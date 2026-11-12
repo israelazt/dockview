@@ -3,8 +3,8 @@
 use std::time::Instant;
 
 use windows::Win32::Foundation::FILETIME;
-use windows::Win32::System::SystemInformation::{GlobalMemoryStatusEx, MEMORYSTATUSEX};
 use windows::Win32::System::ProcessStatus::{GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS};
+use windows::Win32::System::SystemInformation::{GlobalMemoryStatusEx, MEMORYSTATUSEX};
 use windows::Win32::System::Threading::{GetCurrentProcess, GetProcessTimes};
 
 /// CPU used over an interval, as a percentage of *one* core.

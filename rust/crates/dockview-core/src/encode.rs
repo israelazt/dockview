@@ -485,20 +485,21 @@ impl Drop for H264Encoder {
 pub struct Mp4Remuxer {
     writer: IMFSinkWriter,
     stream: u32,
-    /// Stream index of the AAC audio track, when the clip has audio.
-    audio_stream: Option<u32>,
+    /// Stream indexes of the AAC audio tracks, in track order.
+    audio_streams: Vec<u32>,
     /// Timestamp of the first frame, subtracted so the file starts at zero.
     origin: Option<i64>,
 }
 
 impl Mp4Remuxer {
     /// `sequence_header` is the encoder's SPS/PPS blob, if it exposes one.
+    /// `audio_tracks` is how many AAC tracks the file gets (0 for none).
     pub fn create(
         _session: &MfSession,
         path: &Path,
         settings: &EncodeSettings,
         sequence_header: Option<&[u8]>,
-        with_audio: bool,
+        audio_tracks: usize,
     ) -> Result<Self> {
         let EncodeSettings {
             width,
@@ -533,7 +534,8 @@ impl Mp4Remuxer {
 
             // Audio: 16-bit stereo PCM in, AAC (192 kbps) out; the sink writer
             // inserts the encoder.
-            let audio_stream = if with_audio {
+            let mut audio_streams = Vec::with_capacity(audio_tracks);
+            for _ in 0..audio_tracks {
                 let rate = crate::audio_sync::SAMPLE_RATE;
                 let channels = crate::audio_sync::CHANNELS as u32;
                 let aac = MFCreateMediaType()?;
@@ -557,16 +559,14 @@ impl Mp4Remuxer {
                 pcm.SetUINT32(&MF_MT_AUDIO_AVG_BYTES_PER_SECOND, rate * channels * 2)?;
                 pcm.SetUINT32(&MF_MT_ALL_SAMPLES_INDEPENDENT, 1)?;
                 writer.SetInputMediaType(index, &pcm, None::<&IMFAttributes>)?;
-                Some(index)
-            } else {
-                None
-            };
+                audio_streams.push(index);
+            }
 
             writer.BeginWriting()?;
             Ok(Self {
                 writer,
                 stream,
-                audio_stream,
+                audio_streams,
                 origin: None,
             })
         }
@@ -593,11 +593,11 @@ impl Mp4Remuxer {
         }
     }
 
-    /// Writes interleaved 16-bit stereo PCM that starts `start_100ns` after
-    /// the beginning of the clip (the same zero as the video). A no-op when
-    /// the file has no audio track.
-    pub fn write_audio(&mut self, start_100ns: i64, pcm: &[i16]) -> Result<()> {
-        let Some(stream) = self.audio_stream else {
+    /// Writes interleaved 16-bit stereo PCM to audio track `track` (0-based),
+    /// starting `start_100ns` after the beginning of the clip (the same zero as
+    /// the video). A no-op when the file has no such track.
+    pub fn write_audio(&mut self, track: usize, start_100ns: i64, pcm: &[i16]) -> Result<()> {
+        let Some(&stream) = self.audio_streams.get(track) else {
             return Ok(());
         };
         if pcm.is_empty() {

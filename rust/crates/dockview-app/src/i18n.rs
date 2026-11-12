@@ -403,7 +403,10 @@ mod tests {
         for lang in [Lang::En, Lang::Es] {
             assert!(tr(lang, Key::ReplayHint).contains("{hotkey}"), "{lang:?}");
             assert!(tr(lang, Key::ReplayMemory).contains("{size}"), "{lang:?}");
-            assert!(tr(lang, Key::ReplayMemoryLimit).contains("{size}"), "{lang:?}");
+            assert!(
+                tr(lang, Key::ReplayMemoryLimit).contains("{size}"),
+                "{lang:?}"
+            );
         }
     }
 

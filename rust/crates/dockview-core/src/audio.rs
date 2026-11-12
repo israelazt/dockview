@@ -184,7 +184,7 @@ fn format() -> WaveFormat {
 }
 
 /// Opens `client` for event-driven shared-mode streaming in our fixed format.
-fn init_stream(
+pub(crate) fn init_stream(
     client: &mut AudioClient,
     direction: Direction,
     use_min_period: bool,

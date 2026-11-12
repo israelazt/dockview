@@ -63,6 +63,8 @@ struct Shared {
     /// relative to this instant.
     epoch: Instant,
     pcm: Mutex<PcmRing>,
+    /// The microphone, on the same timeline; empty while it is off.
+    mic_pcm: Mutex<PcmRing>,
     audio_offset_ms: AtomicI32,
     ring: Mutex<Option<ReplayRing>>,
     status: Mutex<Option<RecorderStatus>>,
@@ -78,6 +80,7 @@ impl Default for Shared {
         Self {
             epoch: Instant::now(),
             pcm: Mutex::new(PcmRing::new(0.0)),
+            mic_pcm: Mutex::new(PcmRing::new(0.0)),
             audio_offset_ms: AtomicI32::new(0),
             ring: Mutex::new(None),
             status: Mutex::new(None),
@@ -137,6 +140,7 @@ pub struct ReplayRecorder {
     slot: Arc<FrameSlot>,
     tap: Arc<FrameTap>,
     audio_tap: Arc<AudioTap>,
+    mic_tap: Arc<AudioTap>,
     shared: Arc<Shared>,
     stop: Arc<AtomicBool>,
     thread: Option<JoinHandle<()>>,
@@ -147,23 +151,27 @@ impl ReplayRecorder {
     pub fn start(slot: Arc<FrameSlot>, settings: ReplaySettings) -> Self {
         let tap = Arc::new(FrameTap::new(TAP_CAPACITY));
         let audio_tap = Arc::new(AudioTap::new(AUDIO_TAP_CAPACITY));
+        let mic_tap = Arc::new(AudioTap::new(AUDIO_TAP_CAPACITY));
         let shared = Arc::new(Shared::default());
         *shared.pcm.lock().unwrap_or_else(|e| e.into_inner()) = PcmRing::new(settings.keep_seconds);
+        *shared.mic_pcm.lock().unwrap_or_else(|e| e.into_inner()) =
+            PcmRing::new(settings.keep_seconds);
         *shared.ring.lock().unwrap_or_else(|e| e.into_inner()) =
             Some(ReplayRing::new(settings.keep_seconds));
         shared.set_status(RecorderStatus::Starting);
         let stop = Arc::new(AtomicBool::new(false));
 
         let thread = {
-            let (tap, audio, shared, stop) = (
+            let (tap, audio, mic, shared, stop) = (
                 Arc::clone(&tap),
                 Arc::clone(&audio_tap),
+                Arc::clone(&mic_tap),
                 Arc::clone(&shared),
                 Arc::clone(&stop),
             );
             thread::Builder::new()
                 .name("replay-recorder".into())
-                .spawn(move || run(&tap, &audio, &shared, &stop, settings))
+                .spawn(move || run(&tap, &audio, &mic, &shared, &stop, settings))
                 .ok()
         };
         if thread.is_none() {
@@ -177,6 +185,7 @@ impl ReplayRecorder {
             slot,
             tap,
             audio_tap,
+            mic_tap,
             shared,
             stop,
             thread,
@@ -217,6 +226,22 @@ impl ReplayRecorder {
         Arc::clone(&self.audio_tap)
     }
 
+    /// Where the microphone sends its audio.
+    pub fn mic_tap(&self) -> Arc<AudioTap> {
+        Arc::clone(&self.mic_tap)
+    }
+
+    /// Forgets everything the microphone recorded so far. Called when the
+    /// microphone is turned off, so nothing it heard stays in the buffer.
+    pub fn clear_mic(&self) {
+        while self.mic_tap.take(Duration::ZERO).is_some() {}
+        self.shared
+            .mic_pcm
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear();
+    }
+
     /// Shifts the recorded audio relative to the video, like the live sync
     /// control (positive delays the audio).
     pub fn set_audio_offset_ms(&self, ms: i32) {
@@ -234,6 +259,11 @@ impl ReplayRecorder {
 
     /// Changes how much footage is kept.
     pub fn set_keep_seconds(&self, seconds: f64) {
+        self.shared
+            .mic_pcm
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .set_keep_seconds(seconds);
         self.shared
             .pcm
             .lock()
@@ -271,14 +301,29 @@ impl ReplayRecorder {
         let frames: Vec<EncodedFrame> = self
             .with_ring(|r| r.clip(seconds).into_iter().cloned().collect())
             .unwrap_or_default();
-        let audio = match (frames.first(), frames.last()) {
+        let (game, mic) = match (frames.first(), frames.last()) {
             (Some(first), Some(last)) => {
-                let pcm = self.shared.pcm.lock().unwrap_or_else(|e| e.into_inner());
-                (!pcm.is_empty())
-                    .then(|| pcm.extract(first.timestamp, last.timestamp + last.duration))
+                let (from, to) = (first.timestamp, last.timestamp + last.duration);
+                let game = {
+                    let pcm = self.shared.pcm.lock().unwrap_or_else(|e| e.into_inner());
+                    (!pcm.is_empty()).then(|| pcm.extract(from, to))
+                };
+                // The microphone only counts if it was heard during this clip.
+                let mic = {
+                    let pcm = self
+                        .shared
+                        .mic_pcm
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner());
+                    pcm.end_ts()
+                        .is_some_and(|end| end > from)
+                        .then(|| pcm.extract(from, to))
+                };
+                (game, mic)
             }
-            _ => None,
+            _ => (None, None),
         };
+        let tracks = audio_tracks(game, mic);
         let header = self
             .shared
             .header
@@ -290,8 +335,7 @@ impl ReplayRecorder {
         let spawned = thread::Builder::new().name("replay-save".into()).spawn({
             let result = Arc::clone(&result);
             move || {
-                let outcome =
-                    write_clip(&frames, audio.as_deref(), header.as_deref(), stream, &path);
+                let outcome = write_clip(&frames, &tracks, header.as_deref(), stream, &path);
                 *result.lock().unwrap_or_else(|e| e.into_inner()) = Some(outcome);
             }
         });
@@ -319,11 +363,24 @@ impl Drop for ReplayRecorder {
     }
 }
 
+/// The audio tracks of a clip, in file order.
+///
+/// With a microphone the clip carries three: the mix of both (what every player
+/// plays by default), then the game on its own and the microphone on its own so
+/// an editor can rebalance them. Without one, just the game.
+fn audio_tracks(game: Option<Vec<i16>>, mic: Option<Vec<i16>>) -> Vec<Vec<i16>> {
+    match (game, mic) {
+        (Some(game), Some(mic)) => vec![crate::pcm::mix_tracks(&game, &mic), game, mic],
+        (Some(only), None) | (None, Some(only)) => vec![only],
+        (None, None) => Vec::new(),
+    }
+}
+
 /// Writes `frames` to an MP4 at `path`, on a thread of its own so Media
 /// Foundation gets the multithreaded apartment it needs.
 fn write_clip(
     frames: &[EncodedFrame],
-    audio: Option<&[i16]>,
+    tracks: &[Vec<i16>],
     header: Option<&[u8]>,
     stream: Option<EncodeSettings>,
     path: &Path,
@@ -338,23 +395,28 @@ fn write_clip(
         std::fs::create_dir_all(dir).map_err(|e| format!("could not create the folder: {e}"))?;
     }
     let session = MfSession::start().map_err(|e| e.message())?;
-    let mut remux = Mp4Remuxer::create(&session, path, &settings, header, audio.is_some())
+    let mut remux = Mp4Remuxer::create(&session, path, &settings, header, tracks.len())
         .map_err(|e| e.message())?;
 
     // Interleave audio and video by time so the MP4 is written in order.
     const AUDIO_BLOCK_FRAMES: usize = 1024;
     let channels = crate::audio_sync::CHANNELS;
-    let audio = audio.unwrap_or(&[]);
-    let audio_frames = audio.len() / channels;
-    let mut audio_at = 0usize;
-    let write_audio_until = |remux: &mut Mp4Remuxer, audio_at: &mut usize, until: i64| {
-        while *audio_at < audio_frames && frames_to_ticks(*audio_at as i64) <= until {
-            let end = (*audio_at + AUDIO_BLOCK_FRAMES).min(audio_frames);
-            let block = &audio[*audio_at * channels..end * channels];
-            remux
-                .write_audio(frames_to_ticks(*audio_at as i64), block)
-                .map_err(|e| e.message())?;
-            *audio_at = end;
+    let mut audio_at = vec![0usize; tracks.len()];
+    let write_audio_until = |remux: &mut Mp4Remuxer, audio_at: &mut [usize], until: i64| {
+        for (track, samples) in tracks.iter().enumerate() {
+            let total = samples.len() / channels;
+            while audio_at[track] < total && frames_to_ticks(audio_at[track] as i64) <= until {
+                let start = audio_at[track];
+                let end = (start + AUDIO_BLOCK_FRAMES).min(total);
+                remux
+                    .write_audio(
+                        track,
+                        frames_to_ticks(start as i64),
+                        &samples[start * channels..end * channels],
+                    )
+                    .map_err(|e| e.message())?;
+                audio_at[track] = end;
+            }
         }
         Ok::<(), String>(())
     };
@@ -376,6 +438,7 @@ fn write_clip(
 fn run(
     tap: &FrameTap,
     audio: &AudioTap,
+    mic: &AudioTap,
     shared: &Shared,
     stop: &AtomicBool,
     settings: ReplaySettings,
@@ -390,7 +453,7 @@ fn run(
     let mut scratch: Vec<u8> = Vec::new();
 
     while !stop.load(Ordering::Relaxed) {
-        drain_audio(audio, shared);
+        drain_audio(audio, mic, shared);
         let Some(frame) = tap.take(POLL) else {
             continue;
         };
@@ -480,7 +543,15 @@ fn run(
 }
 
 /// Moves every queued audio block onto the shared timeline.
-fn drain_audio(audio: &AudioTap, shared: &Shared) {
+fn drain_audio(audio: &AudioTap, mic: &AudioTap, shared: &Shared) {
+    let to_ticks =
+        |start: Instant| (start.saturating_duration_since(shared.epoch).as_nanos() / 100) as i64;
+    {
+        let mut pcm = shared.mic_pcm.lock().unwrap_or_else(|e| e.into_inner());
+        while let Some(chunk) = mic.take(Duration::ZERO) {
+            pcm.push(to_ticks(chunk.start), &chunk.samples);
+        }
+    }
     let offset = i64::from(shared.audio_offset_ms.load(Ordering::Relaxed)) * 10_000;
     let mut pcm = shared.pcm.lock().unwrap_or_else(|e| e.into_inner());
     while let Some(chunk) = audio.take(Duration::ZERO) {
@@ -573,13 +644,20 @@ mod tests {
 
     /// Decodes the first audio stream of an MP4: (seconds, RMS level 0..1).
     fn audio_summary(path: &Path) -> Option<(f64, f64)> {
+        use windows::Win32::Media::MediaFoundation::MF_SOURCE_READER_FIRST_AUDIO_STREAM;
+        audio_track_summary(path, MF_SOURCE_READER_FIRST_AUDIO_STREAM.0 as u32)
+    }
+
+    /// Length in seconds and RMS level of the file's stream number `stream`
+    /// (0 is the video; audio tracks follow in file order).
+    fn audio_track_summary(path: &Path, stream: u32) -> Option<(f64, f64)> {
         use windows::core::HSTRING;
         use windows::Win32::Media::MediaFoundation::{
             IMFAttributes, IMFSample, MFAudioFormat_PCM, MFCreateMediaType,
             MFCreateSourceReaderFromURL, MFMediaType_Audio, MF_MT_AUDIO_AVG_BYTES_PER_SECOND,
             MF_MT_AUDIO_BITS_PER_SAMPLE, MF_MT_AUDIO_BLOCK_ALIGNMENT, MF_MT_AUDIO_NUM_CHANNELS,
             MF_MT_AUDIO_SAMPLES_PER_SECOND, MF_MT_MAJOR_TYPE, MF_MT_SUBTYPE,
-            MF_SOURCE_READERF_ENDOFSTREAM, MF_SOURCE_READER_FIRST_AUDIO_STREAM,
+            MF_SOURCE_READERF_ENDOFSTREAM, MF_SOURCE_READER_ALL_STREAMS,
         };
         let _session = MfSession::start().ok()?;
         // SAFETY: plain source-reader calls on a file this test just wrote.
@@ -589,7 +667,6 @@ mod tests {
                 None::<&IMFAttributes>,
             )
             .ok()?;
-            let stream = MF_SOURCE_READER_FIRST_AUDIO_STREAM.0 as u32;
             let pcm = MFCreateMediaType().ok()?;
             pcm.SetGUID(&MF_MT_MAJOR_TYPE, &MFMediaType_Audio).ok()?;
             pcm.SetGUID(&MF_MT_SUBTYPE, &MFAudioFormat_PCM).ok()?;
@@ -600,6 +677,10 @@ mod tests {
             pcm.SetUINT32(&MF_MT_AUDIO_BLOCK_ALIGNMENT, 4).ok()?;
             pcm.SetUINT32(&MF_MT_AUDIO_AVG_BYTES_PER_SECOND, 192_000)
                 .ok()?;
+            reader
+                .SetStreamSelection(MF_SOURCE_READER_ALL_STREAMS.0 as u32, false)
+                .ok()?;
+            reader.SetStreamSelection(stream, true).ok()?;
             reader.SetCurrentMediaType(stream, None, &pcm).ok()?;
 
             let (mut frames, mut sum_squares) = (0u64, 0f64);
@@ -692,6 +773,97 @@ mod tests {
         );
         // A sine of amplitude 0.5 has an RMS of about 0.354; AAC is lossy.
         assert!((0.28..0.45).contains(&rms), "RMS {rms:.3}");
+    }
+
+    /// Feeds a sine of the given amplitude and pitch into `tap` in real time.
+    fn feed_sine(
+        tap: Arc<AudioTap>,
+        amplitude: f32,
+        hz: f32,
+        stop: Arc<AtomicBool>,
+    ) -> thread::JoinHandle<()> {
+        thread::spawn(move || {
+            let mut phase = 0.0f32;
+            while !stop.load(Ordering::Relaxed) {
+                let mut block = Vec::with_capacity(960);
+                for _ in 0..480 {
+                    let v = amplitude * (phase * std::f32::consts::TAU).sin();
+                    block.extend_from_slice(&[v, v]);
+                    phase = (phase + hz / 48_000.0).fract();
+                }
+                tap.offer(Instant::now(), &block);
+                thread::sleep(Duration::from_millis(10));
+            }
+        })
+    }
+
+    #[test]
+    fn a_clip_with_a_microphone_has_mix_game_and_mic_tracks() {
+        let Some((recorder, _source)) = record(0.2) else {
+            return;
+        };
+        let stop = Arc::new(AtomicBool::new(false));
+        let feeders = [
+            feed_sine(recorder.audio_tap(), 0.5, 440.0, Arc::clone(&stop)),
+            feed_sine(recorder.mic_tap(), 0.25, 880.0, Arc::clone(&stop)),
+        ];
+        thread::sleep(Duration::from_secs(4));
+
+        let path =
+            std::env::temp_dir().join(format!("dockview-rec-mic-{}.mp4", std::process::id()));
+        let saved = recorder
+            .save(2.0, path.clone())
+            .wait(Duration::from_secs(20))
+            .expect("save finished")
+            .expect("save succeeded");
+        let tracks: Vec<_> = (0..=4).map(|n| audio_track_summary(&path, n)).collect();
+        let fourth = audio_track_summary(&path, 3); // the video, not audio
+
+        // Forgetting the microphone drops its track from the next clip.
+        recorder.clear_mic();
+        stop.store(true, Ordering::Relaxed);
+        for f in feeders {
+            let _ = f.join();
+        }
+        recorder.clear_mic();
+        let path2 =
+            std::env::temp_dir().join(format!("dockview-rec-nomic-{}.mp4", std::process::id()));
+        recorder
+            .save(2.0, path2.clone())
+            .wait(Duration::from_secs(20))
+            .expect("save finished")
+            .expect("save succeeded");
+        let second = audio_track_summary(&path2, 2);
+        let _ = std::fs::remove_file(&path);
+        let _ = std::fs::remove_file(&path2);
+
+        // Media Foundation's reader lists the audio tracks last-added first (the
+        // file itself is video, mix, game, mic) and the video after them.
+        let [mic, game, mix] = [tracks[0], tracks[1], tracks[2]].map(|t| t.expect("track decodes"));
+        for (name, (seconds, _)) in [("mix", mix), ("game", game), ("mic", mic)] {
+            assert!(
+                (seconds - saved.seconds).abs() < 0.25,
+                "{name} {seconds:.2}s vs video {:.2}s",
+                saved.seconds
+            );
+        }
+        // Sines of 0.5 and 0.25 have RMS 0.354 and 0.177; the mix is their power sum.
+        assert!((0.33..0.46).contains(&mix.1), "mix RMS {:.3}", mix.1);
+        assert!((0.28..0.45).contains(&game.1), "game RMS {:.3}", game.1);
+        assert!((0.13..0.23).contains(&mic.1), "mic RMS {:.3}", mic.1);
+        assert!(fourth.is_none(), "exactly three audio tracks");
+        assert!(second.is_none(), "no microphone, no second audio track");
+    }
+
+    #[test]
+    fn tracks_are_the_mix_then_game_then_mic_when_there_is_a_microphone() {
+        let game = vec![100i16, 200];
+        let mic = vec![1i16, 2];
+        let tracks = audio_tracks(Some(game.clone()), Some(mic.clone()));
+        assert_eq!(tracks, vec![vec![101, 202], game.clone(), mic.clone()]);
+        assert_eq!(audio_tracks(Some(game.clone()), None), vec![game]);
+        assert_eq!(audio_tracks(None, Some(mic.clone())), vec![mic]);
+        assert!(audio_tracks(None, None).is_empty());
     }
 
     #[test]

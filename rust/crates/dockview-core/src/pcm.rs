@@ -207,6 +207,19 @@ impl AudioTap {
     }
 }
 
+/// Adds two 16-bit tracks sample by sample, clipping instead of wrapping. The
+/// result is as long as the longer input (the shorter one counts as silence).
+pub fn mix_tracks(a: &[i16], b: &[i16]) -> Vec<i16> {
+    let (long, short) = if a.len() >= b.len() { (a, b) } else { (b, a) };
+    long.iter()
+        .enumerate()
+        .map(|(i, &x)| {
+            let y = short.get(i).copied().unwrap_or(0);
+            x.saturating_add(y)
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -218,6 +231,18 @@ mod tests {
 
     fn second() -> i64 {
         TICKS_PER_SECOND
+    }
+
+    #[test]
+    fn mixing_adds_clips_and_pads_the_shorter_track() {
+        assert_eq!(mix_tracks(&[100, -100, 7], &[1, 2]), vec![101, -98, 7]);
+        assert_eq!(mix_tracks(&[1], &[1, 2, 3]), vec![2, 2, 3]);
+        assert_eq!(
+            mix_tracks(&[i16::MAX, i16::MIN], &[10, -10]),
+            vec![i16::MAX, i16::MIN],
+            "clipped, not wrapped"
+        );
+        assert!(mix_tracks(&[], &[]).is_empty());
     }
 
     #[test]

@@ -313,7 +313,10 @@ impl App {
         self.clamp_replay_length();
         let hotkey = hotkey::Hotkey::register();
         if !hotkey.is_registered() {
-            eprintln!("replay hotkey {} is taken by another program", hotkey::LABEL);
+            eprintln!(
+                "replay hotkey {} is taken by another program",
+                hotkey::LABEL
+            );
         }
         self.hotkey = Some(hotkey);
         self.sync_replay();
@@ -330,7 +333,9 @@ impl App {
                 ReplaySettings {
                     // A little extra so a clip of the chosen length always fits
                     // (it starts at the keyframe before the cut).
-                    keep_seconds: f64::from(self.settings.replay_seconds + settings::REPLAY_MARGIN_SECONDS),
+                    keep_seconds: f64::from(
+                        self.settings.replay_seconds + settings::REPLAY_MARGIN_SECONDS,
+                    ),
                     bitrate_mbps: self.settings.replay_bitrate_mbps,
                     fps: 60,
                 },
@@ -658,7 +663,9 @@ impl App {
                     settings::step_replay_seconds(self.settings.replay_seconds, delta);
                 self.clamp_replay_length();
                 if let Some(recorder) = &self.recorder {
-                    recorder.set_keep_seconds(f64::from(self.settings.replay_seconds + settings::REPLAY_MARGIN_SECONDS));
+                    recorder.set_keep_seconds(f64::from(
+                        self.settings.replay_seconds + settings::REPLAY_MARGIN_SECONDS,
+                    ));
                 }
             }
             Action::SaveReplay => {

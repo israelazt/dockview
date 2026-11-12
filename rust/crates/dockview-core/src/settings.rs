@@ -360,7 +360,10 @@ mod tests {
     #[test]
     fn replay_settings_default_round_trip_and_stay_in_range() {
         let defaults = AppSettings::default();
-        assert!(defaults.replay_enabled, "the buffer is on unless the user turns it off");
+        assert!(
+            defaults.replay_enabled,
+            "the buffer is on unless the user turns it off"
+        );
         assert_eq!(defaults.replay_seconds, 30);
         assert_eq!(defaults.replay_bitrate_mbps, 40);
         assert!(defaults.replay_folder.is_none());
