@@ -2,6 +2,9 @@
 //! Platform-independent logic lives here so it can be unit tested.
 
 #[cfg(windows)]
+pub mod audio;
+pub mod audio_sync;
+#[cfg(windows)]
 pub mod capture;
 pub mod device;
 pub mod frame;

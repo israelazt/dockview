@@ -1,4 +1,8 @@
 //! Dockview: minimal low-latency viewer for UVC capture cards.
+//!
+//! Keys: `F`/`F11` fullscreen · `Esc` leave fullscreen · `V` next video device
+//! · `A` next audio device · `↑`/`↓` volume · `←`/`→` audio sync (±10 ms)
+//! · `P` render preset.
 
 #[cfg(not(windows))]
 compile_error!("Dockview only supports Windows.");
@@ -10,11 +14,12 @@ use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
+use dockview_core::audio::{enumerate_audio_devices, AudioEngine, AudioStatus};
 use dockview_core::capture::{CaptureOptions, CaptureStatus, VideoCapture};
-use dockview_core::device::VideoDevice;
+use dockview_core::device::{match_audio_to_video, AudioDevice, VideoDevice};
 use dockview_core::frame::FrameSlot;
 use dockview_core::mf::{enumerate_video_devices, MfSession};
-use dockview_core::settings::{self, RenderPreset};
+use dockview_core::settings::{self, AppSettings, RenderPreset, MAX_AUDIO_OFFSET_MS};
 use dockview_core::testsrc::TestSource;
 use windows::Win32::Foundation::HWND;
 use winit::application::ApplicationHandler;
@@ -31,12 +36,15 @@ use render::{Filter, Renderer};
 const RECONNECT_DELAY: Duration = Duration::from_secs(2);
 /// How long the event loop waits for a new frame before checking events.
 const FRAME_WAIT: Duration = Duration::from_millis(4);
+/// Volume change per key press.
+const VOLUME_STEP: f32 = 0.05;
+/// Audio offset change per key press, in milliseconds.
+const OFFSET_STEP_MS: i32 = 10;
 
 enum Source {
     /// The handle only keeps the generator thread alive.
     Test(#[allow(dead_code)] TestSource),
     Capture {
-        device: VideoDevice,
         capture: VideoCapture,
         retry_at: Option<Instant>,
     },
@@ -46,6 +54,12 @@ enum Source {
 struct App {
     slot: Arc<FrameSlot>,
     source: Source,
+    video_devices: Vec<VideoDevice>,
+    audio_devices: Vec<AudioDevice>,
+    video_index: Option<usize>,
+    audio_index: Option<usize>,
+    audio: Option<AudioEngine>,
+    settings: AppSettings,
     window: Option<Window>,
     renderer: Option<Renderer>,
     rendered: u64,
@@ -53,14 +67,45 @@ struct App {
     last_rendered: u64,
     video_size: (u32, u32),
     fullscreen: bool,
-    filter: Filter,
+}
+
+fn filter_for(preset: RenderPreset) -> Filter {
+    match preset {
+        RenderPreset::Performance => Filter::Nearest,
+        RenderPreset::Balanced | RenderPreset::Quality => Filter::Linear,
+    }
+}
+
+fn next_preset(preset: RenderPreset) -> RenderPreset {
+    match preset {
+        RenderPreset::Performance => RenderPreset::Balanced,
+        RenderPreset::Balanced => RenderPreset::Quality,
+        RenderPreset::Quality => RenderPreset::Performance,
+    }
+}
+
+/// Index after `current` in a list of `len` items, wrapping around.
+fn next_index(current: Option<usize>, len: usize) -> Option<usize> {
+    (len > 0).then(|| current.map_or(0, |i| (i + 1) % len))
 }
 
 impl App {
-    fn new(slot: Arc<FrameSlot>, source: Source, filter: Filter) -> Self {
-        Self {
+    fn new(
+        slot: Arc<FrameSlot>,
+        settings: AppSettings,
+        video_devices: Vec<VideoDevice>,
+        audio_devices: Vec<AudioDevice>,
+        test_pattern: bool,
+    ) -> Self {
+        let mut app = Self {
             slot,
-            source,
+            source: Source::None,
+            video_devices,
+            audio_devices,
+            video_index: None,
+            audio_index: None,
+            audio: None,
+            settings,
             window: None,
             renderer: None,
             rendered: 0,
@@ -68,8 +113,111 @@ impl App {
             last_rendered: 0,
             video_size: (0, 0),
             fullscreen: false,
-            filter,
+        };
+
+        if test_pattern {
+            app.source = Source::Test(TestSource::start(Arc::clone(&app.slot), 1920, 1080, 30));
+            return app;
         }
+
+        // Restore the last devices, else the first video device and the audio
+        // device whose name matches it.
+        let video = app
+            .video_devices
+            .iter()
+            .position(|d| {
+                app.settings.last_video_device_symbolic_link.as_deref() == Some(&d.symbolic_link)
+            })
+            .or_else(|| next_index(None, app.video_devices.len()));
+        let audio = app
+            .audio_devices
+            .iter()
+            .position(|d| app.settings.last_audio_device_id.as_deref() == Some(&d.device_id))
+            .or_else(|| app.match_audio(video))
+            .or_else(|| next_index(None, app.audio_devices.len()));
+
+        app.select_video(video);
+        app.select_audio(audio);
+        app
+    }
+
+    fn match_audio(&self, video: Option<usize>) -> Option<usize> {
+        let matched = match_audio_to_video(
+            video.and_then(|i| self.video_devices.get(i)),
+            &self.audio_devices,
+        )?;
+        self.audio_devices.iter().position(|a| a == matched)
+    }
+
+    /// Starts capturing from the video device at `index` (or stops).
+    fn select_video(&mut self, index: Option<usize>) {
+        self.video_index = index;
+        self.video_size = (0, 0);
+        // Drop the old capture first so it releases the device.
+        self.source = Source::None;
+        let Some(device) = index.and_then(|i| self.video_devices.get(i)) else {
+            return;
+        };
+        self.settings.last_video_device_symbolic_link = Some(device.symbolic_link.clone());
+        self.source = Source::Capture {
+            capture: self.start_capture(&device.symbolic_link.clone()),
+            retry_at: None,
+        };
+    }
+
+    fn start_capture(&self, symbolic_link: &str) -> VideoCapture {
+        VideoCapture::start(
+            symbolic_link.to_owned(),
+            CaptureOptions::default(),
+            Arc::clone(&self.slot),
+        )
+    }
+
+    /// Starts the audio pipeline for the audio device at `index` (or stops).
+    fn select_audio(&mut self, index: Option<usize>) {
+        self.audio_index = index;
+        self.audio = None;
+        let Some(device) = index.and_then(|i| self.audio_devices.get(i)) else {
+            return;
+        };
+        self.settings.last_audio_device_id = Some(device.device_id.clone());
+        self.audio = Some(AudioEngine::start(
+            device.device_id.clone(),
+            self.settings.volume,
+            self.settings.audio_offset_ms,
+        ));
+    }
+
+    fn change_volume(&mut self, delta: f32) {
+        self.settings.volume = (self.settings.volume + delta).clamp(0.0, 1.0);
+        // Snap away accumulated float error so 5% steps stay exact.
+        self.settings.volume = (self.settings.volume * 100.0).round() / 100.0;
+        if let Some(audio) = &self.audio {
+            audio.set_volume(self.settings.volume);
+        }
+        self.save_settings();
+    }
+
+    fn change_offset(&mut self, delta_ms: i32) {
+        self.settings.audio_offset_ms = (self.settings.audio_offset_ms + delta_ms)
+            .clamp(-MAX_AUDIO_OFFSET_MS, MAX_AUDIO_OFFSET_MS);
+        if let Some(audio) = &self.audio {
+            audio.set_offset_ms(self.settings.audio_offset_ms);
+        }
+        self.save_settings();
+    }
+
+    fn cycle_preset(&mut self) {
+        self.settings.render_preset = next_preset(self.settings.render_preset);
+        if let Some(renderer) = self.renderer.as_mut() {
+            renderer.set_filter(filter_for(self.settings.render_preset));
+        }
+        self.save_settings();
+    }
+
+    fn save_settings(&mut self) {
+        self.settings.was_fullscreen = self.fullscreen;
+        settings::save(&self.settings);
     }
 
     fn render(&mut self) {
@@ -92,40 +240,70 @@ impl App {
         }
     }
 
-    fn toggle_fullscreen(&mut self) {
-        self.set_fullscreen(!self.fullscreen);
-    }
-
     fn set_fullscreen(&mut self, on: bool) {
         self.fullscreen = on;
         if let Some(window) = &self.window {
             window.set_fullscreen(on.then_some(Fullscreen::Borderless(None)));
         }
+        self.save_settings();
     }
 
     /// Restarts the capture thread if the device was lost.
     fn maintain_source(&mut self) {
-        let Source::Capture {
-            device,
-            capture,
-            retry_at,
-        } = &mut self.source
-        else {
+        let Some(device) = self.video_index.and_then(|i| self.video_devices.get(i)) else {
+            return;
+        };
+        let link = device.symbolic_link.clone();
+        let Source::Capture { capture, retry_at } = &self.source else {
             return;
         };
         match capture.status() {
             CaptureStatus::Disconnected { .. } | CaptureStatus::Failed(_) => {
-                let due = *retry_at.get_or_insert_with(|| Instant::now() + RECONNECT_DELAY);
+                let due = retry_at.unwrap_or_else(|| Instant::now() + RECONNECT_DELAY);
                 if Instant::now() >= due {
-                    *capture = VideoCapture::start(
-                        device.symbolic_link.clone(),
-                        CaptureOptions::default(),
-                        Arc::clone(&self.slot),
-                    );
+                    let capture = self.start_capture(&link);
+                    self.source = Source::Capture {
+                        capture,
+                        retry_at: None,
+                    };
+                } else if let Source::Capture { retry_at, .. } = &mut self.source {
+                    *retry_at = Some(due);
+                }
+            }
+            _ => {
+                if let Source::Capture { retry_at, .. } = &mut self.source {
                     *retry_at = None;
                 }
             }
-            _ => *retry_at = None,
+        }
+    }
+
+    fn video_status(&self) -> String {
+        let name = self
+            .video_index
+            .and_then(|i| self.video_devices.get(i))
+            .map_or("no video device", |d| d.friendly_name.as_str());
+        match &self.source {
+            Source::Test(_) => "test pattern".to_string(),
+            Source::None => name.to_string(),
+            Source::Capture { capture, .. } => match capture.status() {
+                CaptureStatus::Running { .. } | CaptureStatus::Stopped => name.to_string(),
+                CaptureStatus::Starting => format!("{name} (connecting…)"),
+                CaptureStatus::Disconnected { .. } => format!("{name} (disconnected, retrying…)"),
+                CaptureStatus::Failed(e) => format!("{name} (error: {e})"),
+            },
+        }
+    }
+
+    fn audio_status(&self) -> String {
+        let name = self
+            .audio_index
+            .and_then(|i| self.audio_devices.get(i))
+            .map_or("none", |d| d.friendly_name.as_str());
+        match self.audio.as_ref().map(AudioEngine::status) {
+            Some(AudioStatus::Disconnected(_)) => format!("{name} (lost)"),
+            Some(AudioStatus::Failed(e)) => format!("{name} (error: {e})"),
+            _ => name.to_string(),
         }
     }
 
@@ -138,32 +316,51 @@ impl App {
         self.last_rendered = self.rendered;
         self.last_stats = Instant::now();
 
-        let detail = match &self.source {
-            Source::Test(_) => "test pattern".to_string(),
-            Source::None => "no capture device found".to_string(),
-            Source::Capture {
-                device, capture, ..
-            } => match capture.status() {
-                CaptureStatus::Running { .. } => device.friendly_name.clone(),
-                CaptureStatus::Starting => format!("{} (connecting…)", device.friendly_name),
-                CaptureStatus::Disconnected { .. } => {
-                    format!("{} (disconnected, retrying…)", device.friendly_name)
-                }
-                CaptureStatus::Failed(e) => format!("{} (error: {e})", device.friendly_name),
-                CaptureStatus::Stopped => device.friendly_name.clone(),
-            },
-        };
         let (w, h) = self.video_size;
-        let title = if w > 0 {
-            format!(
-                "Dockview · {detail} · {w}×{h} · {fps:.0} fps · dropped {}",
-                self.slot.dropped()
-            )
+        let video = if w > 0 {
+            format!("{} · {w}×{h} · {fps:.0} fps", self.video_status())
         } else {
-            format!("Dockview · {detail}")
+            self.video_status()
         };
+        let title = format!(
+            "Dockview · {video} · 🔊 {} {:.0}% · sync {:+} ms",
+            self.audio_status(),
+            self.settings.volume * 100.0,
+            self.settings.audio_offset_ms,
+        );
         if let Some(window) = &self.window {
             window.set_title(&title);
+        }
+    }
+
+    fn on_key(&mut self, key: &Key) {
+        match key {
+            Key::Named(NamedKey::F11) => self.set_fullscreen(!self.fullscreen),
+            Key::Named(NamedKey::Escape) if self.fullscreen => self.set_fullscreen(false),
+            Key::Named(NamedKey::ArrowUp) => self.change_volume(VOLUME_STEP),
+            Key::Named(NamedKey::ArrowDown) => self.change_volume(-VOLUME_STEP),
+            Key::Named(NamedKey::ArrowLeft) => self.change_offset(-OFFSET_STEP_MS),
+            Key::Named(NamedKey::ArrowRight) => self.change_offset(OFFSET_STEP_MS),
+            Key::Character(c) => match c.to_ascii_lowercase().as_str() {
+                "f" => self.set_fullscreen(!self.fullscreen),
+                "p" => self.cycle_preset(),
+                "v" => {
+                    let next = next_index(self.video_index, self.video_devices.len());
+                    self.select_video(next);
+                    // Follow the new video device with its matching audio.
+                    if let Some(audio) = self.match_audio(next) {
+                        self.select_audio(Some(audio));
+                    }
+                    self.save_settings();
+                }
+                "a" => {
+                    let next = next_index(self.audio_index, self.audio_devices.len());
+                    self.select_audio(next);
+                    self.save_settings();
+                }
+                _ => {}
+            },
+            _ => {}
         }
     }
 }
@@ -196,7 +393,7 @@ impl ApplicationHandler for App {
         let size = window.inner_size();
         match Renderer::new(hwnd, size.width, size.height) {
             Ok(mut renderer) => {
-                renderer.set_filter(self.filter);
+                renderer.set_filter(filter_for(self.settings.render_preset));
                 self.renderer = Some(renderer);
             }
             Err(e) => {
@@ -206,11 +403,17 @@ impl ApplicationHandler for App {
             }
         }
         self.window = Some(window);
+        if self.settings.was_fullscreen {
+            self.set_fullscreen(true);
+        }
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
         match event {
-            WindowEvent::CloseRequested => event_loop.exit(),
+            WindowEvent::CloseRequested => {
+                self.save_settings();
+                event_loop.exit();
+            }
             WindowEvent::Resized(size) => {
                 if let Some(renderer) = self.renderer.as_mut() {
                     if let Err(e) = renderer.resize(size.width, size.height) {
@@ -220,12 +423,7 @@ impl ApplicationHandler for App {
             }
             WindowEvent::RedrawRequested => self.render(),
             WindowEvent::KeyboardInput { event, .. } if event.state == ElementState::Pressed => {
-                match event.logical_key {
-                    Key::Named(NamedKey::F11) => self.toggle_fullscreen(),
-                    Key::Named(NamedKey::Escape) if self.fullscreen => self.set_fullscreen(false),
-                    Key::Character(c) if c.eq_ignore_ascii_case("f") => self.toggle_fullscreen(),
-                    _ => {}
-                }
+                self.on_key(&event.logical_key);
             }
             _ => {}
         }
@@ -242,53 +440,32 @@ impl ApplicationHandler for App {
     }
 }
 
-/// Lists capture devices on a helper thread: Media Foundation wants an MTA
+/// Runs `work` on a helper thread. Media Foundation and WASAPI want an MTA
 /// thread, while winit initialises the main thread as an STA.
-fn list_devices() -> Vec<VideoDevice> {
-    thread::spawn(|| {
-        let session = MfSession::start().ok()?;
-        enumerate_video_devices(&session).ok()
-    })
-    .join()
-    .ok()
-    .flatten()
-    .unwrap_or_default()
+fn on_helper_thread<T: Default + Send + 'static>(
+    work: impl FnOnce() -> Option<T> + Send + 'static,
+) -> T {
+    thread::spawn(work)
+        .join()
+        .ok()
+        .flatten()
+        .unwrap_or_default()
 }
 
 fn main() {
     let slot = Arc::new(FrameSlot::new());
-    let use_test_pattern = std::env::args().any(|a| a == "--test-pattern");
+    let test_pattern = std::env::args().any(|a| a == "--test-pattern");
 
-    let settings = settings::load();
-    let filter = match settings.render_preset {
-        RenderPreset::Performance => Filter::Nearest,
-        RenderPreset::Balanced | RenderPreset::Quality => Filter::Linear,
-    };
-
-    let source = if use_test_pattern {
-        Source::Test(TestSource::start(Arc::clone(&slot), 1920, 1080, 30))
+    let (video_devices, audio_devices) = if test_pattern {
+        (Vec::new(), Vec::new())
     } else {
-        let devices = list_devices();
-        let chosen = devices
-            .iter()
-            .find(|d| settings.last_video_device_symbolic_link.as_deref() == Some(&d.symbolic_link))
-            .or_else(|| devices.first())
-            .cloned();
-        match chosen {
-            Some(device) => {
-                let capture = VideoCapture::start(
-                    device.symbolic_link.clone(),
-                    CaptureOptions::default(),
-                    Arc::clone(&slot),
-                );
-                Source::Capture {
-                    device,
-                    capture,
-                    retry_at: None,
-                }
-            }
-            None => Source::None,
-        }
+        (
+            on_helper_thread(|| {
+                let session = MfSession::start().ok()?;
+                enumerate_video_devices(&session).ok()
+            }),
+            on_helper_thread(|| enumerate_audio_devices().ok()),
+        )
     };
 
     let event_loop = match EventLoop::new() {
@@ -300,8 +477,42 @@ fn main() {
     };
     event_loop.set_control_flow(ControlFlow::Poll);
 
-    let mut app = App::new(slot, source, filter);
+    let mut app = App::new(
+        slot,
+        settings::load(),
+        video_devices,
+        audio_devices,
+        test_pattern,
+    );
     if let Err(e) = event_loop.run_app(&mut app) {
         eprintln!("event loop error: {e}");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn next_index_wraps_and_handles_empty_lists() {
+        assert_eq!(next_index(None, 0), None);
+        assert_eq!(next_index(None, 3), Some(0));
+        assert_eq!(next_index(Some(0), 3), Some(1));
+        assert_eq!(next_index(Some(2), 3), Some(0));
+    }
+
+    #[test]
+    fn presets_cycle_through_all_three() {
+        let start = RenderPreset::Performance;
+        let cycled = next_preset(next_preset(next_preset(start)));
+        assert_eq!(cycled, start);
+        assert_ne!(next_preset(start), start);
+    }
+
+    #[test]
+    fn only_performance_uses_nearest_filtering() {
+        assert_eq!(filter_for(RenderPreset::Performance), Filter::Nearest);
+        assert_eq!(filter_for(RenderPreset::Balanced), Filter::Linear);
+        assert_eq!(filter_for(RenderPreset::Quality), Filter::Linear);
     }
 }
