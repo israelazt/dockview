@@ -9,6 +9,8 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
+use crate::scene::Scene;
+
 /// Maximum audio sync offset in either direction, in milliseconds.
 pub const MAX_AUDIO_OFFSET_MS: i32 = 300;
 
@@ -225,6 +227,12 @@ pub struct AppSettings {
     /// Where clips are saved; `None` means the Videos\\Dockview folder.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub replay_folder: Option<String>,
+    /// The scenes the user made.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub scenes: Vec<Scene>,
+    /// The scene in use (a position in `scenes`); `None` is the plain source.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub active_scene: Option<usize>,
 }
 
 impl Default for AppSettings {
@@ -245,6 +253,8 @@ impl Default for AppSettings {
             replay_seconds: DEFAULT_REPLAY_SECONDS,
             replay_bitrate_mbps: DEFAULT_REPLAY_MBPS,
             replay_folder: None,
+            scenes: Vec::new(),
+            active_scene: None,
         }
     }
 }
@@ -265,6 +275,14 @@ impl AppSettings {
         } else {
             self.volume.clamp(0.0, 1.0)
         };
+        self.scenes = self
+            .scenes
+            .into_iter()
+            .map(Scene::sanitized)
+            .filter(|s| !s.layers.is_empty())
+            .collect();
+        // The scene in use must exist.
+        self.active_scene = self.active_scene.filter(|&i| i < self.scenes.len());
         self
     }
 }
@@ -313,6 +331,7 @@ pub fn save(settings: &AppSettings) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::scene::SourceRef;
 
     fn temp_file(name: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!("dockview-test-{}-{name}", std::process::id()));
@@ -351,6 +370,13 @@ mod tests {
             replay_seconds: 120,
             replay_bitrate_mbps: 25,
             replay_folder: Some(r"D:\\Clips".into()),
+            scenes: vec![Scene::with_base(
+                "Juego",
+                SourceRef::Capture {
+                    symbolic_link: "usb#a".into(),
+                },
+            )],
+            active_scene: Some(0),
         };
         let json = serde_json::to_string_pretty(&original).unwrap();
         let restored: AppSettings = serde_json::from_str(&json).unwrap();
@@ -562,5 +588,48 @@ mod tests {
         save_to(&path, &settings).unwrap();
         assert_eq!(load_from(&path), settings);
         let _ = fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn scenes_are_saved_and_an_old_file_without_them_still_loads() {
+        use crate::scene::{Scene, SourceRef};
+        let old = r#"{"volume":0.5}"#;
+        let loaded: AppSettings = serde_json::from_str(old).unwrap();
+        assert!(loaded.scenes.is_empty() && loaded.active_scene.is_none());
+        // Nothing is written for a user who never made a scene.
+        assert!(!serde_json::to_string(&loaded).unwrap().contains("scenes"));
+
+        let mut with = AppSettings::default();
+        with.scenes.push(Scene::with_base(
+            "A",
+            SourceRef::Window {
+                title: "Juego".into(),
+            },
+        ));
+        with.active_scene = Some(0);
+        let json = serde_json::to_string(&with).unwrap();
+        assert!(json.contains("activeScene"));
+        assert_eq!(serde_json::from_str::<AppSettings>(&json).unwrap(), with);
+    }
+
+    #[test]
+    fn sanitizing_drops_empty_scenes_and_a_dangling_active_one() {
+        use crate::scene::{Scene, SourceRef};
+        let mut s = AppSettings::default();
+        s.scenes.push(Scene {
+            name: "vacía".into(),
+            layers: Vec::new(),
+        });
+        s.scenes.push(Scene::with_base(
+            "buena",
+            SourceRef::Monitor {
+                device_name: "D".into(),
+            },
+        ));
+        s.active_scene = Some(5);
+        let s = s.sanitized();
+        assert_eq!(s.scenes.len(), 1);
+        assert_eq!(s.scenes[0].name, "buena");
+        assert_eq!(s.active_scene, None);
     }
 }

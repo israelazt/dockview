@@ -14,6 +14,7 @@ mod hotkey;
 mod i18n;
 mod perf;
 mod render;
+mod scene_runtime;
 mod stats_log;
 #[allow(dead_code)] // some tokens are used by the upcoming live controls
 mod theme;
@@ -29,7 +30,7 @@ use dockview_core::audio::{
     default_capture_device, enumerate_audio_devices, AudioEngine, AudioStatus,
 };
 use dockview_core::capture::{CaptureOptions, CaptureStatus, VideoCapture};
-use dockview_core::compose::{Fit, Layer, NormRect, SceneCompositor};
+use dockview_core::compose::SceneCompositor;
 use dockview_core::device::{match_audio_to_video, pick_microphone, AudioDevice, VideoDevice};
 use dockview_core::diagnostics::{
     diagnose, switch_helped, FallbackWatch, Finding, Snapshot, VideoState,
@@ -38,6 +39,7 @@ use dockview_core::frame::FrameSlot;
 use dockview_core::mf::{enumerate_video_devices, MfSession};
 use dockview_core::recorder::{RecorderStatus, ReplayRecorder, ReplaySettings, SaveHandle};
 use dockview_core::recording::{disk_free_bytes, EndReason, RecordingState, DISK_START_MIN_BYTES};
+use dockview_core::scene::SceneLayer;
 use dockview_core::screen::{
     list_monitors, list_windows, CaptureTarget, MonitorInfo, ScreenCapture, ScreenOptions,
     ScreenStatus, WindowInfo,
@@ -60,10 +62,11 @@ use winit::keyboard::{Key, NamedKey};
 use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use winit::window::{CursorIcon, Fullscreen, Theme as WindowTheme, Window, WindowId};
 
-use cli::{Cli, PipSpec};
+use cli::Cli;
 use i18n::{Lang, LangModeExt};
 use perf::ProcessSampler;
 use render::{Filter, Renderer};
+use scene_runtime::Overlay;
 use theme::{Appearance, Theme, ThemeModeExt};
 use ui::controls::{
     Action, Controls, CurrentSource, MicState, MicView, Model, RecState, RecView, SourcesView,
@@ -102,29 +105,6 @@ enum Source {
     None,
 }
 
-/// The size of the picture a scene is drawn at.
-const SCENE_WIDTH: u32 = 1920;
-const SCENE_HEIGHT: u32 = 1080;
-/// Width of the corner picture, as a fraction of the whole, unless asked.
-const PIP_DEFAULT_SIZE: f32 = 0.28;
-
-/// A second source shown in the corner of the picture.
-enum ExtraRunning {
-    Capture {
-        capture: VideoCapture,
-        link: String,
-        retry_at: Option<Instant>,
-    },
-    Screen(ScreenCapture),
-}
-
-struct Extra {
-    running: ExtraRunning,
-    /// Where the source publishes; the compositor reads it.
-    slot: Arc<FrameSlot>,
-    rect: NormRect,
-}
-
 /// What is being shown and recorded.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum SourceKind {
@@ -139,13 +119,16 @@ enum SourceKind {
 struct App {
     /// What the viewer, the replay and the recording read.
     slot: Arc<FrameSlot>,
-    /// Where the main source publishes: `slot` itself, or with a scene a slot
-    /// of its own that the compositor draws into `slot`.
+    /// Where the main source publishes. It forwards to `slot` unless a scene
+    /// is running, when it keeps the frames for the compositor (see
+    /// `scene_runtime`).
     input_slot: Arc<FrameSlot>,
     /// Draws the layers of the scene; `Some` only while there is a scene.
     scene: Option<SceneCompositor>,
-    /// The source in the corner of the scene, if any.
-    extra: Option<Extra>,
+    /// The layers above the base of the active scene, with their sources.
+    overlays: Vec<Overlay>,
+    /// The base layer of the active scene (its source is `source`).
+    scene_base: Option<SceneLayer>,
     source: Source,
     video_devices: Vec<VideoDevice>,
     audio_devices: Vec<AudioDevice>,
@@ -284,17 +267,16 @@ impl App {
             .and_then(|path| stats_log::StatsLog::create(path).ok());
         // Screenshots must show the settled state, not a mid-transition frame.
         let animations = cli.screenshot.is_none() && system_animations_enabled();
-        // With a scene the main source gets a slot of its own.
-        let input_slot = if cli.pip.is_some() && !preview {
-            Arc::new(FrameSlot::new())
-        } else {
-            Arc::clone(&slot)
-        };
+        // The main source has a slot of its own that forwards to the output
+        // one, so a scene can start or stop without restarting anything.
+        let input_slot = Arc::new(FrameSlot::new());
+        input_slot.set_forward(Some(Arc::clone(&slot)));
         let mut app = Self {
             slot,
             input_slot,
             scene: None,
-            extra: None,
+            overlays: Vec::new(),
+            scene_base: None,
             source: Source::None,
             video_devices,
             audio_devices,
@@ -378,7 +360,7 @@ impl App {
                 app.refresh_sources();
                 app.controls.toggle_sources();
             }
-            app.start_scene();
+            app.start_cli_scene();
             app.start_replay_services();
             if app.cli.mic {
                 app.set_mic(true);
@@ -420,7 +402,17 @@ impl App {
         app.select_audio(audio);
         app.refresh_sources();
         app.restore_screen();
-        app.start_scene();
+        // A scene from the command line, or else the one used last time (unless
+        // the command line chose a different main source).
+        let chose_main =
+            app.cli.video.is_some() || app.cli.screen.is_some() || app.cli.capture_window.is_some();
+        if app.cli.pip.is_some() {
+            app.start_cli_scene();
+        } else if !chose_main && !app.cli.ui_preview {
+            if let Some(index) = app.settings.active_scene {
+                app.activate_scene(Some(index));
+            }
+        }
         app.start_replay_services();
         if app.cli.mic {
             app.set_mic(true);
@@ -1001,161 +993,6 @@ impl App {
             },
             Arc::clone(&self.input_slot),
         )
-    }
-
-    /// The layers of the scene, bottom first: the main source over the whole
-    /// picture, then the corner source.
-    fn scene_layers(&self) -> Vec<Layer> {
-        let mut layers = vec![Layer::full(Arc::clone(&self.input_slot))];
-        if let Some(extra) = &self.extra {
-            layers.push(Layer {
-                slot: Arc::clone(&extra.slot),
-                rect: extra.rect,
-                fit: Fit::Contain,
-                visible: true,
-            });
-        }
-        layers
-    }
-
-    /// Starts the scene asked for on the command line: the main source with
-    /// a second one in the bottom-right corner.
-    fn start_scene(&mut self) {
-        let Some(spec) = self.cli.pip.clone() else {
-            return;
-        };
-        if self.cli.ui_preview {
-            return;
-        }
-        let slot = Arc::new(FrameSlot::new());
-        match self.start_extra_source(&spec, &slot) {
-            Some(running) => {
-                // 16:9 like the picture, so its height is the same fraction.
-                let w = self.cli.pip_size.unwrap_or(PIP_DEFAULT_SIZE);
-                self.extra = Some(Extra {
-                    running,
-                    slot,
-                    rect: NormRect::new(1.0 - w - 0.02, 1.0 - w - 0.035, w, w),
-                });
-            }
-            None => eprintln!("could not start the corner source {spec:?}"),
-        }
-        self.set_capture_exclusion(self.wants_exclusion());
-        self.scene = Some(SceneCompositor::start(
-            self.scene_layers(),
-            Arc::clone(&self.slot),
-            SCENE_WIDTH,
-            SCENE_HEIGHT,
-        ));
-    }
-
-    fn start_extra_source(&self, spec: &PipSpec, slot: &Arc<FrameSlot>) -> Option<ExtraRunning> {
-        match spec {
-            PipSpec::Video(text) => {
-                let wanted = text.to_lowercase();
-                let device = self
-                    .video_devices
-                    .iter()
-                    .find(|d| d.friendly_name.to_lowercase().contains(&wanted))?;
-                let main_link = self
-                    .video_index
-                    .and_then(|i| self.video_devices.get(i))
-                    .filter(|_| self.source_kind == SourceKind::Capture)
-                    .map(|d| &d.symbolic_link);
-                if main_link == Some(&device.symbolic_link) {
-                    eprintln!(
-                        "the corner source is the main one ({})",
-                        device.friendly_name
-                    );
-                    return None;
-                }
-                let link = device.symbolic_link.clone();
-                Some(ExtraRunning::Capture {
-                    capture: VideoCapture::start(
-                        link.clone(),
-                        CaptureOptions::default(),
-                        Arc::clone(slot),
-                    ),
-                    link,
-                    retry_at: None,
-                })
-            }
-            PipSpec::Monitor(n) => {
-                let monitor = list_monitors().into_iter().nth(*n)?;
-                Some(ExtraRunning::Screen(ScreenCapture::start(
-                    CaptureTarget::Monitor(monitor.handle),
-                    ScreenOptions::default(),
-                    Arc::clone(slot),
-                )))
-            }
-            PipSpec::Window(text) => {
-                let wanted = text.to_lowercase();
-                let own = std::process::id();
-                let window = list_windows()
-                    .into_iter()
-                    .find(|w| w.process_id != own && w.title.to_lowercase().contains(&wanted))?;
-                Some(ExtraRunning::Screen(ScreenCapture::start(
-                    CaptureTarget::Window(window.handle),
-                    ScreenOptions::default(),
-                    Arc::clone(slot),
-                )))
-            }
-        }
-    }
-
-    /// Keeps the corner source alive: a capture card that drops out is
-    /// reopened, and a screen source that ends is taken off the picture.
-    fn maintain_extra(&mut self) {
-        let Some(extra) = self.extra.as_mut() else {
-            return;
-        };
-        let mut lost = false;
-        match &mut extra.running {
-            ExtraRunning::Capture {
-                capture,
-                link,
-                retry_at,
-            } => match capture.status() {
-                CaptureStatus::Disconnected { .. } | CaptureStatus::Failed(_) => {
-                    let due = retry_at.unwrap_or_else(|| Instant::now() + RECONNECT_DELAY);
-                    if Instant::now() >= due {
-                        *capture = VideoCapture::start(
-                            link.clone(),
-                            CaptureOptions::default(),
-                            Arc::clone(&extra.slot),
-                        );
-                        *retry_at = None;
-                    } else {
-                        *retry_at = Some(due);
-                    }
-                }
-                _ => *retry_at = None,
-            },
-            ExtraRunning::Screen(capture) => {
-                lost = matches!(
-                    capture.status(),
-                    ScreenStatus::Ended(_) | ScreenStatus::Failed(_)
-                );
-            }
-        }
-        if lost {
-            self.extra = None;
-            if let Some(scene) = &self.scene {
-                scene.set_layers(self.scene_layers());
-            }
-            self.set_capture_exclusion(self.wants_exclusion());
-            self.toast(i18n::Key::ToastPipLost, ToastKind::Error);
-        }
-    }
-
-    /// Whether Dockview's own window must stay out of the captured picture:
-    /// whenever any layer is a screen.
-    fn wants_exclusion(&self) -> bool {
-        self.source_kind != SourceKind::Capture
-            || matches!(
-                self.extra.as_ref().map(|e| &e.running),
-                Some(ExtraRunning::Screen(_))
-            )
     }
 
     /// Starts the audio pipeline for the audio device at `index` (or stops).
@@ -2009,7 +1846,7 @@ impl ApplicationHandler for App {
             return;
         }
         self.maintain_source();
-        self.maintain_extra();
+        self.maintain_overlays();
         if self.controls.sources_open() && self.sources_refreshed.elapsed() > SOURCES_REFRESH {
             self.refresh_sources();
         }

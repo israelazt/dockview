@@ -21,6 +21,7 @@ pub mod recorder;
 pub mod recording;
 #[cfg(windows)]
 pub mod replay;
+pub mod scene;
 #[cfg(windows)]
 pub mod screen;
 pub mod settings;

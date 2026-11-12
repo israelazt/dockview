@@ -139,6 +139,7 @@ pub enum Key {
     ToastSourceLost,
     ToastSourceFailed,
     ToastPipLost,
+    ToastSceneMissing,
     TipSources,
     TipReplay,
     TipSave,
@@ -196,7 +197,7 @@ pub fn size_label(bytes: u64) -> String {
 }
 
 /// All keys, for completeness tests.
-pub const ALL_KEYS: [Key; 124] = [
+pub const ALL_KEYS: [Key; 125] = [
     Key::Live,
     Key::Connecting,
     Key::Disconnected,
@@ -286,6 +287,7 @@ pub const ALL_KEYS: [Key; 124] = [
     Key::ToastSourceLost,
     Key::ToastSourceFailed,
     Key::ToastPipLost,
+    Key::ToastSceneMissing,
     Key::TipSources,
     Key::TipReplay,
     Key::TipSave,
@@ -423,6 +425,7 @@ fn en(key: Key) -> &'static str {
         Key::ToastSourceLost => "The captured window closed: back to the capture card",
         Key::ToastSourceFailed => "That window cannot be captured: back to the capture card",
         Key::ToastPipLost => "The corner source stopped and was taken off the picture",
+        Key::ToastSceneMissing => "Part of the scene is not available right now",
         Key::TipSources => "Choose what to capture: a capture card, a screen or an application",
         Key::TipReplay => "Instant replay options",
         Key::TipSave => "Save the last {seconds} as a clip ({hotkey})",
@@ -552,6 +555,7 @@ fn es(key: Key) -> &'static str {
         Key::ToastSourceLost => "La ventana capturada se cerró: de vuelta a la capturadora",
         Key::ToastSourceFailed => "No se puede capturar esa ventana: de vuelta a la capturadora",
         Key::ToastPipLost => "La fuente de la esquina se detuvo y se quitó de la imagen",
+        Key::ToastSceneMissing => "Una parte de la escena no está disponible ahora",
         Key::TipSources => "Elegir qué capturar: una capturadora, una pantalla o una aplicación",
         Key::TipReplay => "Opciones de la repetición instantánea",
         Key::TipSave => "Guardar los últimos {seconds} como clip ({hotkey})",

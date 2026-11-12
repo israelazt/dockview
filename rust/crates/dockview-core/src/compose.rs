@@ -17,7 +17,6 @@ use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
-use serde::{Deserialize, Serialize};
 use windows::core::{Interface, BOOL};
 use windows::Win32::Foundation::{E_FAIL, HMODULE, RECT};
 use windows::Win32::Graphics::Direct3D::D3D_DRIVER_TYPE_HARDWARE;
@@ -45,40 +44,7 @@ use windows::Win32::Media::{timeBeginPeriod, timeEndPeriod};
 use crate::frame::{Frame, FrameSlot, PixelFormat};
 use crate::screen::fit_in;
 
-/// A rectangle as fractions of the output picture: `0.0, 0.0, 1.0, 1.0` is all
-/// of it. Free-form, so a scene editor can place layers anywhere.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub struct NormRect {
-    pub x: f32,
-    pub y: f32,
-    pub w: f32,
-    pub h: f32,
-}
-
-impl NormRect {
-    pub const FULL: Self = Self {
-        x: 0.0,
-        y: 0.0,
-        w: 1.0,
-        h: 1.0,
-    };
-
-    pub const fn new(x: f32, y: f32, w: f32, h: f32) -> Self {
-        Self { x, y, w, h }
-    }
-}
-
-/// How a source's picture fills its rectangle.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-pub enum Fit {
-    /// The whole picture, kept in proportion, with black bars if needed.
-    #[default]
-    Contain,
-    /// The rectangle is filled in proportion, cropping what sticks out.
-    Cover,
-    /// The whole picture stretched to the rectangle.
-    Stretch,
-}
+pub use crate::scene::{Fit, NormRect};
 
 /// One layer of a scene: where a source's frames are drawn.
 #[derive(Clone)]

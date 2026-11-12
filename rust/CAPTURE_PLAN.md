@@ -200,7 +200,10 @@ Lo que se quiere: componer **varias fuentes a la vez** (por ejemplo el juego a p
 |---|---|---|
 | E-1 ✅ | Compositor sin interfaz: dos fuentes (pantalla/ventana a pantalla completa + capturadora en una esquina); herramienta de prueba que graba y mide | FPS, CPU y GPU; colores y posiciones correctas; coste con LoL abierto |
 | E-2 ✅ | La app mantiene varias fuentes a la vez; el compositor alimenta visor, replay y grabación | Grabar una escena con clics reales |
-| E-3 | Interfaz: selector de escenas y editor libre sobre la vista previa | Clics reales y capturas |
+| E-3a ✅ | Modelo de escenas, guardado en `settings.json`, redirección de frames y varias capas encima (sin interfaz nueva) | Escena guardada activada al arrancar, con clics: pendiente de E-3b |
+| E-3b | Botón y popover de escenas: activar, crear, borrar y añadir una fuente en una esquina (módulo `ui/scenes.rs`) | Clics reales y capturas |
+| E-3c | Editor libre sobre la vista previa: mover, redimensionar y panel de capas (módulo `ui/scene_editor.rs`) | Clics reales y capturas |
+| E-3d | Pulido y pruebas con clics reales | Grabar una escena editada |
 | E-4 | Cambio de escena con tecla global y transición suave opcional | Pruebas |
 
 ### Riesgos
@@ -224,6 +227,16 @@ Lo que se quiere: componer **varias fuentes a la vez** (por ejemplo el juego a p
 - Sin tope, dos fuentes de 60 fps producían **110 imágenes por segundo** (64 % de un núcleo y el codificador trabajando el doble). El compositor se limita a `OUTPUT_FPS` = 60 y dibuja solo cuando alguna fuente visible tiene un frame nuevo.
 - Nada de esto toca todavía la app: el visor y el replay siguen leyendo una sola fuente (E-2).
 - **Pendiente de medir**: GPU y FPS del juego con LoL abierto (lo mide el autor).
+
+### Resultados de E-3a
+
+Regla del autor: **módulos pequeños**. Por eso el modelo vive en `dockview-core/src/scene.rs` (datos puros, sin Windows), la lógica en tiempo de ejecución en `dockview-app/src/scene_runtime.rs`, y la interfaz irá en módulos propios, sin crecer `main.rs` ni `controls.rs`.
+
+- **Modelo** (`scene.rs`): una escena es una lista de capas, de abajo arriba. La primera es la **base** (la fuente principal, cuyo sonido se graba); las demás van encima. Cada capa tiene fuente, rectángulo libre normalizado, ajuste (encajar, recortar, estirar) y visible. La fuente se guarda como capturadora (enlace del dispositivo), monitor (nombre del dispositivo) o ventana (título). Máximo 8 capas; una capa nueva ocupa la primera esquina libre; un archivo dañado se repara al cargar.
+- **Guardado:** `scenes` y `activeScene` en `settings.json`. Un archivo antiguo sin ellos carga igual, y quien nunca crea una escena no ve cambios en el archivo.
+- **Redirección de frames** (`FrameSlot::set_forward`): la fuente principal publica siempre en `input_slot`, que sin escena reenvía directo al slot que leen el visor, el replay y la grabación, y con escena guarda los frames para el compositor. Activar o quitar una escena **no reinicia el grabador ni el replay**.
+- **En la app:** `activate_scene` pone la base como fuente principal, arranca las capas de encima y el compositor; una escena de una sola capa a pantalla completa no usa compositor. Al arrancar se restaura la escena de la última vez, salvo que la línea de comandos elija otra fuente. `--pip` crea una escena temporal que no se guarda.
+- **Verificado con la app real:** `--test-pattern --pip monitor:0` y una escena guardada de dos monitores que se activa sola al arrancar. 10 tests nuevos en el núcleo (modelo, guardado, redirección).
 
 ### Resultados de E-2
 

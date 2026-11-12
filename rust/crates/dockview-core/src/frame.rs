@@ -150,6 +150,8 @@ pub struct FrameSlot {
     slots: Mutex<Slots>,
     arrived: Condvar,
     tap: Mutex<Option<Arc<FrameTap>>>,
+    /// While set, frames published here go to this slot instead.
+    forward: Mutex<Option<Arc<FrameSlot>>>,
     published: AtomicU64,
     dropped: AtomicU64,
 }
@@ -159,8 +161,26 @@ impl FrameSlot {
         Self::default()
     }
 
+    /// Hands every frame published here to `target` from now on (or, with
+    /// `None`, keeps them here again). It lets a source keep one slot while
+    /// the thing reading it changes, so nothing has to restart.
+    pub fn set_forward(&self, target: Option<Arc<FrameSlot>>) {
+        *self.forward.lock().unwrap_or_else(|e| e.into_inner()) = target;
+    }
+
+    fn forward_target(&self) -> Option<Arc<FrameSlot>> {
+        self.forward
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+    }
+
     /// Stores `frame` as the latest one, dropping any unconsumed predecessor.
     pub fn publish(&self, mut frame: Frame) {
+        if let Some(target) = self.forward_target() {
+            target.publish(frame);
+            return;
+        }
         frame.arrived = Instant::now();
         let tap = self.tap.lock().unwrap_or_else(|e| e.into_inner()).clone();
         if let Some(tap) = tap {
@@ -204,6 +224,9 @@ impl FrameSlot {
 
     /// Takes a spare frame whose buffer can be reused for the next capture.
     pub fn take_spare(&self) -> Option<Frame> {
+        if let Some(target) = self.forward_target() {
+            return target.take_spare();
+        }
         self.lock().spare.take()
     }
 
@@ -378,5 +401,31 @@ mod tests {
             1920 * 1080 * 3 / 2
         );
         assert_eq!(PixelFormat::Yuy2.buffer_len(3840, 1080), 3840 * 1080);
+    }
+
+    #[test]
+    fn a_forwarding_slot_hands_its_frames_on_and_can_stop_doing_so() {
+        let source = FrameSlot::new();
+        let target = Arc::new(FrameSlot::new());
+        source.set_forward(Some(Arc::clone(&target)));
+        source.publish(frame(1));
+        assert!(source.take_latest().is_none(), "nothing is kept here");
+        assert_eq!(target.take_latest().map(|f| f.timestamp), Some(1));
+
+        // Buffers come back from where the frames went.
+        target.recycle(frame(7));
+        assert_eq!(source.take_spare().map(|f| f.timestamp), Some(7));
+
+        // The target's tap sees frames that arrive through the forward.
+        let tap = Arc::new(FrameTap::new(4));
+        target.set_tap(Some(Arc::clone(&tap)));
+        source.publish(frame(2));
+        assert_eq!(tap.pending(), 1);
+
+        // Frames stay here again once the forward is removed.
+        source.set_forward(None);
+        source.publish(frame(3));
+        assert_eq!(source.take_latest().map(|f| f.timestamp), Some(3));
+        assert!(target.take_latest().is_some_and(|f| f.timestamp == 2));
     }
 }
