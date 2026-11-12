@@ -2,7 +2,7 @@
 //!
 //! ```text
 //! dockview.exe [--test-pattern] [--ui-preview] [--theme auto|dark|light]
-//!              [--lang auto|en|es] [--scale N] [--open-settings]
+//!              [--lang auto|en|es] [--scale N] [--open-settings] [--stats]
 //!              [--screenshot FILE.png]
 //! ```
 
@@ -25,6 +25,10 @@ pub struct Cli {
     pub scale: Option<f32>,
     /// Start with the settings popover open.
     pub open_settings: bool,
+    /// Start with the statistics panel open.
+    pub show_stats: bool,
+    /// Preview only: show sample problems in the diagnosis.
+    pub demo_findings: bool,
     /// Render a few frames, save the window as a PNG and exit.
     pub screenshot: Option<PathBuf>,
 }
@@ -82,6 +86,8 @@ impl Cli {
                     cli.scale = Some(scale);
                 }
                 "--open-settings" => cli.open_settings = true,
+                "--stats" => cli.show_stats = true,
+                "--demo-findings" => cli.demo_findings = true,
                 "--screenshot" => cli.screenshot = Some(PathBuf::from(value("--screenshot")?)),
                 other => return Err(format!("unknown option '{other}'")),
             }
@@ -123,6 +129,12 @@ mod tests {
     fn open_settings_is_a_flag() {
         assert!(parse(&["--open-settings"]).unwrap().open_settings);
         assert!(!parse(&[]).unwrap().open_settings);
+    }
+
+    #[test]
+    fn stats_is_a_flag() {
+        assert!(parse(&["--stats"]).unwrap().show_stats);
+        assert!(!parse(&[]).unwrap().show_stats);
     }
 
     #[test]

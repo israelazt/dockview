@@ -63,6 +63,7 @@ const ICON_SETTINGS: char = '\u{e29a}';
 const ICON_FULLSCREEN: char = '\u{e112}';
 const ICON_EXIT_FULLSCREEN: char = '\u{e11a}';
 const ICON_CHECK: char = '\u{e06c}';
+const ICON_ACTIVITY: char = '\u{e038}';
 
 const LABEL: TextStyle = TextStyle::new(13.0, Weight::Medium);
 const BODY: TextStyle = TextStyle::new(13.0, Weight::Regular);
@@ -103,6 +104,7 @@ pub struct Model {
     pub preset: RenderPreset,
     pub theme_mode: ThemeMode,
     pub lang_mode: LangMode,
+    pub stats_open: bool,
 }
 
 /// A change the user asked for.
@@ -116,6 +118,7 @@ pub enum Action {
     SetPreset(RenderPreset),
     SetTheme(ThemeMode),
     SetLang(LangMode),
+    ToggleStats,
 }
 
 /// Identifies an interactive (or occluding) region.
@@ -133,6 +136,7 @@ enum Hit {
     Preset(usize),
     Theme(usize),
     Lang(usize),
+    Stats,
 }
 
 impl Hit {
@@ -151,6 +155,7 @@ impl Hit {
                 | Hit::Preset(_)
                 | Hit::Theme(_)
                 | Hit::Lang(_)
+                | Hit::Stats
         )
     }
 }
@@ -357,6 +362,7 @@ impl Controls {
             Hit::Preset(i) => Action::SetPreset(PRESETS[i]),
             Hit::Theme(i) => Action::SetTheme(THEMES[i]),
             Hit::Lang(i) => Action::SetLang(LANGS[i]),
+            Hit::Stats => Action::ToggleStats,
             Hit::Pill | Hit::Popover | Hit::Volume => return,
         };
         self.actions.push(action);
@@ -731,7 +737,7 @@ impl Controls {
             tr(lang, Key::Spanish),
         ];
         let lang_selected = LANGS.iter().position(|v| *v == m.lang_mode).unwrap_or(0);
-        self.segmented_section(
+        y = self.segmented_section(
             ui,
             m,
             Key::Language,
@@ -743,6 +749,39 @@ impl Controls {
             y,
             inner_w,
         );
+        y += SECTION_GAP;
+        self.stats_row(ui, m, inner_x, y, inner_w);
+    }
+
+    /// The row that toggles the statistics panel.
+    fn stats_row(&mut self, ui: &mut Ui, m: &Model, x: f32, y: f32, w: f32) {
+        let t = &m.theme;
+        let row = Rect::new(x, y, w, ROW_HEIGHT);
+        self.register(Hit::Stats, row);
+        let (hover, press) = self.amounts(Hit::Stats);
+        let alpha = t.hover.a * (hover + 0.9 * press);
+        if alpha > 0.002 {
+            ui.rect(row, 9.0, t.hover.with_alpha(alpha.min(1.0)));
+        }
+        let cy = y + ROW_HEIGHT / 2.0;
+        ui.icon(ICON_ACTIVITY, x + 20.0, cy, 15.0, t.text_dim);
+        let line_h = ui.measure("Ag", BODY).1;
+        ui.text(
+            tr(m.lang, Key::Statistics),
+            x + 38.0,
+            cy - line_h / 2.0,
+            BODY,
+            t.text,
+        );
+        if m.stats_open {
+            ui.icon(ICON_CHECK, x + w - 18.0, cy, 15.0, t.accent);
+        } else {
+            let hint = TextStyle::new(12.0, Weight::Medium);
+            let key_w = ui.measure("I", hint).0 + 12.0;
+            let key = Rect::new(x + w - 10.0 - key_w, cy - 10.0, key_w, 20.0);
+            ui.rect(key, 6.0, t.segment_track);
+            ui.text("I", key.x + 6.0, cy - 9.0, hint, t.text_dim);
+        }
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -931,7 +970,8 @@ fn popover_height(m: &Model) -> f32 {
         + device(m.video_devices.len())
         + device(m.audio_devices.len())
         + segmented * 3.0
-        + SECTION_GAP * 4.0
+        + SECTION_GAP * 5.0
+        + ROW_HEIGHT
 }
 
 /// Shortens `text` with an ellipsis so it fits in `max_w` logical pixels.
@@ -975,6 +1015,7 @@ mod tests {
             preset: RenderPreset::Balanced,
             theme_mode: ThemeMode::Auto,
             lang_mode: LangMode::Auto,
+            stats_open: false,
         }
     }
 
@@ -1176,6 +1217,18 @@ mod tests {
         rig.frame(0.016);
         rig.click_on(Hit::SyncPlus);
         assert_eq!(rig.actions(), vec![Action::SetSync(MAX_AUDIO_OFFSET_MS)]);
+    }
+
+    #[test]
+    fn the_statistics_row_toggles_the_panel() {
+        let mut rig = Rig::new(true);
+        rig.click_on(Hit::Settings);
+        rig.click_on(Hit::Stats);
+        assert_eq!(rig.actions(), vec![Action::ToggleStats]);
+        assert!(
+            rig.controls.settings_open(),
+            "toggling stats keeps the popover"
+        );
     }
 
     #[test]

@@ -30,6 +30,21 @@ pub struct StreamInfo {
 }
 
 impl StreamInfo {
+    /// Data rate of the mode over USB in megabits per second, for formats
+    /// that are sent uncompressed. `None` for compressed modes, whose size
+    /// depends on the content.
+    pub fn raw_mbps(&self) -> Option<f32> {
+        if self.is_compressed {
+            return None;
+        }
+        let bytes_per_pixel = match self.format_name.as_str() {
+            "NV12" => 1.5,
+            "YUY2" => 2.0,
+            _ => 4.0,
+        };
+        Some(self.pixels() as f32 * bytes_per_pixel * self.fps as f32 * 8.0 / 1e6)
+    }
+
     fn pixels(&self) -> u64 {
         u64::from(self.width) * u64::from(self.height)
     }
@@ -249,6 +264,16 @@ mod tests {
         for profile in ALL_PROFILES {
             assert_eq!(select_best(&types, profile), Some(&types[0]), "{profile:?}");
         }
+    }
+
+    #[test]
+    fn raw_bandwidth_matches_the_well_known_figures() {
+        // 1080p30 NV12 is about 746 Mbps: far beyond USB 2.0 (480 Mbps).
+        let nv12 = make(1920, 1080, 30, false, "NV12");
+        assert!((nv12.raw_mbps().unwrap() - 746.5).abs() < 1.0);
+        let yuy2 = make(640, 480, 30, false, "YUY2");
+        assert!((yuy2.raw_mbps().unwrap() - 147.5).abs() < 1.0);
+        assert_eq!(mjpeg_1080p60().raw_mbps(), None);
     }
 
     #[test]

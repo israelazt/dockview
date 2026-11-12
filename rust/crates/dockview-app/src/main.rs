@@ -10,6 +10,7 @@ compile_error!("Dockview only supports Windows.");
 mod cli;
 #[allow(dead_code)] // some strings are used by the upcoming live controls
 mod i18n;
+mod perf;
 mod render;
 #[allow(dead_code)] // some tokens are used by the upcoming live controls
 mod theme;
@@ -21,14 +22,16 @@ use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use dockview_core::audio::{enumerate_audio_devices, AudioEngine};
+use dockview_core::audio::{enumerate_audio_devices, AudioEngine, AudioStatus};
 use dockview_core::capture::{CaptureOptions, CaptureStatus, VideoCapture};
 use dockview_core::device::{match_audio_to_video, AudioDevice, VideoDevice};
+use dockview_core::diagnostics::{diagnose, Snapshot, VideoState};
 use dockview_core::frame::FrameSlot;
 use dockview_core::mf::{enumerate_video_devices, MfSession};
 use dockview_core::settings::{
     self, AppSettings, LangMode, RenderPreset, ThemeMode, MAX_AUDIO_OFFSET_MS,
 };
+use dockview_core::stream::StreamInfo;
 use dockview_core::testsrc::TestSource;
 use windows::Win32::Foundation::HWND;
 use winit::application::ApplicationHandler;
@@ -41,11 +44,13 @@ use winit::window::{CursorIcon, Fullscreen, Theme as WindowTheme, Window, Window
 
 use cli::Cli;
 use i18n::{Lang, LangModeExt};
+use perf::ProcessSampler;
 use render::{Filter, Renderer};
 use theme::{Appearance, Theme, ThemeModeExt};
 use ui::controls::{Action, Controls, Model, StatusKind};
 use ui::gpu::UiGpu;
 use ui::input::Pointer;
+use ui::stats::{Stats, StatsPanel};
 use ui::Ui;
 
 /// Delay before trying to reopen a capture device that went away.
@@ -99,6 +104,16 @@ struct App {
     needs_redraw: bool,
     cursor_pointer: bool,
     cursor_hidden: bool,
+    animations: bool,
+    stats_open: bool,
+    stats_panel: StatsPanel,
+    stats: Stats,
+    sampler: ProcessSampler,
+    last_published: u64,
+    last_dropped: u64,
+    latency_sum_ms: f64,
+    latency_count: u32,
+    stats_updates: u32,
 }
 
 /// Whether Windows allows UI animations ("Show animations in Windows").
@@ -157,6 +172,7 @@ impl App {
     ) -> Self {
         let test_pattern = cli.test_pattern;
         let preview = cli.ui_preview;
+        let show_stats = cli.show_stats;
         // Screenshots must show the settled state, not a mid-transition frame.
         let animations = cli.screenshot.is_none() && system_animations_enabled();
         let mut app = Self {
@@ -189,6 +205,16 @@ impl App {
             needs_redraw: true,
             cursor_pointer: false,
             cursor_hidden: false,
+            animations,
+            stats_open: show_stats,
+            stats_panel: StatsPanel::new(),
+            stats: Stats::default(),
+            sampler: ProcessSampler::new(),
+            last_published: 0,
+            last_dropped: 0,
+            latency_sum_ms: 0.0,
+            latency_count: 0,
+            stats_updates: 0,
         };
 
         app.controls.set_animations(animations);
@@ -396,6 +422,7 @@ impl App {
             preset: self.settings.render_preset,
             theme_mode: self.theme_mode(),
             lang_mode: self.lang_mode(),
+            stats_open: self.stats_open,
         }
     }
 
@@ -426,6 +453,10 @@ impl App {
                 }
             }
             Action::SelectAudio(index) => self.select_audio(Some(index)),
+            Action::ToggleStats => {
+                self.stats_open = !self.stats_open;
+                return;
+            }
             Action::SetPreset(preset) => {
                 self.settings.render_preset = preset;
                 if let Some(renderer) = self.renderer.as_mut() {
@@ -444,15 +475,119 @@ impl App {
         self.save_settings();
     }
 
-    /// Frame rate of what is actually being drawn, refreshed once a second.
+    /// Refreshes the measurements once a second.
     fn update_stats(&mut self) {
         let elapsed = self.last_stats.elapsed();
         if elapsed < Duration::from_secs(1) {
             return;
         }
-        self.fps = (self.rendered - self.last_rendered) as f32 / elapsed.as_secs_f32();
+        let secs = elapsed.as_secs_f32();
+        let published = self.slot.published();
+        let dropped = self.slot.dropped();
+        let received_fps = (published - self.last_published) as f32 / secs;
+        let dropped_per_sec = (dropped - self.last_dropped) as f32 / secs;
+        let shown_fps = (self.rendered - self.last_rendered) as f32 / secs;
+        self.last_published = published;
+        self.last_dropped = dropped;
         self.last_rendered = self.rendered;
         self.last_stats = Instant::now();
+        self.stats_updates += 1;
+        self.fps = shown_fps;
+
+        let usage = self.sampler.sample();
+        let latency_ms = (self.latency_count > 0)
+            .then(|| (self.latency_sum_ms / f64::from(self.latency_count)) as f32)
+            .or(self.stats.latency_ms);
+        self.latency_sum_ms = 0.0;
+        self.latency_count = 0;
+
+        let native = self.native_mode();
+        let video = match &self.source {
+            Source::Test(_) => VideoState::Running,
+            Source::None => VideoState::NoDevice,
+            Source::Capture { capture, .. } => match capture.status() {
+                CaptureStatus::Running { .. } | CaptureStatus::Stopped => VideoState::Running,
+                CaptureStatus::Starting => VideoState::Connecting,
+                CaptureStatus::Disconnected { .. } | CaptureStatus::Failed(_) => VideoState::Lost,
+            },
+        };
+        let monitor_hz = self
+            .window
+            .as_ref()
+            .and_then(|w| w.current_monitor())
+            .and_then(|m| m.refresh_rate_millihertz())
+            .map(|mhz| mhz as f32 / 1000.0);
+        let gpu_ms = self.renderer.as_ref().and_then(Renderer::gpu_ms);
+        let audio_ok = self.audio.as_ref().map(|a| {
+            !matches!(
+                a.status(),
+                AudioStatus::Disconnected(_) | AudioStatus::Failed(_)
+            )
+        });
+
+        let findings = diagnose(&Snapshot {
+            video,
+            mode_fps: native.as_ref().map(|n| n.fps),
+            mode_raw_mbps: native.as_ref().and_then(StreamInfo::raw_mbps),
+            received_fps,
+            dropped_per_sec,
+            cpu_core_percent: usage.cpu_core_percent,
+            gpu_ms,
+            frame_budget_ms: monitor_hz.map(|hz| 1000.0 / hz),
+            audio_ok,
+        });
+
+        let findings = if self.cli.ui_preview && self.cli.demo_findings {
+            use dockview_core::diagnostics::Finding;
+            vec![
+                Finding::NeedsUsb3,
+                Finding::DroppingFrames,
+                Finding::HighCpu,
+            ]
+        } else {
+            findings
+        };
+
+        let size = self
+            .window
+            .as_ref()
+            .map_or((0, 0), |w| (w.inner_size().width, w.inner_size().height));
+        self.stats = Stats {
+            device_mode: native.as_ref().map(ToString::to_string),
+            mode_mbps: native.as_ref().and_then(StreamInfo::raw_mbps),
+            received_fps,
+            shown_fps,
+            dropped_per_sec,
+            latency_ms,
+            cpu_core_percent: usage.cpu_core_percent,
+            cpu_total_percent: usage.cpu_total_percent,
+            gpu_ms,
+            memory_mb: usage.memory_mb,
+            audio_buffer_ms: self.audio.as_ref().map(AudioEngine::buffered_ms),
+            monitor_hz,
+            window: size,
+            findings,
+            measured: true,
+        };
+    }
+
+    /// The device mode in use (a stand-in for the synthetic source).
+    fn native_mode(&self) -> Option<StreamInfo> {
+        match &self.source {
+            Source::Test(_) => Some(StreamInfo {
+                type_index: 0,
+                format_name: "NV12".into(),
+                width: 1920,
+                height: 1080,
+                fps: 30,
+                is_compressed: false,
+            }),
+            Source::Capture { capture, .. } => match capture.status() {
+                CaptureStatus::Running { native, .. } => Some(native),
+                _ => None,
+            },
+            Source::None => None,
+        }
     }
 
     /// Pointer shape and visibility follow what the controls are doing.
@@ -484,7 +619,10 @@ impl App {
         self.last_frame = now;
         let pointer = self.pointer;
         let scale = self.ui_scale;
-        let capture = self.cli.screenshot.is_some() && self.rendered >= SCREENSHOT_AFTER_FRAMES;
+        // The first seconds include start-up work; wait for steady numbers.
+        let settled = !self.cli.show_stats || self.stats_updates >= 3;
+        let capture =
+            self.cli.screenshot.is_some() && self.rendered >= SCREENSHOT_AFTER_FRAMES && settled;
 
         let Some(renderer) = self.renderer.as_mut() else {
             return;
@@ -492,7 +630,9 @@ impl App {
         // Wait for a free present slot *before* picking the frame so we always
         // show the freshest one.
         renderer.wait_for_present_slot(100);
+        let mut arrived = None;
         if let Some(frame) = self.slot.take_latest() {
+            arrived = Some(frame.arrived);
             self.video_size = (frame.width, frame.height);
             if let Err(e) = renderer.upload(&frame) {
                 eprintln!("upload failed: {e}");
@@ -502,6 +642,8 @@ impl App {
         }
 
         let (ui, ui_gpu, controls) = (&mut self.ui, &mut self.ui_gpu, &mut self.controls);
+        let (stats_panel, stats) = (&mut self.stats_panel, &self.stats);
+        let (stats_open, animations) = (self.stats_open, self.animations);
         let result = renderer.draw(
             &mut |_device, context, size| {
                 let Some(gpu) = ui_gpu.as_mut() else {
@@ -509,6 +651,15 @@ impl App {
                 };
                 ui.begin(size, scale);
                 controls.frame(ui, &model, &pointer, dt);
+                stats_panel.frame(
+                    ui,
+                    &model.theme,
+                    model.lang,
+                    stats,
+                    stats_open,
+                    dt,
+                    animations,
+                );
                 if let Err(e) = gpu.render(context, ui, size) {
                     eprintln!("ui draw failed: {e}");
                 }
@@ -519,6 +670,10 @@ impl App {
             Ok(Some(shot)) => self.save_screenshot(&shot),
             Ok(None) => {}
             Err(e) => eprintln!("present failed: {e}"),
+        }
+        if let Some(arrived) = arrived {
+            self.latency_sum_ms += arrived.elapsed().as_secs_f64() * 1000.0;
+            self.latency_count += 1;
         }
 
         self.pointer.end_frame();
@@ -607,6 +762,7 @@ impl App {
             Key::Character(c) => match c.to_ascii_lowercase().as_str() {
                 "f" => self.set_fullscreen(!self.fullscreen),
                 "p" => self.cycle_preset(),
+                "i" => self.stats_open = !self.stats_open,
                 "v" => {
                     let next = next_index(self.video_index, self.video_devices.len());
                     self.select_video(next);

@@ -78,3 +78,16 @@ dockview.exe --ui-preview --screenshot salida.png   # guarda la ventana y sale
 ```
 
 Las capturas de referencia están en `rust/ui-previews/`.
+
+## Panel de estadísticas y diagnóstico
+
+Se abre con la tecla `I` o desde la fila «Estadísticas» del popover (`--stats` lo abre al arrancar; `--demo-findings` simula problemas en la vista previa). Muestra, en inglés o español:
+
+- **Video:** modo del dispositivo, datos que necesita ese modo por USB, frames recibidos, mostrados y saltados.
+- **Rendimiento:** latencia interna de la app (desde que llega el frame hasta que se entrega a la pantalla; no incluye la capturadora ni el USB), CPU de la app, tiempo de GPU por frame (consultas de temporización de D3D11) y memoria.
+- **Pantalla:** frecuencia del monitor, tamaño de la ventana, búfer de audio.
+- **Diagnóstico** en lenguaje claro (`dockview-core/src/diagnostics.rs`): sin dispositivo, dispositivo perdido, modo que necesita USB 3, dispositivo que entrega menos frames de los anunciados, frames saltados, CPU alta, GPU lenta y audio perdido.
+
+Todo se mide localmente; no hay telemetría ni se envía nada.
+
+Medidas de referencia (modo de prueba, build release, PC del autor: GTX 1660 Ti, Ryzen 5 3600X, monitor a 144 Hz): 30 fps recibidos y mostrados, 0 saltados, ~1,7 ms de latencia interna, ~0,6 % de CPU total, 0,08 ms de GPU por frame, ~75 MB. El arranque cuesta ~1 s de CPU (fuentes y compilación de shaders): candidato a optimizar para equipos modestos.

@@ -308,6 +308,7 @@ fn publish_frame(
         format,
         data: Vec::with_capacity(expected),
         timestamp: 0,
+        arrived: std::time::Instant::now(),
     });
     frame.width = layout.width;
     frame.height = layout.height;

@@ -4,6 +4,7 @@
 pub mod controls;
 pub mod gpu;
 pub mod input;
+pub mod stats;
 pub mod text;
 
 use crate::theme::Color;

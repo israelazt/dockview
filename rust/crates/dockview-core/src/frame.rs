@@ -2,7 +2,7 @@
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Condvar, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 /// Pixel layout of a [`Frame`]. Colour conversion happens on the GPU.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -35,6 +35,9 @@ pub struct Frame {
     pub data: Vec<u8>,
     /// Presentation time in 100 ns units, as reported by Media Foundation.
     pub timestamp: i64,
+    /// When the frame reached the application (set by [`FrameSlot::publish`]).
+    /// Used to measure the app's own latency.
+    pub arrived: Instant,
 }
 
 #[derive(Default)]
@@ -62,7 +65,8 @@ impl FrameSlot {
     }
 
     /// Stores `frame` as the latest one, dropping any unconsumed predecessor.
-    pub fn publish(&self, frame: Frame) {
+    pub fn publish(&self, mut frame: Frame) {
+        frame.arrived = Instant::now();
         let mut slots = self.lock();
         if let Some(old) = slots.latest.replace(frame) {
             slots.spare = Some(old);
@@ -128,7 +132,18 @@ mod tests {
             format: PixelFormat::Nv12,
             data: vec![0; 12],
             timestamp,
+            arrived: Instant::now(),
         }
+    }
+
+    #[test]
+    fn publishing_stamps_the_arrival_time() {
+        let slot = FrameSlot::new();
+        let mut old = frame(1);
+        old.arrived = Instant::now() - Duration::from_secs(60);
+        slot.publish(old);
+        let got = slot.take_latest().unwrap();
+        assert!(got.arrived.elapsed() < Duration::from_secs(5));
     }
 
     #[test]

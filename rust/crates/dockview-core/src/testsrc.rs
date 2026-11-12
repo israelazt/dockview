@@ -68,6 +68,7 @@ pub fn nv12_bars(width: u32, height: u32) -> Frame {
         format: PixelFormat::Nv12,
         data,
         timestamp: 0,
+        arrived: std::time::Instant::now(),
     }
 }
 

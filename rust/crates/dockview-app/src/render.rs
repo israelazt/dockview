@@ -19,6 +19,10 @@ use windows::Win32::Graphics::Direct3D11::{
     D3D11_MAP_READ, D3D11_SAMPLER_DESC, D3D11_SDK_VERSION, D3D11_TEXTURE2D_DESC,
     D3D11_TEXTURE_ADDRESS_CLAMP, D3D11_USAGE_DEFAULT, D3D11_USAGE_STAGING, D3D11_VIEWPORT,
 };
+use windows::Win32::Graphics::Direct3D11::{
+    ID3D11Query, D3D11_QUERY_DATA_TIMESTAMP_DISJOINT, D3D11_QUERY_DESC, D3D11_QUERY_TIMESTAMP,
+    D3D11_QUERY_TIMESTAMP_DISJOINT,
+};
 use windows::Win32::Graphics::Dxgi::Common::{
     DXGI_ALPHA_MODE_IGNORE, DXGI_FORMAT, DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_R8G8B8A8_UNORM,
     DXGI_FORMAT_R8G8_UNORM, DXGI_FORMAT_R8_UNORM, DXGI_FORMAT_UNKNOWN, DXGI_SAMPLE_DESC,
@@ -56,6 +60,126 @@ struct VideoTextures {
     chroma: Option<(ID3D11Texture2D, ID3D11ShaderResourceView)>,
 }
 
+/// Measures how long the GPU spends on each frame, using timestamp queries.
+///
+/// Results arrive a few frames late (the GPU runs behind the CPU), so queries
+/// are kept in a small ring and read back without ever stalling.
+struct GpuTimer {
+    sets: Vec<QuerySet>,
+    next: usize,
+    active: Option<usize>,
+    /// Smoothed GPU time per frame, in milliseconds.
+    smoothed_ms: Option<f32>,
+}
+
+struct QuerySet {
+    disjoint: ID3D11Query,
+    start: ID3D11Query,
+    end: ID3D11Query,
+    in_flight: bool,
+}
+
+impl GpuTimer {
+    const RING: usize = 4;
+
+    fn new(device: &ID3D11Device) -> Result<Self> {
+        let make = |kind| -> Result<ID3D11Query> {
+            let desc = D3D11_QUERY_DESC {
+                Query: kind,
+                MiscFlags: 0,
+            };
+            let mut query = None;
+            // SAFETY: valid query description and out-pointer.
+            unsafe { device.CreateQuery(&desc, Some(&mut query))? };
+            query.ok_or_else(missing)
+        };
+        let mut sets = Vec::with_capacity(Self::RING);
+        for _ in 0..Self::RING {
+            sets.push(QuerySet {
+                disjoint: make(D3D11_QUERY_TIMESTAMP_DISJOINT)?,
+                start: make(D3D11_QUERY_TIMESTAMP)?,
+                end: make(D3D11_QUERY_TIMESTAMP)?,
+                in_flight: false,
+            });
+        }
+        Ok(Self {
+            sets,
+            next: 0,
+            active: None,
+            smoothed_ms: None,
+        })
+    }
+
+    fn begin(&mut self, context: &ID3D11DeviceContext) {
+        let index = self.next;
+        if self.sets[index].in_flight {
+            self.active = None; // the GPU is still behind: skip this frame
+            return;
+        }
+        let set = &self.sets[index];
+        // SAFETY: the queries belong to the same device as `context`.
+        unsafe {
+            context.Begin(&set.disjoint);
+            context.End(&set.start);
+        }
+        self.active = Some(index);
+    }
+
+    fn end(&mut self, context: &ID3D11DeviceContext) {
+        let Some(index) = self.active.take() else {
+            return;
+        };
+        let set = &mut self.sets[index];
+        // SAFETY: see `begin`.
+        unsafe {
+            context.End(&set.end);
+            context.End(&set.disjoint);
+        }
+        set.in_flight = true;
+        self.next = (index + 1) % Self::RING;
+    }
+
+    /// Reads back every finished query set.
+    fn collect(&mut self, context: &ID3D11DeviceContext) {
+        for set in self.sets.iter_mut().filter(|s| s.in_flight) {
+            // GetData reports "not ready yet" as a success code, so a zero
+            // frequency (the value we pre-load) means nothing was written.
+            let mut disjoint = D3D11_QUERY_DATA_TIMESTAMP_DISJOINT::default();
+            let (mut start, mut end) = (0u64, 0u64);
+            // SAFETY: every out-pointer matches the size passed with it.
+            let ready = unsafe {
+                context
+                    .GetData(
+                        &set.disjoint,
+                        Some((&mut disjoint as *mut D3D11_QUERY_DATA_TIMESTAMP_DISJOINT).cast()),
+                        std::mem::size_of::<D3D11_QUERY_DATA_TIMESTAMP_DISJOINT>() as u32,
+                        0,
+                    )
+                    .is_ok()
+                    && disjoint.Frequency != 0
+                    && context
+                        .GetData(&set.start, Some((&mut start as *mut u64).cast()), 8, 0)
+                        .is_ok()
+                    && context
+                        .GetData(&set.end, Some((&mut end as *mut u64).cast()), 8, 0)
+                        .is_ok()
+                    && end != 0
+            };
+            if !ready {
+                continue;
+            }
+            set.in_flight = false;
+            if !disjoint.Disjoint.as_bool() && end >= start {
+                let ms = (end - start) as f64 / disjoint.Frequency as f64 * 1000.0;
+                self.smoothed_ms = Some(match self.smoothed_ms {
+                    Some(previous) => previous * 0.9 + ms as f32 * 0.1,
+                    None => ms as f32,
+                });
+            }
+        }
+    }
+}
+
 /// Callback that draws on top of the video: device, context, target size.
 pub type Overlay<'a> = dyn FnMut(&ID3D11Device, &ID3D11DeviceContext, (u32, u32)) + 'a;
 
@@ -81,6 +205,7 @@ pub struct Renderer {
     filter: Filter,
     video: Option<VideoTextures>,
     size: (u32, u32),
+    gpu_timer: Option<GpuTimer>,
 }
 
 impl Renderer {
@@ -162,7 +287,9 @@ impl Renderer {
                 filter: Filter::Linear,
                 video: None,
                 size: (width.max(1), height.max(1)),
+                gpu_timer: None,
             };
+            renderer.gpu_timer = GpuTimer::new(&renderer.device).ok();
             renderer.create_target()?;
             Ok(renderer)
         }
@@ -235,6 +362,11 @@ impl Renderer {
         &self.device
     }
 
+    /// Smoothed GPU time per frame in milliseconds, once measured.
+    pub fn gpu_ms(&self) -> Option<f32> {
+        self.gpu_timer.as_ref().and_then(|t| t.smoothed_ms)
+    }
+
     /// Draws the current video (letterboxed), then lets `overlay` draw on top
     /// (it receives the device, context and render-target size), and presents.
     /// With `capture` set, also returns the finished image.
@@ -244,6 +376,9 @@ impl Renderer {
         };
         // SAFETY: all resources are owned by `self` and alive for the draw.
         unsafe {
+            if let Some(timer) = self.gpu_timer.as_mut() {
+                timer.begin(&self.context);
+            }
             self.context
                 .OMSetRenderTargets(Some(&[Some(target.clone())]), None);
             self.context
@@ -299,6 +434,9 @@ impl Renderer {
             self.context
                 .OMSetRenderTargets(Some(&[Some(target.clone())]), None);
             overlay(&self.device, &self.context, self.size);
+            if let Some(timer) = self.gpu_timer.as_mut() {
+                timer.end(&self.context);
+            }
 
             let shot = if capture {
                 Some(self.read_back()?)
@@ -306,6 +444,9 @@ impl Renderer {
                 None
             };
             self.swap_chain.Present(1, DXGI_PRESENT(0)).ok()?;
+            if let Some(timer) = self.gpu_timer.as_mut() {
+                timer.collect(&self.context);
+            }
             Ok(shot)
         }
     }
