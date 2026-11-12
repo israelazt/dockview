@@ -23,7 +23,7 @@ use windows::Win32::Media::MediaFoundation::{
 
 use crate::frame::{Frame, FrameSlot, PixelFormat};
 use crate::mf::{first_video_stream, open_source, read_native_types, unpack_pair, MfSession};
-use crate::stream::{select_best, CaptureProfile, StreamInfo};
+use crate::stream::{select_best, select_best_compressed, CaptureProfile, StreamInfo};
 
 /// How long `Drop` waits for the capture thread before detaching it. A source
 /// with no signal can leave `ReadSample` blocked indefinitely.
@@ -38,6 +38,8 @@ pub enum CaptureStatus {
     Running {
         native: StreamInfo,
         output: PixelFormat,
+        /// Whether the device also offers a compressed mode to fall back to.
+        has_compressed: bool,
     },
     /// The device was unplugged or the stream ended.
     Disconnected { reason: String },
@@ -54,6 +56,9 @@ pub struct CaptureOptions {
     pub profile: CaptureProfile,
     /// Force a specific native mode by its `StreamInfo::type_index`.
     pub mode_index: Option<u32>,
+    /// Choose among compressed (MJPEG) modes when the device has any. Used when
+    /// the USB connection cannot carry an uncompressed mode.
+    pub prefer_compressed: bool,
 }
 
 /// Handle to a running capture thread. Dropping it stops the capture.
@@ -210,12 +215,14 @@ unsafe fn read_frames(
     let stream = first_video_stream();
 
     let types = read_native_types(reader)?;
+    let has_compressed = types.iter().any(|t| t.is_compressed);
     let best = match options.mode_index {
-        Some(index) => types.iter().find(|t| t.type_index == index),
-        None => select_best(&types, options.profile),
+        Some(index) => types.iter().find(|t| t.type_index == index).cloned(),
+        None if options.prefer_compressed => select_best_compressed(&types, options.profile)
+            .or_else(|| select_best(&types, options.profile).cloned()),
+        None => select_best(&types, options.profile).cloned(),
     }
-    .ok_or_else(|| Error::new(E_FAIL, "requested video mode is not available"))?
-    .clone();
+    .ok_or_else(|| Error::new(E_FAIL, "requested video mode is not available"))?;
 
     // 1. Pick the device's native mode.
     let native = reader.GetNativeMediaType(stream, best.type_index)?;
@@ -242,6 +249,7 @@ unsafe fn read_frames(
         CaptureStatus::Running {
             native: best,
             output,
+            has_compressed,
         },
     );
 

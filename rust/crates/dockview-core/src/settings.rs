@@ -84,6 +84,18 @@ pub enum LangMode {
     Es,
 }
 
+/// How the video mode of the capture device is chosen.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum VideoModePref {
+    /// Best quality first (uncompressed); switches to a compressed mode by
+    /// itself if the USB connection cannot keep up.
+    #[default]
+    Auto,
+    /// Always use a compressed (MJPEG) mode when the device offers one.
+    Compressed,
+}
+
 /// Persisted application settings. Every field falls back to its default when
 /// missing from the file.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -107,6 +119,8 @@ pub struct AppSettings {
     pub theme: ThemeMode,
     /// Interface language preference.
     pub language: LangMode,
+    /// How the capture mode is chosen.
+    pub video_mode: VideoModePref,
 }
 
 impl Default for AppSettings {
@@ -120,6 +134,7 @@ impl Default for AppSettings {
             render_preset: RenderPreset::default(),
             theme: ThemeMode::default(),
             language: LangMode::default(),
+            video_mode: VideoModePref::default(),
         }
     }
 }
@@ -150,7 +165,11 @@ pub fn settings_path() -> Option<PathBuf> {
 pub fn load_from(path: &Path) -> AppSettings {
     fs::read_to_string(path)
         .ok()
-        .and_then(|json| serde_json::from_str::<AppSettings>(&json).ok())
+        // Editors such as Notepad (and PowerShell 5.1) prepend a UTF-8 byte
+        // order mark, which JSON parsers reject.
+        .and_then(|json| {
+            serde_json::from_str::<AppSettings>(json.trim_start_matches('\u{feff}')).ok()
+        })
         .unwrap_or_default()
         .sanitized()
 }
@@ -209,6 +228,7 @@ mod tests {
             render_preset: RenderPreset::Quality,
             theme: ThemeMode::Light,
             language: LangMode::Es,
+            video_mode: VideoModePref::Compressed,
         };
         let json = serde_json::to_string_pretty(&original).unwrap();
         let restored: AppSettings = serde_json::from_str(&json).unwrap();
@@ -256,6 +276,19 @@ mod tests {
     }
 
     #[test]
+    fn video_mode_is_stored_as_a_lowercase_word_and_defaults_to_auto() {
+        let s = AppSettings {
+            video_mode: VideoModePref::Compressed,
+            ..AppSettings::default()
+        };
+        assert!(serde_json::to_string(&s)
+            .unwrap()
+            .contains(r#""videoMode":"compressed""#));
+        let old: AppSettings = serde_json::from_str("{}").unwrap();
+        assert_eq!(old.video_mode, VideoModePref::Auto);
+    }
+
+    #[test]
     fn files_from_the_csharp_app_load_with_auto_theme_and_language() {
         let s: AppSettings = serde_json::from_str(r#"{"volume": 0.5}"#).unwrap();
         assert_eq!((s.theme, s.language), (ThemeMode::Auto, LangMode::Auto));
@@ -291,6 +324,15 @@ mod tests {
     fn missing_file_returns_defaults() {
         let path = temp_file("missing");
         assert_eq!(load_from(&path), AppSettings::default());
+    }
+
+    #[test]
+    fn a_file_with_a_utf8_byte_order_mark_still_loads() {
+        let path = temp_file("bom");
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(&path, "\u{feff}{ \"volume\": 0.25 }").unwrap();
+        assert_eq!(load_from(&path).volume, 0.25);
+        let _ = fs::remove_dir_all(path.parent().unwrap());
     }
 
     #[test]

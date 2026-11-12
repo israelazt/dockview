@@ -3,7 +3,7 @@
 //! ```text
 //! dockview.exe [--test-pattern] [--ui-preview] [--theme auto|dark|light]
 //!              [--lang auto|en|es] [--scale N] [--open-settings] [--stats]
-//!              [--log-stats FILE.csv]
+//!              [--log-stats FILE.csv] [--video NAME]
 //!              [--screenshot FILE.png]
 //! ```
 
@@ -32,6 +32,8 @@ pub struct Cli {
     pub demo_findings: bool,
     /// Append one line of measurements per second to this CSV file.
     pub log_stats: Option<PathBuf>,
+    /// Open the first video device whose name contains this text.
+    pub video: Option<String>,
     /// Render a few frames, save the window as a PNG and exit.
     pub screenshot: Option<PathBuf>,
 }
@@ -90,6 +92,7 @@ impl Cli {
                 }
                 "--open-settings" => cli.open_settings = true,
                 "--stats" => cli.show_stats = true,
+                "--video" => cli.video = Some(value("--video")?),
                 "--log-stats" => cli.log_stats = Some(PathBuf::from(value("--log-stats")?)),
                 "--demo-findings" => cli.demo_findings = true,
                 "--screenshot" => cli.screenshot = Some(PathBuf::from(value("--screenshot")?)),
@@ -139,6 +142,15 @@ mod tests {
     fn stats_is_a_flag() {
         assert!(parse(&["--stats"]).unwrap().show_stats);
         assert!(!parse(&[]).unwrap().show_stats);
+    }
+
+    #[test]
+    fn video_takes_a_name_fragment() {
+        assert_eq!(
+            parse(&["--video", "ugreen"]).unwrap().video.as_deref(),
+            Some("ugreen")
+        );
+        assert!(parse(&["--video"]).is_err());
     }
 
     #[test]

@@ -157,6 +157,7 @@ pub fn finding_text(finding: Finding, lang: Lang) -> &'static str {
             Finding::HighCpu => Key::FindHighCpu,
             Finding::SlowGpu => Key::FindSlowGpu,
             Finding::AudioLost => Key::FindAudioLost,
+            Finding::SwitchedToCompressed => Key::FindSwitched,
         },
     )
 }
@@ -348,7 +349,8 @@ fn tone_color(finding: Finding, theme: &Theme) -> crate::theme::Color {
         | Finding::CaptureBelowMode
         | Finding::DroppingFrames
         | Finding::HighCpu
-        | Finding::SlowGpu => theme.warn,
+        | Finding::SlowGpu
+        | Finding::SwitchedToCompressed => theme.warn,
     }
 }
 
@@ -476,6 +478,7 @@ mod tests {
             Finding::HighCpu,
             Finding::SlowGpu,
             Finding::AudioLost,
+            Finding::SwitchedToCompressed,
         ] {
             for lang in [Lang::En, Lang::Es] {
                 assert!(

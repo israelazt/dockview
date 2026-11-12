@@ -26,11 +26,13 @@ use std::time::{Duration, Instant};
 use dockview_core::audio::{enumerate_audio_devices, AudioEngine, AudioStatus};
 use dockview_core::capture::{CaptureOptions, CaptureStatus, VideoCapture};
 use dockview_core::device::{match_audio_to_video, AudioDevice, VideoDevice};
-use dockview_core::diagnostics::{diagnose, Snapshot, VideoState};
+use dockview_core::diagnostics::{
+    diagnose, switch_helped, FallbackWatch, Finding, Snapshot, VideoState,
+};
 use dockview_core::frame::FrameSlot;
 use dockview_core::mf::{enumerate_video_devices, MfSession};
 use dockview_core::settings::{
-    self, AppSettings, LangMode, RenderPreset, ThemeMode, MAX_AUDIO_OFFSET_MS,
+    self, AppSettings, LangMode, RenderPreset, ThemeMode, VideoModePref, MAX_AUDIO_OFFSET_MS,
 };
 use dockview_core::stream::StreamInfo;
 use dockview_core::testsrc::TestSource;
@@ -54,6 +56,8 @@ use ui::input::Pointer;
 use ui::stats::{Stats, StatsPanel};
 use ui::Ui;
 
+/// Seconds after an automatic mode switch before its effect is judged.
+const SWITCH_CHECK_SECS: u32 = 7;
 /// Delay before trying to reopen a capture device that went away.
 const RECONNECT_DELAY: Duration = Duration::from_secs(2);
 /// How long the event loop waits for a new frame before checking events.
@@ -116,6 +120,13 @@ struct App {
     latency_count: u32,
     stats_updates: u32,
     stats_log: Option<stats_log::StatsLog>,
+    fallback: FallbackWatch,
+    /// The app switched to a compressed mode by itself this session.
+    auto_switched: bool,
+    /// A switch was already tried this session; never try twice.
+    fallback_tried: bool,
+    /// After a switch: seconds until its effect is judged, and the rate before.
+    switch_check: Option<(u32, f32)>,
 }
 
 /// Whether Windows allows UI animations ("Show animations in Windows").
@@ -222,6 +233,10 @@ impl App {
             latency_count: 0,
             stats_updates: 0,
             stats_log,
+            fallback: FallbackWatch::new(),
+            auto_switched: false,
+            fallback_tried: false,
+            switch_check: None,
         };
 
         app.controls.set_animations(animations);
@@ -239,11 +254,22 @@ impl App {
 
         // Restore the last devices, else the first video device and the audio
         // device whose name matches it.
-        let video = app
-            .video_devices
-            .iter()
-            .position(|d| {
-                app.settings.last_video_device_symbolic_link.as_deref() == Some(&d.symbolic_link)
+        let by_name = app
+            .cli
+            .video
+            .as_deref()
+            .map(str::to_lowercase)
+            .and_then(|wanted| {
+                app.video_devices
+                    .iter()
+                    .position(|d| d.friendly_name.to_lowercase().contains(&wanted))
+            });
+        let video = by_name
+            .or_else(|| {
+                app.video_devices.iter().position(|d| {
+                    app.settings.last_video_device_symbolic_link.as_deref()
+                        == Some(&d.symbolic_link)
+                })
             })
             .or_else(|| next_index(None, app.video_devices.len()));
         let audio = app
@@ -288,7 +314,10 @@ impl App {
     fn start_capture(&self, symbolic_link: &str) -> VideoCapture {
         VideoCapture::start(
             symbolic_link.to_owned(),
-            CaptureOptions::default(),
+            CaptureOptions {
+                prefer_compressed: self.settings.video_mode == VideoModePref::Compressed,
+                ..CaptureOptions::default()
+            },
             Arc::clone(&self.slot),
         )
     }
@@ -429,6 +458,7 @@ impl App {
             preset: self.settings.render_preset,
             theme_mode: self.theme_mode(),
             lang_mode: self.lang_mode(),
+            video_mode: self.settings.video_mode,
             stats_open: self.stats_open,
         }
     }
@@ -463,6 +493,16 @@ impl App {
             Action::ToggleStats => {
                 self.stats_open = !self.stats_open;
                 return;
+            }
+            Action::SetVideoMode(mode) => {
+                self.settings.video_mode = mode;
+                // A deliberate choice ends any automatic switch and allows a
+                // new automatic attempt later (for example after changing port).
+                self.auto_switched = false;
+                self.fallback_tried = false;
+                self.switch_check = None;
+                self.fallback.reset();
+                self.select_video(self.video_index);
             }
             Action::SetPreset(preset) => {
                 self.settings.render_preset = preset;
@@ -544,6 +584,22 @@ impl App {
             audio_ok,
         });
 
+        let has_compressed = self.capture_has_compressed();
+        let eligible = self.settings.video_mode == VideoModePref::Auto
+            && video == VideoState::Running
+            && has_compressed
+            && !self.fallback_tried
+            && !self.cli.test_pattern;
+        let usb_slow = findings.contains(&Finding::NeedsUsb3);
+        if self.fallback.observe(usb_slow, eligible) {
+            self.switch_to_compressed(received_fps);
+        }
+        self.judge_switch(received_fps);
+        let mut findings = findings;
+        if self.auto_switched {
+            findings.insert(0, Finding::SwitchedToCompressed);
+        }
+
         let findings = if self.cli.ui_preview && self.cli.demo_findings {
             use dockview_core::diagnostics::Finding;
             vec![
@@ -578,6 +634,54 @@ impl App {
         };
         if let Some(log) = self.stats_log.as_mut() {
             log.record(&self.stats);
+        }
+    }
+
+    /// Whether the open device also offers a compressed mode.
+    fn capture_has_compressed(&self) -> bool {
+        match &self.source {
+            Source::Capture { capture, .. } => matches!(
+                capture.status(),
+                CaptureStatus::Running {
+                    has_compressed: true,
+                    ..
+                }
+            ),
+            _ => false,
+        }
+    }
+
+    /// Moves to a compressed mode because the USB port cannot carry the
+    /// uncompressed one, and schedules a check that it actually helped.
+    fn switch_to_compressed(&mut self, fps_before: f32) {
+        eprintln!("[auto] USB too slow for the uncompressed mode ({fps_before:.0} fps): switching to a compressed mode");
+        self.settings.video_mode = VideoModePref::Compressed;
+        self.auto_switched = true;
+        self.fallback_tried = true;
+        self.switch_check = Some((SWITCH_CHECK_SECS, fps_before));
+        self.save_settings();
+        self.select_video(self.video_index);
+    }
+
+    /// A few seconds after an automatic switch, keeps it only if the rate
+    /// clearly improved; otherwise the slowness had another cause, so the
+    /// better-quality mode comes back.
+    fn judge_switch(&mut self, fps_now: f32) {
+        let Some((remaining, before)) = self.switch_check else {
+            return;
+        };
+        if remaining > 1 {
+            self.switch_check = Some((remaining - 1, before));
+            return;
+        }
+        self.switch_check = None;
+        eprintln!("[auto] compressed mode: {fps_now:.0} fps (was {before:.0} fps)");
+        if !switch_helped(before, fps_now) {
+            eprintln!("[auto] no clear improvement: going back to automatic mode");
+            self.settings.video_mode = VideoModePref::Auto;
+            self.auto_switched = false;
+            self.save_settings();
+            self.select_video(self.video_index);
         }
     }
 

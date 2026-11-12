@@ -62,6 +62,55 @@ pub enum Finding {
     HighCpu,
     SlowGpu,
     AudioLost,
+    /// The app moved to a compressed mode because the USB port was too slow.
+    SwitchedToCompressed,
+}
+
+/// Consecutive seconds of "USB too slow" before the app acts. Long enough to
+/// ignore the first, noisy second after a start or a reconnect.
+pub const FALLBACK_AFTER_SECS: u32 = 4;
+
+/// Decides when to give up on an uncompressed mode.
+///
+/// Feed it one observation per second; it answers `true` once, after
+/// [`FALLBACK_AFTER_SECS`] seconds in a row of the problem.
+#[derive(Debug, Default)]
+pub struct FallbackWatch {
+    slow_seconds: u32,
+}
+
+impl FallbackWatch {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// `usb_slow` is whether this second showed [`Finding::NeedsUsb3`];
+    /// `eligible` is whether switching is allowed right now (automatic mode,
+    /// video running, not already switched).
+    pub fn observe(&mut self, usb_slow: bool, eligible: bool) -> bool {
+        if !(usb_slow && eligible) {
+            self.slow_seconds = 0;
+            return false;
+        }
+        self.slow_seconds += 1;
+        if self.slow_seconds >= FALLBACK_AFTER_SECS {
+            self.slow_seconds = 0;
+            return true;
+        }
+        false
+    }
+
+    /// Forgets any progress (after a device or mode change).
+    pub fn reset(&mut self) {
+        self.slow_seconds = 0;
+    }
+}
+
+/// Whether the rate measured after switching to a compressed mode is a real
+/// improvement over `before`. If not, the slowness had another cause (for
+/// example a dim room for a webcam) and the switch is undone.
+pub fn switch_helped(fps_before: f32, fps_after: f32) -> bool {
+    fps_after >= fps_before * 1.25
 }
 
 /// Evaluates `s`. The result is never empty: it is `[Healthy]` when nothing
@@ -125,6 +174,46 @@ mod tests {
             frame_budget_ms: Some(16.7),
             audio_ok: Some(true),
         }
+    }
+
+    #[test]
+    fn the_watch_triggers_once_after_four_slow_seconds_in_a_row() {
+        let mut watch = FallbackWatch::new();
+        assert!(!watch.observe(true, true));
+        assert!(!watch.observe(true, true));
+        assert!(!watch.observe(true, true));
+        assert!(watch.observe(true, true), "fourth slow second");
+        assert!(!watch.observe(true, true), "counting restarts after firing");
+    }
+
+    #[test]
+    fn a_good_second_or_ineligibility_resets_the_count() {
+        let mut watch = FallbackWatch::new();
+        for _ in 0..3 {
+            watch.observe(true, true);
+        }
+        assert!(!watch.observe(false, true), "recovered");
+        assert!(!watch.observe(true, true));
+        for _ in 0..3 {
+            assert!(!watch.observe(true, false), "not eligible: never fires");
+        }
+        let mut again = FallbackWatch::new();
+        for _ in 0..3 {
+            again.observe(true, true);
+        }
+        again.reset();
+        assert!(!again.observe(true, true));
+    }
+
+    #[test]
+    fn a_switch_only_counts_as_helpful_when_the_rate_clearly_improves() {
+        assert!(switch_helped(20.0, 60.0));
+        assert!(switch_helped(40.0, 50.0));
+        assert!(
+            !switch_helped(20.0, 21.0),
+            "dim webcam: same rate either way"
+        );
+        assert!(!switch_helped(30.0, 30.0));
     }
 
     #[test]

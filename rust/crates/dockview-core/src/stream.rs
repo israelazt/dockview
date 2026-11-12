@@ -90,6 +90,17 @@ pub fn select_best(types: &[StreamInfo], profile: CaptureProfile) -> Option<&Str
     }
 }
 
+/// Picks the best *compressed* (MJPEG) mode for `profile`, using the same
+/// rules as [`select_best`] (1080p60 first). `None` when the device has no
+/// compressed mode at all.
+///
+/// Compressed modes need far less USB bandwidth, which makes them the way out
+/// when a slow port cannot carry an uncompressed mode.
+pub fn select_best_compressed(types: &[StreamInfo], profile: CaptureProfile) -> Option<StreamInfo> {
+    let compressed: Vec<StreamInfo> = types.iter().filter(|t| t.is_compressed).cloned().collect();
+    select_best(&compressed, profile).cloned()
+}
+
 /// Restricts `pool` to uncompressed streams when any exist, then picks the
 /// maximum by `order`.
 fn prefer_uncompressed(
@@ -264,6 +275,29 @@ mod tests {
         for profile in ALL_PROFILES {
             assert_eq!(select_best(&types, profile), Some(&types[0]), "{profile:?}");
         }
+    }
+
+    #[test]
+    fn the_compressed_choice_keeps_the_1080p60_preference() {
+        let types = [
+            make(1920, 1080, 60, false, "NV12"),
+            make(1280, 720, 60, true, "MJPEG"),
+            make(1920, 1080, 30, true, "MJPEG"),
+            make(1920, 1080, 60, true, "MJPEG"),
+        ];
+        let best = select_best_compressed(&types, CaptureProfile::Balanced).unwrap();
+        assert_eq!((best.width, best.height, best.fps), (1920, 1080, 60));
+        assert!(best.is_compressed);
+    }
+
+    #[test]
+    fn a_device_without_compressed_modes_has_no_compressed_choice() {
+        let types = [make(1920, 1080, 60, false, "NV12"), yuy2_720p60()];
+        assert_eq!(
+            select_best_compressed(&types, CaptureProfile::Balanced),
+            None
+        );
+        assert_eq!(select_best_compressed(&[], CaptureProfile::Balanced), None);
     }
 
     #[test]

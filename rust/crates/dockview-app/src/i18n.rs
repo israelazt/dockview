@@ -97,10 +97,13 @@ pub enum Key {
     FindHighCpu,
     FindSlowGpu,
     FindAudioLost,
+    VideoMode,
+    ModeCompressed,
+    FindSwitched,
 }
 
 /// All keys, for completeness tests.
-pub const ALL_KEYS: [Key; 47] = [
+pub const ALL_KEYS: [Key; 50] = [
     Key::Live,
     Key::Connecting,
     Key::Disconnected,
@@ -148,6 +151,9 @@ pub const ALL_KEYS: [Key; 47] = [
     Key::FindHighCpu,
     Key::FindSlowGpu,
     Key::FindAudioLost,
+    Key::VideoMode,
+    Key::ModeCompressed,
+    Key::FindSwitched,
 ];
 
 /// Looks up `key` in `lang`. The matches have no wildcard arm, so adding a
@@ -208,6 +214,9 @@ fn en(key: Key) -> &'static str {
         Key::FindHighCpu => "The app is using a lot of CPU. Close other heavy programs.",
         Key::FindSlowGpu => "Drawing takes a big part of each frame. Try the Performance image quality.",
         Key::FindAudioLost => "The audio device was lost. Choose it again in Settings.",
+        Key::VideoMode => "Video mode",
+        Key::ModeCompressed => "Compressed",
+        Key::FindSwitched => "Switched to a compressed video mode because the USB port could not carry the uncompressed one. Use a USB 3 port and choose Auto in Settings to try again.",
     }
 }
 
@@ -260,6 +269,9 @@ fn es(key: Key) -> &'static str {
         Key::FindHighCpu => "La app usa mucha CPU. Cierra otros programas pesados.",
         Key::FindSlowGpu => "Dibujar ocupa gran parte de cada frame. Prueba la calidad de imagen «Rendimiento».",
         Key::FindAudioLost => "Se perdió el dispositivo de audio. Vuelve a elegirlo en Ajustes.",
+        Key::VideoMode => "Modo de video",
+        Key::ModeCompressed => "Comprimido",
+        Key::FindSwitched => "Se cambió a un modo de video comprimido porque el puerto USB no podía con el modo sin comprimir. Usa un puerto USB 3 y elige «Automático» en Ajustes para volver a probar.",
     }
 }
 

@@ -7,7 +7,7 @@
 use std::collections::HashMap;
 use std::f32::consts::TAU;
 
-use dockview_core::settings::{LangMode, RenderPreset, MAX_AUDIO_OFFSET_MS};
+use dockview_core::settings::{LangMode, RenderPreset, VideoModePref, MAX_AUDIO_OFFSET_MS};
 
 use super::input::Pointer;
 use super::text::Weight;
@@ -76,6 +76,7 @@ const PRESETS: [RenderPreset; 3] = [
 ];
 const THEMES: [ThemeMode; 3] = [ThemeMode::Auto, ThemeMode::Dark, ThemeMode::Light];
 const LANGS: [LangMode; 3] = [LangMode::Auto, LangMode::En, LangMode::Es];
+const VIDEO_MODES: [VideoModePref; 2] = [VideoModePref::Auto, VideoModePref::Compressed];
 
 /// How healthy the video source is, for the status dot.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -104,6 +105,7 @@ pub struct Model {
     pub preset: RenderPreset,
     pub theme_mode: ThemeMode,
     pub lang_mode: LangMode,
+    pub video_mode: VideoModePref,
     pub stats_open: bool,
 }
 
@@ -118,6 +120,7 @@ pub enum Action {
     SetPreset(RenderPreset),
     SetTheme(ThemeMode),
     SetLang(LangMode),
+    SetVideoMode(VideoModePref),
     ToggleStats,
 }
 
@@ -136,6 +139,7 @@ enum Hit {
     Preset(usize),
     Theme(usize),
     Lang(usize),
+    VideoMode(usize),
     Stats,
 }
 
@@ -155,6 +159,7 @@ impl Hit {
                 | Hit::Preset(_)
                 | Hit::Theme(_)
                 | Hit::Lang(_)
+                | Hit::VideoMode(_)
                 | Hit::Stats
         )
     }
@@ -183,7 +188,7 @@ pub struct Controls {
     /// Popover open/close progress, 0.0–1.0 (linear in time).
     popover_t: f32,
     /// Animated position of each segmented control's indicator.
-    segments: Option<[f32; 3]>,
+    segments: Option<[f32; 4]>,
 }
 
 impl Controls {
@@ -362,6 +367,7 @@ impl Controls {
             Hit::Preset(i) => Action::SetPreset(PRESETS[i]),
             Hit::Theme(i) => Action::SetTheme(THEMES[i]),
             Hit::Lang(i) => Action::SetLang(LANGS[i]),
+            Hit::VideoMode(i) => Action::SetVideoMode(VIDEO_MODES[i]),
             Hit::Stats => Action::ToggleStats,
             Hit::Pill | Hit::Popover | Hit::Volume => return,
         };
@@ -658,6 +664,10 @@ impl Controls {
             PRESETS.iter().position(|v| *v == m.preset).unwrap_or(1) as f32,
             THEMES.iter().position(|v| *v == m.theme_mode).unwrap_or(0) as f32,
             LANGS.iter().position(|v| *v == m.lang_mode).unwrap_or(0) as f32,
+            VIDEO_MODES
+                .iter()
+                .position(|v| *v == m.video_mode)
+                .unwrap_or(0) as f32,
         ];
         let mut slide = self.segments.unwrap_or(targets);
         for (position, target) in slide.iter_mut().zip(targets) {
@@ -691,6 +701,24 @@ impl Controls {
         y += SECTION_GAP;
 
         let lang = m.lang;
+        let modes = [tr(lang, Key::Auto), tr(lang, Key::ModeCompressed)];
+        let mode_selected = VIDEO_MODES
+            .iter()
+            .position(|v| *v == m.video_mode)
+            .unwrap_or(0);
+        y = self.segmented_section(
+            ui,
+            m,
+            Key::VideoMode,
+            &modes,
+            mode_selected,
+            slide[3],
+            Hit::VideoMode,
+            inner_x,
+            y,
+            inner_w,
+        );
+        y += SECTION_GAP;
         let presets = [
             tr(lang, Key::PresetPerformance),
             tr(lang, Key::PresetBalanced),
@@ -701,7 +729,7 @@ impl Controls {
             ui,
             m,
             Key::ImageQuality,
-            presets,
+            &presets,
             preset_selected,
             slide[0],
             Hit::Preset,
@@ -721,7 +749,7 @@ impl Controls {
             ui,
             m,
             Key::Theme,
-            themes,
+            &themes,
             theme_selected,
             slide[1],
             Hit::Theme,
@@ -741,7 +769,7 @@ impl Controls {
             ui,
             m,
             Key::Language,
-            langs,
+            &langs,
             lang_selected,
             slide[2],
             Hit::Lang,
@@ -852,7 +880,7 @@ impl Controls {
         ui: &mut Ui,
         m: &Model,
         title: Key,
-        labels: [&str; 3],
+        labels: &[&str],
         selected: usize,
         position: f32,
         hit: fn(usize) -> Hit,
@@ -866,7 +894,7 @@ impl Controls {
 
         let track = Rect::new(x, y, w, ROW_HEIGHT);
         ui.rect(track, 11.0, t.segment_track);
-        let segment_w = (w - 6.0) / 3.0;
+        let segment_w = (w - 6.0) / labels.len().max(1) as f32;
         let style = TextStyle::new(12.5, Weight::Medium);
         let line_h = ui.measure("Ag", style).1;
 
@@ -969,8 +997,8 @@ fn popover_height(m: &Model) -> f32 {
     POPOVER_PAD * 2.0
         + device(m.video_devices.len())
         + device(m.audio_devices.len())
-        + segmented * 3.0
-        + SECTION_GAP * 5.0
+        + segmented * 4.0
+        + SECTION_GAP * 6.0
         + ROW_HEIGHT
 }
 
@@ -1015,6 +1043,7 @@ mod tests {
             preset: RenderPreset::Balanced,
             theme_mode: ThemeMode::Auto,
             lang_mode: LangMode::Auto,
+            video_mode: VideoModePref::Auto,
             stats_open: false,
         }
     }
@@ -1217,6 +1246,37 @@ mod tests {
         rig.frame(0.016);
         rig.click_on(Hit::SyncPlus);
         assert_eq!(rig.actions(), vec![Action::SetSync(MAX_AUDIO_OFFSET_MS)]);
+    }
+
+    #[test]
+    fn the_video_mode_selector_emits_the_choice() {
+        let mut rig = Rig::new(true);
+        rig.click_on(Hit::Settings);
+        rig.click_on(Hit::VideoMode(1));
+        assert_eq!(
+            rig.actions(),
+            vec![Action::SetVideoMode(VideoModePref::Compressed)]
+        );
+        rig.click_on(Hit::VideoMode(0));
+        assert_eq!(
+            rig.actions(),
+            vec![Action::SetVideoMode(VideoModePref::Auto)]
+        );
+    }
+
+    #[test]
+    fn a_two_option_selector_slides_to_its_second_segment() {
+        let mut rig = Rig::new(true);
+        rig.click_on(Hit::Settings);
+        for _ in 0..30 {
+            rig.frame(0.016);
+        }
+        assert_eq!(rig.controls.segments.unwrap()[3], 0.0);
+        rig.model.video_mode = VideoModePref::Compressed;
+        for _ in 0..60 {
+            rig.frame(0.016);
+        }
+        assert_eq!(rig.controls.segments.unwrap()[3], 1.0);
     }
 
     #[test]
