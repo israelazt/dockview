@@ -35,7 +35,7 @@ use dockview_core::frame::FrameSlot;
 use dockview_core::mf::{enumerate_video_devices, MfSession};
 use dockview_core::mic::MicCapture;
 use dockview_core::recorder::{RecorderStatus, ReplayRecorder, ReplaySettings, SaveHandle};
-use dockview_core::recording::RecordingState;
+use dockview_core::recording::{disk_free_bytes, EndReason, RecordingState, DISK_START_MIN_BYTES};
 use dockview_core::settings::{
     self, AppSettings, LangMode, RenderPreset, ThemeMode, VideoModePref, MAX_AUDIO_OFFSET_MS,
 };
@@ -145,6 +145,8 @@ struct App {
     mic: Option<MicCapture>,
     /// Recording was asked for while the buffer was still starting.
     record_when_ready: bool,
+    /// The low-disk warning was already shown for this recording.
+    low_disk_warned: bool,
     /// Smoothed loudness for the meter.
     mic_level: f32,
     mic_level_at: Instant,
@@ -265,6 +267,7 @@ impl App {
             total_ram: perf::total_ram_bytes(),
             mic: None,
             record_when_ready: false,
+            low_disk_warned: false,
             mic_level: 0.0,
             mic_level_at: Instant::now(),
         };
@@ -462,6 +465,10 @@ impl App {
         }
         self.record_when_ready = false;
         let folder = self.clips_folder();
+        if disk_free_bytes(&folder).is_some_and(|free| free < DISK_START_MIN_BYTES) {
+            self.toast(i18n::Key::ToastRecNoSpace, ToastKind::Error);
+            return;
+        }
         let name = clips::recording_file_name(clips::local_time_now());
         let path = clips::unique_path(&folder, &name);
         match recorder.start_recording(path) {
@@ -595,18 +602,29 @@ impl App {
         if self.record_when_ready {
             self.begin_recording();
         }
-        if let Some(result) = self
-            .recorder
-            .as_ref()
-            .and_then(ReplayRecorder::take_recording_result)
-        {
-            match result {
-                Ok(_) => self.toast(i18n::Key::ToastRecSaved, ToastKind::Success),
-                Err(e) => {
-                    eprintln!("recording failed: {e}");
-                    self.toast(i18n::Key::ToastRecFailed, ToastKind::Error);
-                }
+        let mut outcomes = Vec::new();
+        if let Some(recorder) = &self.recorder {
+            while let Some(outcome) = recorder.take_recording_result() {
+                outcomes.push(outcome);
             }
+        }
+        for outcome in outcomes {
+            if let Err(e) = &outcome.result {
+                eprintln!("recording ended with an error: {e}");
+            }
+            if let Some((key, kind)) = outcome_toast(outcome.reason, outcome.result.is_ok()) {
+                self.toast(key, kind);
+            }
+        }
+        // Warn once when the disk is running low.
+        let info = self.recorder.as_ref().map(|r| r.recording());
+        match info {
+            Some(info) if info.state == RecordingState::Idle => self.low_disk_warned = false,
+            Some(info) if info.low_disk && !self.low_disk_warned => {
+                self.low_disk_warned = true;
+                self.toast(i18n::Key::ToastLowDisk, ToastKind::Error);
+            }
+            _ => {}
         }
         if let Some(result) = self.saving.as_ref().and_then(SaveHandle::poll) {
             self.saving = None;
@@ -1511,9 +1529,49 @@ fn main() {
     }
 }
 
+/// The message to show when a recording (or one of its files) ends, if any.
+fn outcome_toast(reason: EndReason, saved: bool) -> Option<(i18n::Key, ToastKind)> {
+    use i18n::Key;
+    match (reason, saved) {
+        // The user cancelled before anything was recorded: nothing to say.
+        (EndReason::Cancelled, _) => None,
+        (EndReason::ResolutionChanged, true) => Some((Key::ToastRecNewPart, ToastKind::Info)),
+        (EndReason::DiskFull, true) => Some((Key::ToastRecDiskFull, ToastKind::Error)),
+        (EndReason::NoSignal, _) => Some((Key::ToastRecNoSignal, ToastKind::Error)),
+        (_, true) => Some((Key::ToastRecSaved, ToastKind::Success)),
+        (_, false) => Some((Key::ToastRecFailed, ToastKind::Error)),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn every_way_a_recording_can_end_says_the_right_thing() {
+        use i18n::Key;
+        assert_eq!(outcome_toast(EndReason::Cancelled, false), None);
+        assert_eq!(
+            outcome_toast(EndReason::Stopped, true),
+            Some((Key::ToastRecSaved, ToastKind::Success))
+        );
+        assert_eq!(
+            outcome_toast(EndReason::ResolutionChanged, true),
+            Some((Key::ToastRecNewPart, ToastKind::Info))
+        );
+        assert_eq!(
+            outcome_toast(EndReason::DiskFull, true),
+            Some((Key::ToastRecDiskFull, ToastKind::Error))
+        );
+        assert_eq!(
+            outcome_toast(EndReason::NoSignal, false),
+            Some((Key::ToastRecNoSignal, ToastKind::Error))
+        );
+        assert_eq!(
+            outcome_toast(EndReason::Failed, false),
+            Some((Key::ToastRecFailed, ToastKind::Error))
+        );
+    }
 
     #[test]
     fn next_index_wraps_and_handles_empty_lists() {

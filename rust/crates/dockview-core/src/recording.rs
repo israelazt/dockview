@@ -12,6 +12,9 @@
 
 use std::path::{Path, PathBuf};
 
+use windows::core::HSTRING;
+use windows::Win32::Storage::FileSystem::GetDiskFreeSpaceExW;
+
 use crate::audio_sync::CHANNELS;
 use crate::encode::{EncodeSettings, EncodedFrame, Mp4Remuxer};
 use crate::mf::MfSession;
@@ -38,6 +41,93 @@ pub struct RecordingInfo {
     pub seconds: f64,
     /// Size of the file so far.
     pub bytes: u64,
+    /// The disk is running low; the recording will stop if it keeps filling.
+    pub low_disk: bool,
+}
+
+/// Why a recording (or one file of it) ended.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EndReason {
+    /// The user stopped it, or the program closed.
+    Stopped,
+    /// Stopped before anything had been recorded (nothing to report).
+    Cancelled,
+    /// The disk was about to fill up.
+    DiskFull,
+    /// The picture changed size, which a file cannot follow: the file was
+    /// closed and recording went on in a new one.
+    ResolutionChanged,
+    /// No video arrived after asking to start.
+    NoSignal,
+    /// Something went wrong (for example the disk could not be written).
+    Failed,
+}
+
+/// How a recording, or one file of it, ended.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RecordingOutcome {
+    pub result: Result<SavedClip, String>,
+    pub reason: EndReason,
+    /// Recording goes on in a new file.
+    pub continues: bool,
+}
+
+/// Free space below which a recording stops, to leave room to close the file.
+pub const DISK_STOP_BYTES: u64 = 1 << 30; // 1 GB
+/// Free space below which the user is warned (about 15 minutes at 40 Mbps).
+pub const DISK_WARN_BYTES: u64 = 5 << 30; // 5 GB
+/// Free space needed to start a recording at all.
+pub const DISK_START_MIN_BYTES: u64 = 2 << 30; // 2 GB
+
+/// How full the disk is, for a recording.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DiskLevel {
+    Ok,
+    Low,
+    Full,
+}
+
+/// Classifies `free` bytes; `stop` is the level at which recording must end.
+pub fn disk_level(free: u64, stop: u64) -> DiskLevel {
+    if free < stop {
+        DiskLevel::Full
+    } else if free < DISK_WARN_BYTES {
+        DiskLevel::Low
+    } else {
+        DiskLevel::Ok
+    }
+}
+
+/// Free bytes on the disk that holds `path` (which need not exist yet), or
+/// `None` if Windows does not say.
+pub fn disk_free_bytes(path: &Path) -> Option<u64> {
+    // Walk up to a folder that exists, so a not-yet-created folder still works.
+    let mut dir = path;
+    while !dir.is_dir() {
+        dir = dir.parent()?;
+    }
+    let mut free = 0u64;
+    // SAFETY: valid NUL-terminated path and a valid out-pointer.
+    unsafe {
+        GetDiskFreeSpaceExW(&HSTRING::from(dir.as_os_str()), Some(&mut free), None, None).ok()?;
+    }
+    Some(free)
+}
+
+/// The file for part `part` of a recording: part 1 is `path` itself, later
+/// parts are `name (part 2).ext`, `name (part 3).ext`…
+pub fn part_path(path: &Path, part: u32) -> PathBuf {
+    if part <= 1 {
+        return path.to_owned();
+    }
+    let stem = path
+        .file_stem()
+        .map_or_else(String::new, |s| s.to_string_lossy().into_owned());
+    let name = match path.extension() {
+        Some(ext) => format!("{stem} (part {part}).{}", ext.to_string_lossy()),
+        None => format!("{stem} (part {part})"),
+    };
+    path.with_file_name(name)
 }
 
 /// How many audio tracks a new recording gets: all three when any audio has
@@ -173,6 +263,51 @@ impl ActiveRecording {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn disk_levels_follow_the_thresholds() {
+        assert_eq!(disk_level(10 << 30, DISK_STOP_BYTES), DiskLevel::Ok);
+        assert_eq!(disk_level(DISK_WARN_BYTES, DISK_STOP_BYTES), DiskLevel::Ok);
+        assert_eq!(
+            disk_level(DISK_WARN_BYTES - 1, DISK_STOP_BYTES),
+            DiskLevel::Low
+        );
+        assert_eq!(disk_level(DISK_STOP_BYTES, DISK_STOP_BYTES), DiskLevel::Low);
+        assert_eq!(
+            disk_level(DISK_STOP_BYTES - 1, DISK_STOP_BYTES),
+            DiskLevel::Full
+        );
+        assert_eq!(disk_level(0, DISK_STOP_BYTES), DiskLevel::Full);
+        // A raised floor (used by tests) turns any disk "full".
+        assert_eq!(disk_level(100 << 30, u64::MAX), DiskLevel::Full);
+        const {
+            assert!(
+                DISK_START_MIN_BYTES > DISK_STOP_BYTES && DISK_WARN_BYTES > DISK_START_MIN_BYTES
+            );
+        }
+    }
+
+    #[test]
+    fn free_space_is_found_even_for_a_folder_that_does_not_exist_yet() {
+        let existing = std::env::temp_dir();
+        assert!(disk_free_bytes(&existing).is_some_and(|b| b > 0));
+        let missing = existing
+            .join("dockview-no-such-folder")
+            .join("deeper")
+            .join("x.mp4");
+        assert!(disk_free_bytes(&missing).is_some());
+    }
+
+    #[test]
+    fn later_parts_get_numbered_names() {
+        let base = Path::new(r"C:\Videos\Dockview Recording 2026-11-05 09-04-03.mp4");
+        assert_eq!(part_path(base, 1), base);
+        assert_eq!(
+            part_path(base, 2),
+            Path::new(r"C:\Videos\Dockview Recording 2026-11-05 09-04-03 (part 2).mp4")
+        );
+        assert_eq!(part_path(Path::new("clip"), 3), Path::new("clip (part 3)"));
+    }
 
     #[test]
     fn tracks_exist_only_when_some_audio_was_heard() {

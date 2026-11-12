@@ -489,6 +489,8 @@ pub struct Mp4Remuxer {
     audio_streams: Vec<u32>,
     /// Timestamp of the first frame, subtracted so the file starts at zero.
     origin: Option<i64>,
+    /// The newest frame, held back until the next one shows how long it lasts.
+    held: Option<EncodedFrame>,
 }
 
 impl Mp4Remuxer {
@@ -577,12 +579,30 @@ impl Mp4Remuxer {
                 stream,
                 audio_streams,
                 origin: None,
+                held: None,
             })
         }
     }
 
+    /// Adds a frame. The MP4 writer ignores gaps between samples and would
+    /// squeeze them out, leaving the audio (which keeps its own timeline)
+    /// ahead of the picture; so a frame followed by a long gap is stretched to
+    /// last until the next one (the picture freezes during an outage).
     pub fn write(&mut self, frame: &EncodedFrame) -> Result<()> {
-        let origin = *self.origin.get_or_insert(frame.timestamp);
+        self.origin.get_or_insert(frame.timestamp);
+        let previous = self.held.replace(frame.clone());
+        match previous {
+            Some(mut previous) => {
+                let gap = frame.timestamp - previous.timestamp;
+                previous.duration = stretched_duration(previous.duration, gap);
+                self.write_sample(&previous)
+            }
+            None => Ok(()),
+        }
+    }
+
+    fn write_sample(&mut self, frame: &EncodedFrame) -> Result<()> {
+        let origin = self.origin.unwrap_or(frame.timestamp);
         // SAFETY: the buffer is filled while locked and sized to the data.
         unsafe {
             let buffer = MFCreateMemoryBuffer(frame.data.len() as u32)?;
@@ -630,9 +650,22 @@ impl Mp4Remuxer {
         }
     }
 
-    pub fn finish(self) -> Result<()> {
+    pub fn finish(mut self) -> Result<()> {
+        if let Some(last) = self.held.take() {
+            self.write_sample(&last)?;
+        }
         // SAFETY: the writer was started with BeginWriting.
         unsafe { self.writer.Finalize() }
+    }
+}
+
+/// How long a frame should last given the time until the next one: its own
+/// duration normally, the whole gap when the next frame is clearly late.
+fn stretched_duration(duration: i64, gap_to_next: i64) -> i64 {
+    if gap_to_next > duration * 3 / 2 {
+        gap_to_next
+    } else {
+        duration
     }
 }
 
@@ -683,6 +716,23 @@ pub fn sequence_header(media_type: &IMFMediaType) -> Option<Vec<u8>> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_frame_before_a_long_gap_is_stretched_over_it() {
+        use super::stretched_duration;
+        let frame = 333_333; // 30 fps
+        assert_eq!(stretched_duration(frame, frame), frame, "on time");
+        assert_eq!(
+            stretched_duration(frame, frame + 20_000),
+            frame,
+            "jitter is ignored"
+        );
+        assert_eq!(
+            stretched_duration(frame, 30_000_000),
+            30_000_000,
+            "a 3 s outage"
+        );
+    }
+
     use super::*;
 
     #[test]

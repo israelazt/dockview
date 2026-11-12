@@ -128,7 +128,8 @@ fn main() -> windows::core::Result<()> {
         }
         thread::sleep(Duration::from_millis(20));
     };
-    match result {
+    println!("Ended: {:?}", result.reason);
+    match result.result {
         Ok(clip) => println!(
             "\nSaved {}\n  {} frames, {:.2} s ({:.1} fps), {:.1} MB ({:.1} Mbps)\n  CPU of this process while recording: {:.1}% of one core",
             clip.path.display(),

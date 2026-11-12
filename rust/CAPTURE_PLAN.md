@@ -76,7 +76,7 @@ Decisiones: se codifica **una sola vez** (la grabación reutiliza los frames com
 |---|---|---|
 | G-1 | Escritor de archivo en el núcleo: empieza en un fotograma clave, video y tres pistas en directo | ✅ |
 | G-2 | Botón, atajo Ctrl+Alt+R, cronómetro, punto rojo y avisos | ✅ |
-| G-3 | Casos incómodos: poco espacio en disco, capturadora desconectada, cambio de resolución (hoy cierra el archivo; después abrirá una parte 2), cerrar la app grabando | pendiente |
+| G-3 | Casos incómodos: poco espacio en disco, señal que se corta, cambio de resolución, sin señal al iniciar, cerrar la app grabando | ✅ (falta la prueba con el cable de la capturadora) |
 | G-4 | Ajuste de calidad, carpeta y acceso a la última grabación | pendiente |
 | G-5 | Prueba de 1 hora con la capturadora: CPU, GPU, RAM, deriva de audio y tamaño | pendiente |
 
@@ -98,3 +98,19 @@ Decisiones: se codifica **una sola vez** (la grabación reutiliza los frames com
 - Cerrar la app grabando finaliza el archivo (con su índice final), no lo deja a medias.
 - Verificado con la UGREEN: el atajo inició y detuvo una grabación de 8,28 s, 497 frames (60 fps) y tres pistas de audio.
 - Flags de prueba: `--record` (empieza a grabar al abrir) y `--mic`.
+
+### Resultados de G-3
+
+| Caso | Qué hace Dockview | Cómo se comprobó |
+|---|---|---|
+| **Poco espacio en disco** | Comprueba cada 2 s el disco del archivo. Avisa una vez por debajo de 5 GB libres («Poco espacio en disco…»), y **cierra el archivo con limpieza por debajo de 1 GB** («Grabación detenida: el disco está casi lleno»). No deja empezar con menos de 2 GB libres | Test con el umbral elevado (no se llenó un disco de verdad) |
+| **La señal se corta y vuelve** | La grabación **sigue**, es un solo archivo y el video **mantiene el último frame durante el corte**; el audio rellena con silencio, así que no se desincronizan | Test que apaga la fuente 3 s y la vuelve a encender |
+| **La imagen cambia de tamaño** | Un archivo no puede cambiar de resolución: cierra el actual y **sigue en `… (parte 2).mp4`** (y así sucesivamente), con aviso | Test con una fuente que pasa de 640×360 a 800×448: los dos archivos se leen |
+| **Se pide grabar y no llega video** | A los 10 s desiste con «No hay señal de video para grabar» | Test |
+| **Se cancela antes del primer frame** | Se cancela sin mensaje de error | Test |
+| **Se cierra la app grabando** | El archivo se finaliza (con su índice final) | Prueba con captura de pantalla (G-2) |
+| **El disco no se puede escribir** | Cierra la grabación y avisa; lo escrito hasta el último fragmento sigue válido | Cubierto por el diseño fragmentado (G-1) |
+
+**Error real encontrado y corregido:** el escritor de MP4 de Windows **ignora los huecos entre frames** y los comprime, mientras que el audio conserva su propia línea de tiempo. Tras un corte de señal de 3 s, el video terminaba 3 s antes que el audio (video 6,27 s frente a 9,30 s de grabación). Ahora `Mp4Remuxer` retiene cada frame hasta ver el siguiente y, si hay un hueco, lo alarga hasta cubrirlo. Esto también protege a los clips del replay.
+
+Pendiente de probar a mano: desenchufar y volver a enchufar el cable USB de la capturadora durante una grabación. Se desconoce aún si el audio de la capturadora vuelve solo tras reconectar (la reconexión del video ya existía; la del audio no está verificada).
