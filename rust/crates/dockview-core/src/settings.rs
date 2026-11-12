@@ -142,6 +142,9 @@ pub struct AppSettings {
     pub language: LangMode,
     /// How the capture mode is chosen.
     pub video_mode: VideoModePref,
+    /// Whether the instant-replay buffer runs. On by default; the user turns it
+    /// off by hand.
+    pub replay_enabled: bool,
     /// Seconds of footage the instant replay keeps and saves.
     pub replay_seconds: u32,
     /// Video bitrate of the instant-replay buffer, in Mbps.
@@ -163,6 +166,7 @@ impl Default for AppSettings {
             theme: ThemeMode::default(),
             language: LangMode::default(),
             video_mode: VideoModePref::default(),
+            replay_enabled: true,
             replay_seconds: DEFAULT_REPLAY_SECONDS,
             replay_bitrate_mbps: DEFAULT_REPLAY_MBPS,
             replay_folder: None,
@@ -264,6 +268,7 @@ mod tests {
             theme: ThemeMode::Light,
             language: LangMode::Es,
             video_mode: VideoModePref::Compressed,
+            replay_enabled: false,
             replay_seconds: 120,
             replay_bitrate_mbps: 25,
             replay_folder: Some(r"D:\\Clips".into()),
@@ -329,6 +334,7 @@ mod tests {
     #[test]
     fn replay_settings_default_round_trip_and_stay_in_range() {
         let defaults = AppSettings::default();
+        assert!(defaults.replay_enabled, "the buffer is on unless the user turns it off");
         assert_eq!(defaults.replay_seconds, 30);
         assert_eq!(defaults.replay_bitrate_mbps, 40);
         assert!(defaults.replay_folder.is_none());

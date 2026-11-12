@@ -8,9 +8,7 @@
 compile_error!("Dockview only supports Windows.");
 
 mod cli;
-#[allow(dead_code)] // wired up by the instant-replay controls
 mod clips;
-#[allow(dead_code)] // wired up by the instant-replay controls
 mod hotkey;
 #[allow(dead_code)] // some strings are used by the upcoming live controls
 mod i18n;
@@ -35,6 +33,7 @@ use dockview_core::diagnostics::{
 };
 use dockview_core::frame::FrameSlot;
 use dockview_core::mf::{enumerate_video_devices, MfSession};
+use dockview_core::recorder::{RecorderStatus, ReplayRecorder, ReplaySettings, SaveHandle};
 use dockview_core::settings::{
     self, AppSettings, LangMode, RenderPreset, ThemeMode, VideoModePref, MAX_AUDIO_OFFSET_MS,
 };
@@ -58,6 +57,7 @@ use ui::controls::{Action, Controls, Model, StatusKind};
 use ui::gpu::UiGpu;
 use ui::input::Pointer;
 use ui::stats::{Stats, StatsPanel};
+use ui::toast::{ToastHost, ToastKind};
 use ui::Ui;
 
 /// Seconds after an automatic mode switch before its effect is judged.
@@ -131,6 +131,12 @@ struct App {
     fallback_tried: bool,
     /// After a switch: seconds until its effect is judged, and the rate before.
     switch_check: Option<(u32, f32)>,
+    /// The instant-replay buffer; `Some` while it is on.
+    recorder: Option<ReplayRecorder>,
+    /// A clip being written in the background.
+    saving: Option<SaveHandle>,
+    hotkey: Option<hotkey::Hotkey>,
+    toasts: ToastHost,
 }
 
 /// Whether Windows allows UI animations ("Show animations in Windows").
@@ -241,6 +247,10 @@ impl App {
             auto_switched: false,
             fallback_tried: false,
             switch_check: None,
+            recorder: None,
+            saving: None,
+            hotkey: None,
+            toasts: ToastHost::new(),
         };
 
         app.controls.set_animations(animations);
@@ -285,7 +295,119 @@ impl App {
 
         app.select_video(video);
         app.select_audio(audio);
+        app.start_replay_services();
         app
+    }
+
+    /// Registers the hotkey and starts the replay buffer if it is enabled.
+    fn start_replay_services(&mut self) {
+        if self.cli.ui_preview {
+            return;
+        }
+        let hotkey = hotkey::Hotkey::register();
+        if !hotkey.is_registered() {
+            eprintln!("replay hotkey {} is taken by another program", hotkey::LABEL);
+        }
+        self.hotkey = Some(hotkey);
+        self.sync_replay();
+    }
+
+    /// Makes the recorder match `settings.replay_enabled`.
+    fn sync_replay(&mut self) {
+        if self.settings.replay_enabled == self.recorder.is_some() {
+            return;
+        }
+        if self.settings.replay_enabled {
+            let recorder = ReplayRecorder::start(
+                Arc::clone(&self.slot),
+                ReplaySettings {
+                    // A little extra so a clip of the chosen length always fits
+                    // (it starts at the keyframe before the cut).
+                    keep_seconds: f64::from(self.settings.replay_seconds) + 2.0,
+                    bitrate_mbps: self.settings.replay_bitrate_mbps,
+                    fps: 60,
+                },
+            );
+            if let Some(audio) = &self.audio {
+                audio.set_tap(Some(recorder.audio_tap()));
+            }
+            self.recorder = Some(recorder);
+        } else {
+            if let Some(audio) = &self.audio {
+                audio.set_tap(None);
+            }
+            self.recorder = None;
+        }
+    }
+
+    /// Folder clips are saved to.
+    fn clips_folder(&self) -> std::path::PathBuf {
+        self.settings
+            .replay_folder
+            .as_deref()
+            .map_or_else(clips::default_folder, std::path::PathBuf::from)
+    }
+
+    fn replay_view(&self) -> ui::controls::ReplayView {
+        use ui::controls::{ReplayState, ReplayView};
+        let mut view = ReplayView::off(hotkey::LABEL);
+        view.keep_seconds = self.settings.replay_seconds;
+        view.folder = self.clips_folder().display().to_string();
+        view.saving = self.saving.is_some();
+        if let Some(recorder) = &self.recorder {
+            view.state = match recorder.status() {
+                RecorderStatus::Starting => ReplayState::Starting,
+                RecorderStatus::Recording => ReplayState::Recording,
+                RecorderStatus::Unsupported(_) | RecorderStatus::Failed(_) => {
+                    ReplayState::Unavailable
+                }
+            };
+            view.buffered_seconds = recorder.buffered_seconds() as f32;
+            view.buffered_mb = recorder.buffered_bytes() as f32 / 1e6;
+        }
+        view
+    }
+
+    fn toast(&mut self, key: i18n::Key, kind: ToastKind) {
+        let lang = self.lang_mode().resolve(self.system_lang);
+        self.toasts.show(i18n::tr(lang, key), kind);
+        self.needs_redraw = true;
+    }
+
+    fn save_replay(&mut self) {
+        if self.saving.is_some() {
+            return;
+        }
+        let Some(recorder) = &self.recorder else {
+            self.toast(i18n::Key::ToastTurnOnFirst, ToastKind::Info);
+            return;
+        };
+        let folder = self.clips_folder();
+        if std::fs::create_dir_all(&folder).is_err() {
+            self.toast(i18n::Key::ToastClipFailed, ToastKind::Error);
+            return;
+        }
+        let name = clips::clip_file_name(clips::local_time_now());
+        let path = clips::unique_path(&folder, &name);
+        self.saving = Some(recorder.save(f64::from(self.settings.replay_seconds), path));
+        self.toast(i18n::Key::ToastSaving, ToastKind::Info);
+    }
+
+    /// Per-tick work: the hotkey and finished saves.
+    fn poll_replay(&mut self) {
+        if self.hotkey.as_ref().is_some_and(|h| h.take_pressed()) {
+            self.save_replay();
+        }
+        if let Some(result) = self.saving.as_ref().and_then(SaveHandle::poll) {
+            self.saving = None;
+            match result {
+                Ok(_) => self.toast(i18n::Key::ToastClipSaved, ToastKind::Success),
+                Err(e) => {
+                    eprintln!("clip not saved: {e}");
+                    self.toast(i18n::Key::ToastClipFailed, ToastKind::Error);
+                }
+            }
+        }
     }
 
     fn match_audio(&self, video: Option<usize>) -> Option<usize> {
@@ -337,11 +459,15 @@ impl App {
             return;
         };
         self.settings.last_audio_device_id = Some(device.device_id.clone());
-        self.audio = Some(AudioEngine::start(
+        let audio = AudioEngine::start(
             device.device_id.clone(),
             self.settings.volume,
             self.settings.audio_offset_ms,
-        ));
+        );
+        if let Some(recorder) = &self.recorder {
+            audio.set_tap(Some(recorder.audio_tap()));
+        }
+        self.audio = Some(audio);
     }
 
     fn change_volume(&mut self, delta: f32) {
@@ -464,7 +590,7 @@ impl App {
             lang_mode: self.lang_mode(),
             video_mode: self.settings.video_mode,
             stats_open: self.stats_open,
-            replay: ui::controls::ReplayView::off(hotkey::LABEL),
+            replay: self.replay_view(),
         }
     }
 
@@ -495,11 +621,31 @@ impl App {
                 }
             }
             Action::SelectAudio(index) => self.select_audio(Some(index)),
-            // Instant replay is not wired to the recorder yet.
-            Action::ToggleReplay
-            | Action::ReplayLength(_)
-            | Action::SaveReplay
-            | Action::OpenReplayFolder => return,
+            Action::ToggleReplay => {
+                self.settings.replay_enabled = !self.settings.replay_enabled;
+                self.sync_replay();
+                let key = if self.settings.replay_enabled {
+                    i18n::Key::ToastReplayOn
+                } else {
+                    i18n::Key::ToastReplayOff
+                };
+                self.toast(key, ToastKind::Info);
+            }
+            Action::ReplayLength(delta) => {
+                self.settings.replay_seconds =
+                    settings::step_replay_seconds(self.settings.replay_seconds, delta);
+                if let Some(recorder) = &self.recorder {
+                    recorder.set_keep_seconds(f64::from(self.settings.replay_seconds) + 2.0);
+                }
+            }
+            Action::SaveReplay => {
+                self.save_replay();
+                return;
+            }
+            Action::OpenReplayFolder => {
+                clips::open_folder(&self.clips_folder());
+                return;
+            }
             Action::ToggleStats => {
                 self.stats_open = !self.stats_open;
                 return;
@@ -768,6 +914,7 @@ impl App {
         let (ui, ui_gpu, controls) = (&mut self.ui, &mut self.ui_gpu, &mut self.controls);
         let (stats_panel, stats) = (&mut self.stats_panel, &self.stats);
         let (stats_open, animations) = (self.stats_open, self.animations);
+        let toasts = &mut self.toasts;
         let result = renderer.draw(
             &mut |_device, context, size| {
                 let Some(gpu) = ui_gpu.as_mut() else {
@@ -784,6 +931,7 @@ impl App {
                     dt,
                     animations,
                 );
+                toasts.frame(ui, &model.theme, dt, animations);
                 if let Err(e) = gpu.render(context, ui, size) {
                     eprintln!("ui draw failed: {e}");
                 }
@@ -1028,10 +1176,11 @@ impl ApplicationHandler for App {
         }
         self.maintain_source();
         self.update_stats();
+        self.poll_replay();
         // Redraw for new video, for input, and while the controls are on
         // screen (hover, drag and fade animations need steady frames).
         let new_frame = self.slot.wait_for_frame(FRAME_WAIT);
-        let animating = self.controls.is_visible();
+        let animating = self.controls.is_visible() || self.toasts.is_visible();
         if new_frame || animating || std::mem::take(&mut self.needs_redraw) {
             if let Some(window) = &self.window {
                 window.request_redraw();
