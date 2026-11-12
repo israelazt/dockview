@@ -625,8 +625,9 @@ mod tests {
                 let mut len = 0u32;
                 buffer.Lock(&mut data, None, Some(&mut len)).ok()?;
                 let bytes = std::slice::from_raw_parts(data, len as usize);
-                for pair in bytes.chunks_exact(2) {
-                    let v = f64::from(i16::from_le_bytes([pair[0], pair[1]])) / 32768.0;
+                let (pairs, _) = bytes.as_chunks::<2>();
+                for pair in pairs {
+                    let v = f64::from(i16::from_le_bytes(*pair)) / 32768.0;
                     sum_squares += v * v;
                 }
                 frames += (len / 4) as u64;

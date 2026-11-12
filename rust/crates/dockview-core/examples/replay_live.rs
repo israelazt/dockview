@@ -242,8 +242,10 @@ fn verify_audio(path: &std::path::Path) -> windows::core::Result<()> {
             let mut data: *mut u8 = std::ptr::null_mut();
             let mut len = 0u32;
             buffer.Lock(&mut data, None, Some(&mut len))?;
-            for pair in std::slice::from_raw_parts(data, len as usize).chunks_exact(2) {
-                let v = f64::from(i16::from_le_bytes([pair[0], pair[1]])) / 32768.0;
+            let bytes = std::slice::from_raw_parts(data, len as usize);
+            let (pairs, _) = bytes.as_chunks::<2>();
+            for pair in pairs {
+                let v = f64::from(i16::from_le_bytes(*pair)) / 32768.0;
                 sum_squares += v * v;
                 peak = peak.max(v.abs());
             }
