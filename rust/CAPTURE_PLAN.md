@@ -199,7 +199,7 @@ Lo que se quiere: componer **varias fuentes a la vez** (por ejemplo el juego a p
 | Fase | Qué | Se comprueba con |
 |---|---|---|
 | E-1 ✅ | Compositor sin interfaz: dos fuentes (pantalla/ventana a pantalla completa + capturadora en una esquina); herramienta de prueba que graba y mide | FPS, CPU y GPU; colores y posiciones correctas; coste con LoL abierto |
-| E-2 | La app mantiene varias fuentes a la vez; el compositor alimenta visor, replay y grabación | Grabar una escena con clics reales |
+| E-2 ✅ | La app mantiene varias fuentes a la vez; el compositor alimenta visor, replay y grabación | Grabar una escena con clics reales |
 | E-3 | Interfaz: selector de escenas y editor libre sobre la vista previa | Clics reales y capturas |
 | E-4 | Cambio de escena con tecla global y transición suave opcional | Pruebas |
 
@@ -224,6 +224,24 @@ Lo que se quiere: componer **varias fuentes a la vez** (por ejemplo el juego a p
 - Sin tope, dos fuentes de 60 fps producían **110 imágenes por segundo** (64 % de un núcleo y el codificador trabajando el doble). El compositor se limita a `OUTPUT_FPS` = 60 y dibuja solo cuando alguna fuente visible tiene un frame nuevo.
 - Nada de esto toca todavía la app: el visor y el replay siguen leyendo una sola fuente (E-2).
 - **Pendiente de medir**: GPU y FPS del juego con LoL abierto (lo mide el autor).
+
+### Resultados de E-2
+
+La app ya puede tener **dos fuentes vivas** y dibujarlas con el compositor. Todavía no hay interfaz (E-3): se pide por la línea de comandos, por ejemplo `dockview.exe --video UGREEN --pip monitor:1` (también `--pip video:NOMBRE`, `--pip window:TEXTO` y `--pip-size 0.3`).
+
+- **Cómo está montado.** Sin escena todo sigue igual que antes. Con escena, la fuente principal publica en un slot de entrada propio (`input_slot`) y el compositor dibuja en `slot`, el mismo de siempre, que leen el visor, el replay y la grabación. Por eso G-1..G-4 y S-1..S-3 no se tocaron. Cambiar la fuente principal con la interfaz sigue funcionando durante una escena.
+- **Fuente de la esquina.** Abajo a la derecha, 16:9, 28 % del ancho por defecto. Una capturadora que se desconecta se reabre sola cada 2 s; una pantalla o ventana que termina se quita de la imagen con un aviso. Si se pide como esquina la misma capturadora que ya es la principal, se rechaza con un mensaje.
+- **La ventana de Dockview se excluye de la captura** mientras cualquier capa sea una pantalla. De paso se corrigió un fallo antiguo: una pantalla pedida por la línea de comandos arrancaba antes de que existiera la ventana y no se excluía.
+- **Audio.** Igual que antes: el de la fuente principal. La esquina no aporta sonido todavía.
+- **Verificado con la app real:** patrón de prueba + monitor 0 en la esquina (captura de pantalla correcta); ventana de Edge como principal; C7 + monitor 1 grabando 12 s (603 frames a 50,5 fps, audio y video, cierre limpio en 0,45 s).
+
+| Coste (C7 1080p50, grabando, monitor 1 con video en la esquina) | Sin escena | Con escena |
+|---|---|---|
+| CPU de Dockview | 35 % de un núcleo | 56 % de un núcleo (+21 puntos) |
+| Latencia propia | 2,0 ms | 3,9 ms |
+| Memoria | 163 MB | 216 MB |
+
+- **Pendiente:** ver la capturadora **con imagen real** dentro de una escena (la Switch estaba dormida y la C7 daba negro, igual que sola); medir el coste con LoL abierto; y el fallback automático a MJPEG, que juzga los FPS del slot de salida y no los de la fuente principal.
 
 ## Segunda capturadora: C7 USB3.0 (2026-11-12)
 
