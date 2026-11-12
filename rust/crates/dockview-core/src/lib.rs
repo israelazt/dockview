@@ -6,6 +6,7 @@ pub mod audio;
 pub mod audio_sync;
 #[cfg(windows)]
 pub mod capture;
+pub mod compose;
 pub mod device;
 pub mod diagnostics;
 #[cfg(windows)]

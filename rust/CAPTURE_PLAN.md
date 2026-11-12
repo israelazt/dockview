@@ -12,7 +12,7 @@ Objetivo: que Dockview sea la herramienta única para grabar y transmitir (LoL y
 | 3 | **Captura de pantalla y de aplicaciones** (fuentes): ver la sección de abajo | Dockview graba un monitor o una app con su audio y el micrófono |
 | 4 | **Grabación normal** (inicio/fin): ver la sección de abajo | Una partida entera sin perder FPS |
 | 5 | Editor rápido (recorte, exportación horizontal y vertical) | Un clip listo para redes en menos de un minuto |
-| 6 | Streaming (RTMP) y escenas | Transmitir con una escena de dos capas |
+| 6 | Escenas (6a, plan abajo) y streaming (RTMP) | Transmitir con una escena de dos capas |
 
 ## Forma que debe tener desde ya (aunque el paso 3 llegue después)
 
@@ -182,6 +182,48 @@ Los frames de pantalla pasan por el mismo `FrameSlot`, así que el visor, el rep
 Detalles a tener en cuenta:
 - La captura de pantalla **solo entrega frames cuando algo cambia**, así que con una ventana quieta el recuento de frames es bajo (es normal; el archivo mantiene la duración correcta).
 - Al perderse la fuente en plena grabación, el video pasa a la capturadora sin cortar el archivo; si no hubiera capturadora o señal, actúa el aviso de «sin señal» de G-3.
+
+## Paso 6a — Escenas: plan (decidido 2026-11-12)
+
+Lo que se quiere: componer **varias fuentes a la vez** (por ejemplo el juego a pantalla completa y la cámara o la capturadora en una esquina), guardar esas composiciones como **escenas** y cambiar entre ellas. El visor, el replay y la grabación ven solo el resultado.
+
+### Decisiones de diseño
+1. **Varias fuentes vivas**, cada una con su propio `FrameSlot`. Hoy `Source` (en `main.rs`) es una sola; pasa a ser una lista de fuentes con identificador.
+2. **Compositor en la GPU** (`dockview-core`): sube el frame NV12 de cada fuente como textura, dibuja las capas en una textura BGRA, la convierte a NV12 con el procesador de video de D3D11 (el mismo camino de S-1) y la publica en un **slot de salida**. El visor, el replay y la grabación leen ese slot: G-1..G-4 y S-1..S-3 no se tocan.
+3. **Atajo sin coste**: una escena de una sola capa a pantalla completa no pasa por el compositor; el frame se reenvía tal cual (igual que hoy).
+4. **Modelo**: una escena es una lista ordenada de capas; cada capa tiene fuente, rectángulo **libre y normalizado** (x, y, ancho, alto de 0 a 1), ajuste (llenar, encajar, recortar) y visible/oculta. Se guarda en `settings.json`. El tamaño de salida es fijo (1080p), así no se parte la grabación al cambiar de escena.
+5. **Audio**: igual que ahora (pista del juego, micrófono y mezcla). Cada escena indica de qué fuente viene el sonido principal.
+6. **Editor libre** (decidido por el autor, estilo OBS): arrastrar y redimensionar cada capa sobre la vista previa, con asas y ajuste a bordes y centro. Más trabajo que las plantillas, pero el modelo con rectángulos libres lo admite desde el principio.
+
+### Fases
+| Fase | Qué | Se comprueba con |
+|---|---|---|
+| E-1 ✅ | Compositor sin interfaz: dos fuentes (pantalla/ventana a pantalla completa + capturadora en una esquina); herramienta de prueba que graba y mide | FPS, CPU y GPU; colores y posiciones correctas; coste con LoL abierto |
+| E-2 | La app mantiene varias fuentes a la vez; el compositor alimenta visor, replay y grabación | Grabar una escena con clics reales |
+| E-3 | Interfaz: selector de escenas y editor libre sobre la vista previa | Clics reales y capturas |
+| E-4 | Cambio de escena con tecla global y transición suave opcional | Pruebas |
+
+### Riesgos
+- Más GPU y RAM con dos fuentes más el compositor, en una GTX 1660 Ti con el juego abierto: se mide en E-1 antes de seguir.
+- Una captura de pantalla baja a RAM como NV12 y vuelve a subir a la GPU (unos 180 MB/s a 1080p60): debería aguantar; si no, la fuente de pantalla publicará su textura directamente.
+- La Canon M50 II (spike 2b) entra después como una fuente más, sin tocar el compositor.
+
+### Resultados de E-1 (GTX 1660 Ti, dos monitores 1080p)
+
+`crates/dockview-core/src/compose.rs`: `Compositor` (dibuja capas en una textura NV12 con el procesador de video de D3D11, sin shaders), `SceneCompositor` (lo ejecuta en un hilo y publica en un `FrameSlot` de salida), `Layer`, `NormRect` y `Fit` (llenar/encajar/recortar). Herramienta de medición: `cargo run --release -p dockview-core --example compose_probe -- --main monitor:1 --pip monitor:0 --seconds 15`.
+
+| Prueba | Resultado |
+|---|---|
+| Orden y posición de las capas | Test con GPU real: la capa de abajo se ve donde la de arriba no está, la de arriba cubre su cuarto de pantalla y una capa oculta desaparece. La entrada YUY2 (capturadoras sin comprimir) también funciona |
+| Monitor 1 a pantalla completa + monitor 0 en la esquina (grabado 15 s) | Colores correctos y el recuadro cae abajo a la derecha. Archivo continuo de 14,5 s a 54,5 fps (la fuente principal entrega 49,8) |
+| Coste (captura de dos pantallas + composición + codificación) | **40 % de un núcleo**, frente al 32 % de una sola pantalla en S-1: la composición añade en torno a un 8 % |
+| Monitor 1 + capturadora UGREEN en la esquina | Funciona, pero la capturadora estaba sin señal (recuadro negro); no se validó con imagen real de la consola |
+
+**Hallazgos**
+- Las texturas de entrada NV12 necesitan `BIND_SHADER_RESOURCE | BIND_RENDER_TARGET`; con solo `SHADER_RESOURCE` Windows rechaza la vista de entrada (`E_INVALIDARG`).
+- Sin tope, dos fuentes de 60 fps producían **110 imágenes por segundo** (64 % de un núcleo y el codificador trabajando el doble). El compositor se limita a `OUTPUT_FPS` = 60 y dibuja solo cuando alguna fuente visible tiene un frame nuevo.
+- Nada de esto toca todavía la app: el visor y el replay siguen leyendo una sola fuente (E-2).
+- **Pendiente de medir**: GPU y FPS del juego con LoL abierto (lo mide el autor).
 
 ## Tooltips (2026-11-12)
 
