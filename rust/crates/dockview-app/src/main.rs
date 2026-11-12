@@ -33,6 +33,7 @@ use dockview_core::diagnostics::{
 };
 use dockview_core::frame::FrameSlot;
 use dockview_core::mf::{enumerate_video_devices, MfSession};
+use dockview_core::mic::MicCapture;
 use dockview_core::recorder::{RecorderStatus, ReplayRecorder, ReplaySettings, SaveHandle};
 use dockview_core::settings::{
     self, AppSettings, LangMode, RenderPreset, ThemeMode, VideoModePref, MAX_AUDIO_OFFSET_MS,
@@ -53,7 +54,7 @@ use i18n::{Lang, LangModeExt};
 use perf::ProcessSampler;
 use render::{Filter, Renderer};
 use theme::{Appearance, Theme, ThemeModeExt};
-use ui::controls::{Action, Controls, Model, StatusKind};
+use ui::controls::{Action, Controls, MicState, MicView, Model, StatusKind};
 use ui::gpu::UiGpu;
 use ui::input::Pointer;
 use ui::stats::{Stats, StatsPanel};
@@ -139,6 +140,11 @@ struct App {
     toasts: ToastHost,
     /// Installed RAM, which caps the replay length.
     total_ram: u64,
+    /// The microphone; `Some` only while the user has it on.
+    mic: Option<MicCapture>,
+    /// Smoothed loudness for the meter.
+    mic_level: f32,
+    mic_level_at: Instant,
 }
 
 /// Whether Windows allows UI animations ("Show animations in Windows").
@@ -254,6 +260,9 @@ impl App {
             hotkey: None,
             toasts: ToastHost::new(),
             total_ram: perf::total_ram_bytes(),
+            mic: None,
+            mic_level: 0.0,
+            mic_level_at: Instant::now(),
         };
 
         app.controls.set_animations(animations);
@@ -268,6 +277,10 @@ impl App {
             }
             if app.cli.open_replay {
                 app.controls.toggle_replay();
+            }
+            app.start_replay_services();
+            if app.cli.mic {
+                app.set_mic(true);
             }
             return app;
         }
@@ -302,6 +315,9 @@ impl App {
         app.select_video(video);
         app.select_audio(audio);
         app.start_replay_services();
+        if app.cli.mic {
+            app.set_mic(true);
+        }
         app
     }
 
@@ -327,6 +343,8 @@ impl App {
         if self.settings.replay_enabled == self.recorder.is_some() {
             return;
         }
+        // The microphone rides on the recorder: it goes when the buffer goes.
+        self.mic = None;
         if self.settings.replay_enabled {
             let recorder = ReplayRecorder::start(
                 Arc::clone(&self.slot),
@@ -350,6 +368,55 @@ impl App {
             }
             self.recorder = None;
         }
+    }
+
+    /// Names for the microphone list: the Windows default, then every input.
+    fn mic_device_names(&self, lang: Lang) -> Vec<String> {
+        std::iter::once(i18n::tr(lang, i18n::Key::MicDefault).to_owned())
+            .chain(self.audio_devices.iter().map(|d| d.friendly_name.clone()))
+            .collect()
+    }
+
+    /// Index in [`Self::mic_device_names`] of the chosen microphone.
+    fn mic_selected(&self) -> usize {
+        self.settings
+            .last_mic_device_id
+            .as_deref()
+            .and_then(|id| self.audio_devices.iter().position(|d| d.device_id == id))
+            .map_or(0, |i| i + 1)
+    }
+
+    fn mic_view(&self) -> MicView {
+        let state = match self.mic.as_ref().map(MicCapture::status) {
+            None => MicState::Off,
+            Some(AudioStatus::Starting) => MicState::Starting,
+            Some(AudioStatus::Running) => MicState::Live,
+            Some(AudioStatus::Stopped) => MicState::Off,
+            Some(AudioStatus::Disconnected(_) | AudioStatus::Failed(_)) => MicState::Unavailable,
+        };
+        MicView {
+            state,
+            level: self.mic_level,
+        }
+    }
+
+    /// Opens or closes the microphone. It needs the replay buffer, which is
+    /// what carries its audio.
+    fn set_mic(&mut self, on: bool) {
+        if !on {
+            self.mic = None;
+            if let Some(recorder) = &self.recorder {
+                recorder.clear_mic();
+            }
+            self.mic_level = 0.0;
+            return;
+        }
+        let Some(recorder) = &self.recorder else {
+            self.toast(i18n::Key::ToastTurnOnFirst, ToastKind::Info);
+            return;
+        };
+        let device = self.settings.last_mic_device_id.clone();
+        self.mic = Some(MicCapture::start(device, 1.0, recorder.mic_tap()));
     }
 
     /// The longest replay this PC's memory allows, in seconds.
@@ -422,6 +489,12 @@ impl App {
 
     /// Per-tick work: the hotkey and finished saves.
     fn poll_replay(&mut self) {
+        let now = Instant::now();
+        let dt = now.duration_since(self.mic_level_at).as_secs_f32().min(0.2);
+        self.mic_level_at = now;
+        // Rise at once, fall smoothly.
+        let raw = self.mic.as_ref().map_or(0.0, MicCapture::level);
+        self.mic_level = raw.max(self.mic_level - dt * 1.5).clamp(0.0, 1.0);
         if self.hotkey.as_ref().is_some_and(|h| h.take_pressed()) {
             self.save_replay();
         }
@@ -618,6 +691,9 @@ impl App {
             video_mode: self.settings.video_mode,
             stats_open: self.stats_open,
             replay: self.replay_view(),
+            mic_devices: self.mic_device_names(self.lang_mode().resolve(self.system_lang)),
+            mic_selected: Some(self.mic_selected()),
+            mic: self.mic_view(),
         }
     }
 
@@ -657,6 +733,30 @@ impl App {
                     i18n::Key::ToastReplayOff
                 };
                 self.toast(key, ToastKind::Info);
+            }
+            Action::ToggleMic => {
+                let on = self.mic.is_none();
+                self.set_mic(on);
+                if self.mic.is_some() == on {
+                    let key = if on {
+                        i18n::Key::ToastMicOn
+                    } else {
+                        i18n::Key::ToastMicOff
+                    };
+                    self.toast(key, ToastKind::Info);
+                }
+                return; // the microphone always starts off; nothing to save
+            }
+            Action::SelectMic(index) => {
+                self.settings.last_mic_device_id = index
+                    .checked_sub(1)
+                    .and_then(|i| self.audio_devices.get(i))
+                    .map(|d| d.device_id.clone());
+                if self.mic.is_some() {
+                    // Reopen on the new device.
+                    self.set_mic(false);
+                    self.set_mic(true);
+                }
             }
             Action::ReplayLength(delta) => {
                 self.settings.replay_seconds =

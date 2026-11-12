@@ -46,12 +46,12 @@ Cada fase es útil por sí sola.
 
 ### R-1 · Búfer de repetición y «guardar los últimos N»
 
-**Estado:** R-1.1 a R-1.4 y R-1.6 hechas y verificadas con la capturadora real (clip guardado con el atajo Ctrl+Alt+S). El búfer **arranca activo por defecto**; el usuario lo apaga a mano. Estimación de memoria y límite por RAM hechos (20 % de la RAM instalada; el popover muestra el uso y avisa al llegar al tope). Faltan micrófono y estadísticas del búfer (R-1.5, R-1.8).
+**Estado:** R-1.1 a R-1.4 y R-1.6 hechas y verificadas con la capturadora real (clip guardado con el atajo Ctrl+Alt+S). El búfer **arranca activo por defecto**; el usuario lo apaga a mano. Estimación de memoria y límite por RAM hechos (20 % de la RAM instalada; el popover muestra el uso y avisa al llegar al tope). Micrófono hecho (R-1.5): apagado por defecto en cada sesión, selector en Ajustes, indicador rojo en la píldora y medidor en el popover; el clip lleva 3 pistas AAC (mezcla, juego, micrófono). Falta solo las estadísticas del búfer (R-1.8).
 - **R-1.1 ✅** Codificar con `IMFTransform` y extraer muestras comprimidas y cabeceras (prueba de concepto).
 - **R-1.2 ✅** Anillo de muestras en RAM acotado por duración y tamaño, con corte en fotogramas clave.
 - **R-1.3 ✅** Volcar una ventana del anillo a MP4 *sin recodificar*; comprobar que se reproduce.
 - **R-1.4 ✅** Audio AAC del juego (desde la tubería WASAPI actual) en su pista.
-- **R-1.5** Micrófono opcional en su pista, con selección de dispositivo e indicador visible.
+- **R-1.5 ✅** Micrófono opcional en su pista, con selección de dispositivo e indicador visible.
 - **R-1.6 ✅** Interfaz: interruptor, duración personalizable, botón «Guardar» y atajo global; aviso al guardar.
 - **R-1.7 ✅** Ajustes persistentes, carpeta de destino y estimación de tamaño antes de activar.
 - **R-1.8** Estadísticas: estado del búfer, coste del codificador y avisos de espacio.

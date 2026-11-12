@@ -70,9 +70,14 @@ const ICON_ACTIVITY: char = '\u{e038}';
 const ICON_REPLAY: char = '\u{e1f5}';
 const ICON_SAVE: char = '\u{e14d}';
 const ICON_FOLDER: char = '\u{e247}';
+const ICON_MIC: char = '\u{e118}';
+const ICON_MIC_OFF: char = '\u{e119}';
 
 const LABEL: TextStyle = TextStyle::new(13.0, Weight::Medium);
 const BODY: TextStyle = TextStyle::new(13.0, Weight::Regular);
+/// Height of the microphone row and of the line under it, in the replay popover.
+const MIC_ROW: f32 = 30.0;
+const MIC_METER: f32 = 14.0;
 const SECTION: TextStyle = TextStyle::new(12.0, Weight::Medium);
 
 const PRESETS: [RenderPreset; 3] = [
@@ -101,6 +106,38 @@ pub enum ReplayState {
     Recording,
     /// This PC cannot record (no hardware encoder, unsupported format).
     Unavailable,
+}
+
+/// State of the microphone.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MicState {
+    Off,
+    Starting,
+    Live,
+    /// No microphone could be opened.
+    Unavailable,
+}
+
+/// What the microphone controls display.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MicView {
+    pub state: MicState,
+    /// How loud it is right now, 0.0–1.0.
+    pub level: f32,
+}
+
+impl MicView {
+    pub const fn off() -> Self {
+        Self {
+            state: MicState::Off,
+            level: 0.0,
+        }
+    }
+
+    /// Turned on by the user (even if it could not start).
+    pub fn is_on(&self) -> bool {
+        self.state != MicState::Off
+    }
 }
 
 /// What the replay controls display.
@@ -158,12 +195,16 @@ pub struct Model {
     pub video_selected: Option<usize>,
     pub audio_devices: Vec<String>,
     pub audio_selected: Option<usize>,
+    /// The first entry is the Windows default microphone.
+    pub mic_devices: Vec<String>,
+    pub mic_selected: Option<usize>,
     pub preset: RenderPreset,
     pub theme_mode: ThemeMode,
     pub lang_mode: LangMode,
     pub video_mode: VideoModePref,
     pub stats_open: bool,
     pub replay: ReplayView,
+    pub mic: MicView,
 }
 
 /// A change the user asked for.
@@ -174,6 +215,8 @@ pub enum Action {
     ToggleFullscreen,
     SelectVideo(usize),
     SelectAudio(usize),
+    SelectMic(usize),
+    ToggleMic,
     SetPreset(RenderPreset),
     SetTheme(ThemeMode),
     SetLang(LangMode),
@@ -198,6 +241,7 @@ enum Hit {
     Fullscreen,
     Video(usize),
     Audio(usize),
+    MicDevice(usize),
     Preset(usize),
     Theme(usize),
     Lang(usize),
@@ -214,6 +258,9 @@ enum Hit {
     ReplayLonger,
     ReplayPopSave,
     ReplayFolder,
+    MicToggle,
+    /// Only an animation key for the microphone switch knob; never registered.
+    MicKnob,
 }
 
 impl Hit {
@@ -229,6 +276,8 @@ impl Hit {
             Hit::Popover
                 | Hit::Video(_)
                 | Hit::Audio(_)
+                | Hit::MicDevice(_)
+                | Hit::MicToggle
                 | Hit::Preset(_)
                 | Hit::Theme(_)
                 | Hit::Lang(_)
@@ -487,7 +536,9 @@ impl Controls {
             Hit::ReplayShorter => Action::ReplayLength(-1),
             Hit::ReplayLonger => Action::ReplayLength(1),
             Hit::ReplayFolder => Action::OpenReplayFolder,
-            Hit::ReplayKnob => return,
+            Hit::ReplayKnob | Hit::MicKnob => return,
+            Hit::MicToggle => Action::ToggleMic,
+            Hit::MicDevice(i) => Action::SelectMic(i),
             Hit::Fullscreen => Action::ToggleFullscreen,
             Hit::SyncMinus => Action::SetSync(sync(-SYNC_STEP_MS)),
             Hit::SyncPlus => Action::SetSync(sync(SYNC_STEP_MS)),
@@ -731,6 +782,10 @@ impl Controls {
                 t.error.with_alpha(pulse),
             );
         }
+        if m.mic.state == MicState::Live {
+            // The microphone is open: a red microphone at the button's corner.
+            ui.icon(ICON_MIC, x + BUTTON / 2.0 + 10.0, cy + 10.0, 11.0, t.error);
+        }
         x += BUTTON + 4.0;
         self.save_button(ui, m, x + BUTTON / 2.0, cy);
         x += BUTTON;
@@ -795,9 +850,9 @@ impl Controls {
     }
 
     /// An on/off switch. The knob glides when `on` changes.
-    fn switch(&mut self, ui: &mut Ui, m: &Model, track: Rect, on: bool) {
+    fn switch(&mut self, ui: &mut Ui, m: &Model, track: Rect, on: bool, knob: Hit) {
         let t = &m.theme;
-        let (amount, _) = self.animate(Hit::ReplayKnob, on, false);
+        let (amount, _) = self.animate(knob, on, false);
         let fill = lerp_color(t.track, t.accent, amount);
         ui.rect(track, track.h / 2.0, fill);
         let r = track.h / 2.0 - 2.0;
@@ -859,6 +914,10 @@ impl Controls {
             + 8.0
             + hint_h
             + 14.0
+            + MIC_ROW
+            + 4.0
+            + MIC_METER
+            + 14.0
             + button_h
             + 8.0
             + folder_h;
@@ -910,6 +969,7 @@ impl Controls {
             m,
             Rect::new(inner_x + inner_w - 42.0, cy - 11.0, 42.0, 22.0),
             r.is_on(),
+            Hit::ReplayKnob,
         );
         y += title_h + 4.0;
 
@@ -961,6 +1021,70 @@ impl Controls {
             y += 16.0;
         }
         y += 14.0;
+
+        // Microphone: switch, and a level meter while it is open.
+        let mic_row = Rect::new(inner_x, y, inner_w, MIC_ROW);
+        self.register(Hit::MicToggle, mic_row);
+        let (hover, press) = self.amounts(Hit::MicToggle);
+        let shade = t.hover.a * (hover * 0.6 + 0.9 * press);
+        if shade > 0.002 {
+            ui.rect(
+                Rect::new(
+                    mic_row.x - 6.0,
+                    mic_row.y - 2.0,
+                    mic_row.w + 12.0,
+                    mic_row.h + 4.0,
+                ),
+                10.0,
+                t.hover.with_alpha(shade.min(1.0)),
+            );
+        }
+        let mic_cy = y + MIC_ROW / 2.0;
+        let (mic_icon, mic_color) = match m.mic.state {
+            MicState::Live | MicState::Starting => (ICON_MIC, t.error),
+            MicState::Unavailable => (ICON_MIC_OFF, t.text_dim),
+            MicState::Off => (ICON_MIC_OFF, t.text_dim),
+        };
+        ui.icon(mic_icon, inner_x + 10.0, mic_cy, 17.0, mic_color);
+        ui.text(
+            tr(lang, Key::Microphone),
+            inner_x + 30.0,
+            mic_cy - line_h / 2.0,
+            TextStyle::new(14.0, Weight::SemiBold),
+            t.text,
+        );
+        self.switch(
+            ui,
+            m,
+            Rect::new(inner_x + inner_w - 42.0, mic_cy - 11.0, 42.0, 22.0),
+            m.mic.is_on(),
+            Hit::MicKnob,
+        );
+        y += MIC_ROW + 4.0;
+        match m.mic.state {
+            MicState::Unavailable => {
+                ui.text(
+                    tr(lang, Key::MicUnavailable),
+                    inner_x,
+                    y,
+                    hint_style,
+                    t.error,
+                );
+            }
+            MicState::Off => {
+                ui.text(tr(lang, Key::MicHint), inner_x, y, hint_style, t.text_dim);
+            }
+            MicState::Starting | MicState::Live => {
+                let bar = Rect::new(inner_x, y + (MIC_METER - 4.0) / 2.0, inner_w, 4.0);
+                ui.rect(bar, 2.0, t.track);
+                // Loudness feels linear on a square-root scale.
+                let filled = m.mic.level.clamp(0.0, 1.0).sqrt() * bar.w;
+                if filled >= 1.0 {
+                    ui.rect(Rect::new(bar.x, bar.y, filled, bar.h), 2.0, t.accent);
+                }
+            }
+        }
+        y += MIC_METER + 14.0;
 
         // Save button.
         let button = Rect::new(inner_x, y, inner_w, button_h);
@@ -1124,6 +1248,18 @@ impl Controls {
             &m.audio_devices,
             m.audio_selected,
             Hit::Audio,
+            inner_x,
+            y,
+            inner_w,
+        );
+        y += SECTION_GAP;
+        y = self.device_section(
+            ui,
+            m,
+            Key::Microphone,
+            &m.mic_devices,
+            m.mic_selected,
+            Hit::MicDevice,
             inner_x,
             y,
             inner_w,
@@ -1439,8 +1575,9 @@ fn popover_height(m: &Model) -> f32 {
     POPOVER_PAD * 2.0
         + device(m.video_devices.len())
         + device(m.audio_devices.len())
+        + device(m.mic_devices.len())
         + segmented * 4.0
-        + SECTION_GAP * 6.0
+        + SECTION_GAP * 7.0
         + ROW_HEIGHT
 }
 
@@ -1482,12 +1619,15 @@ mod tests {
             video_selected: Some(0),
             audio_devices: vec!["HDMI (UGREEN 25173)".into()],
             audio_selected: Some(0),
+            mic_devices: vec!["Windows default".into(), "USB Microphone".into()],
+            mic_selected: Some(0),
             preset: RenderPreset::Balanced,
             theme_mode: ThemeMode::Auto,
             lang_mode: LangMode::Auto,
             video_mode: VideoModePref::Auto,
             stats_open: false,
             replay: ReplayView::off("Ctrl+Alt+S"),
+            mic: MicView::off(),
         }
     }
 
@@ -1763,6 +1903,36 @@ mod tests {
         assert!(rig.controls.close_settings());
         rig.click_on(Hit::Settings);
         assert!(rig.controls.close_settings());
+    }
+
+    #[test]
+    fn the_microphone_switch_and_device_list_emit_their_actions() {
+        let mut rig = Rig::new(true);
+        recording_model(&mut rig);
+        rig.click_on(Hit::Replay);
+        rig.click_on(Hit::MicToggle);
+        assert_eq!(rig.actions(), vec![Action::ToggleMic]);
+        rig.click_on(Hit::Settings);
+        rig.click_on(Hit::MicDevice(1));
+        assert_eq!(rig.actions(), vec![Action::SelectMic(1)]);
+    }
+
+    #[test]
+    fn the_microphone_states_draw_without_breaking_the_popover() {
+        for state in [
+            MicState::Off,
+            MicState::Starting,
+            MicState::Live,
+            MicState::Unavailable,
+        ] {
+            let mut rig = Rig::new(true);
+            recording_model(&mut rig);
+            rig.model.mic = MicView { state, level: 0.6 };
+            rig.click_on(Hit::Replay);
+            rig.frame(0.016);
+            assert!(rig.controls.replay_open(), "{state:?}");
+            assert_eq!(rig.model.mic.is_on(), state != MicState::Off);
+        }
     }
 
     #[test]

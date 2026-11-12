@@ -154,6 +154,10 @@ pub struct AppSettings {
     /// WASAPI id of the last-used audio capture device.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_audio_device_id: Option<String>,
+    /// WASAPI id of the chosen microphone; `None` is the Windows default. The
+    /// microphone itself always starts off: it is turned on by hand each session.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_mic_device_id: Option<String>,
     /// Audio sync offset in milliseconds (-300..=300).
     pub audio_offset_ms: i32,
     /// Master volume (0.0..=1.0).
@@ -185,6 +189,7 @@ impl Default for AppSettings {
         Self {
             last_video_device_symbolic_link: None,
             last_audio_device_id: None,
+            last_mic_device_id: None,
             audio_offset_ms: 0,
             volume: 1.0,
             was_fullscreen: false,
@@ -280,6 +285,7 @@ mod tests {
         assert_eq!(s.render_preset, RenderPreset::Balanced);
         assert!(s.last_video_device_symbolic_link.is_none());
         assert!(s.last_audio_device_id.is_none());
+        assert!(s.last_mic_device_id.is_none());
     }
 
     #[test]
@@ -287,6 +293,7 @@ mod tests {
         let original = AppSettings {
             last_video_device_symbolic_link: Some(r"\\?\usb#vid_1234".into()),
             last_audio_device_id: Some("{0.0.1.00000000}.{abc}".into()),
+            last_mic_device_id: Some("{0.0.1.00000000}.{mic}".into()),
             audio_offset_ms: -150,
             volume: 0.75,
             was_fullscreen: true,
