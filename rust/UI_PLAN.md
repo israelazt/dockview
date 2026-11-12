@@ -91,3 +91,25 @@ Se abre con la tecla `I` o desde la fila «Estadísticas» del popover (`--stats
 Todo se mide localmente; no hay telemetría ni se envía nada.
 
 Medidas de referencia (modo de prueba, build release, PC del autor: GTX 1660 Ti, Ryzen 5 3600X, monitor a 144 Hz): 30 fps recibidos y mostrados, 0 saltados, ~1,7 ms de latencia interna, ~0,6 % de CPU total, 0,08 ms de GPU por frame, ~75 MB. El arranque cuesta ~1 s de CPU (fuentes y compilación de shaders): candidato a optimizar para equipos modestos.
+
+## Estructura del código de los controles (2026-11-12)
+
+`ui/controls.rs` llegó a más de 3000 líneas con cinco cosas mezcladas. Se repartió en módulos pequeños **sin cambiar nada visible** (se comprobó comparando capturas, píxel a píxel, antes y después, en dos temas, dos idiomas y cinco vistas):
+
+| Módulo (`ui/controls/…`) | Qué contiene |
+|---|---|
+| `controls.rs` | El estado de `Controls`, `frame`, abrir y cerrar popovers, animaciones de hover (≈ 400 líneas) |
+| `model.rs` | Lo que se muestra (`Model` y sus vistas) y lo que se pide (`Action`) |
+| `consts.rs` | Tamaños, tiempos, iconos y estilos de texto |
+| `interaction.rs` | Qué hace un clic, una pulsación o un arrastre |
+| `tooltip.rs` | Cuándo salen los tooltips, dónde y qué dicen |
+| `widgets.rs` | Piezas reutilizables: botón de icono, interruptor, deslizador, filas de lista, selector segmentado |
+| `pill.rs` | La píldora flotante |
+| `popover_settings.rs`, `popover_replay.rs`, `popover_sources.rs`, `scenes.rs` | Un popover por archivo |
+| `math.rs` | Fundidos, curvas de aceleración y mezcla de color |
+| `tests.rs` | Los tests de los controles |
+
+**Regla:** una función nueva de interfaz va en su propio módulo (o en el del popover al que pertenece), y lo reutilizable va a `widgets.rs`. `controls.rs` solo debe ganar enlaces. Los módulos hijos ven lo privado de `controls`; lo que se comparte entre hermanos se marca `pub(super)`.
+
+Esto prepara el terreno para usar más partes de la pantalla (un panel lateral de capas, el editor de escenas sobre la vista previa, paneles de transmisión): cada una se podrá añadir como un módulo más sin tocar lo existente.
+
