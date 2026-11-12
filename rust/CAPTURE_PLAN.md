@@ -272,6 +272,15 @@ Pensada también como entrada de la **Canon M50 Mark II por HDMI limpio** (una c
 
 **Fallo encontrado y corregido:** el audio de la C7 se llama «Interfaz de sonido digital (2- C7 USB3.0 Audio)», sin ninguna palabra que delate una capturadora, y Windows lo puso como entrada predeterminada. Con la UGREEN en uso, el modo «Automático» habría elegido ese audio como micrófono (pista muda). Ahora `pick_microphone` recibe todos los dispositivos de video y descarta el audio de **cualquier** capturadora que no sea una webcam (la webcam sigue valiendo como último recurso). Verificado con la app real: con la C7 como entrada predeterminada elige el RØDE.
 
+### Nombres de las capturadoras (2026-11-12)
+
+El nombre que Windows muestra viene del firmware de la tarjeta («C7 USB3.0 Video») y no se puede cambiar de forma segura ni viaja con ella a otro PC. Por eso Dockview **reconoce las tarjetas por su VID/PID USB**, que es igual en cualquier ordenador y puerto, y muestra un nombre mejor. Solo cambia lo que se muestra: el dispositivo se sigue buscando por su nombre real.
+
+- **Orden de prioridad:** el alias del usuario, luego el nombre de la tabla de tarjetas conocidas, luego el de Windows.
+- **Tabla integrada** (`dockview-core/src/device_names.rs`): `345f:2131` → «Pacoxi Budget HDMI Capture (USB3)». Cualquiera puede añadir la suya.
+- **Alias propio** en `settings.json`: `"deviceAliases": { "345f:2131": "Mi capturadora" }` (la clave es `vid:pid` en minúsculas). Aún no hay forma de editarlo desde la interfaz.
+- Verificado con la app real: la lista de fuentes muestra el nombre nuevo con la tarjeta conectada. De paso, `--open-sources`, `--open-settings` y `--open-replay` ahora funcionan también con dispositivos reales (antes solo con el patrón de prueba).
+
 ## Tooltips (2026-11-12)
 
 Cada control explica qué hace al dejar el ratón encima medio segundo (aparece con un fundido corto; desaparece al pulsar o al moverse a otro control).

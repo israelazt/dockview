@@ -32,6 +32,7 @@ use dockview_core::audio::{
 use dockview_core::capture::{CaptureOptions, CaptureStatus, VideoCapture};
 use dockview_core::compose::SceneCompositor;
 use dockview_core::device::{match_audio_to_video, pick_microphone, AudioDevice, VideoDevice};
+use dockview_core::device_names;
 use dockview_core::diagnostics::{
     diagnose, switch_helped, FallbackWatch, Finding, Snapshot, VideoState,
 };
@@ -350,16 +351,7 @@ impl App {
             if preview {
                 app.install_preview_devices();
             }
-            if app.cli.open_settings {
-                app.controls.toggle_settings();
-            }
-            if app.cli.open_replay {
-                app.controls.toggle_replay();
-            }
-            if app.cli.open_sources {
-                app.refresh_sources();
-                app.controls.toggle_sources();
-            }
+            app.open_requested_popover();
             app.start_cli_scene();
             app.start_replay_services();
             if app.cli.mic {
@@ -413,6 +405,7 @@ impl App {
                 app.activate_scene(Some(index));
             }
         }
+        app.open_requested_popover();
         app.start_replay_services();
         if app.cli.mic {
             app.set_mic(true);
@@ -421,6 +414,20 @@ impl App {
             app.toggle_record();
         }
         app
+    }
+
+    /// Opens the popover asked for on the command line (for screenshots).
+    fn open_requested_popover(&mut self) {
+        if self.cli.open_settings {
+            self.controls.toggle_settings();
+        }
+        if self.cli.open_replay {
+            self.controls.toggle_replay();
+        }
+        if self.cli.open_sources {
+            self.refresh_sources();
+            self.controls.toggle_sources();
+        }
     }
 
     /// Registers the hotkey and starts the replay buffer if it is enabled.
@@ -1121,11 +1128,18 @@ impl App {
             volume: self.settings.volume,
             sync_ms: self.settings.audio_offset_ms,
             fullscreen: self.fullscreen,
+            // The names shown can differ from the ones Windows gives (aliases).
             video_devices: names(
                 &self
                     .video_devices
                     .iter()
-                    .map(|d| d.friendly_name.clone())
+                    .map(|d| {
+                        device_names::display_name(
+                            &d.symbolic_link,
+                            &d.friendly_name,
+                            &self.settings.device_aliases,
+                        )
+                    })
                     .collect::<Vec<_>>(),
             ),
             video_selected: self.video_index,

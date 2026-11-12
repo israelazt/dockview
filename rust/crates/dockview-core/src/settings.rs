@@ -7,6 +7,8 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::scene::Scene;
@@ -233,6 +235,10 @@ pub struct AppSettings {
     /// The scene in use (a position in `scenes`); `None` is the plain source.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub active_scene: Option<usize>,
+    /// Names the user gave capture devices, by USB `vid:pid` (for example
+    /// `"345f:2131"`). They are only shown; the device keeps its real name.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub device_aliases: BTreeMap<String, String>,
 }
 
 impl Default for AppSettings {
@@ -255,6 +261,7 @@ impl Default for AppSettings {
             replay_folder: None,
             scenes: Vec::new(),
             active_scene: None,
+            device_aliases: BTreeMap::new(),
         }
     }
 }
@@ -281,6 +288,7 @@ impl AppSettings {
             .map(Scene::sanitized)
             .filter(|s| !s.layers.is_empty())
             .collect();
+        self.device_aliases = crate::device_names::sanitize_aliases(self.device_aliases);
         // The scene in use must exist.
         self.active_scene = self.active_scene.filter(|&i| i < self.scenes.len());
         self
@@ -377,6 +385,7 @@ mod tests {
                 },
             )],
             active_scene: Some(0),
+            device_aliases: BTreeMap::from([("345f:2131".to_owned(), "Pacoxi".to_owned())]),
         };
         let json = serde_json::to_string_pretty(&original).unwrap();
         let restored: AppSettings = serde_json::from_str(&json).unwrap();
