@@ -100,10 +100,34 @@ pub enum Key {
     VideoMode,
     ModeCompressed,
     FindSwitched,
+    InstantReplay,
+    ReplayOff,
+    ReplayRecording,
+    ReplayStarting,
+    ReplayUnavailable,
+    ReplayKeep,
+    ReplayHint,
+    SaveClip,
+    OpenFolder,
+    ToastClipSaved,
+    ToastClipFailed,
+    ToastTurnOnFirst,
+    ToastReplayOn,
+    ToastReplayOff,
+    ToastSaving,
+}
+
+/// A length of time as people say it: `45 s`, `2 min`, `1 min 30 s`.
+pub fn duration_label(seconds: u32) -> String {
+    match (seconds / 60, seconds % 60) {
+        (0, s) => format!("{s} s"),
+        (m, 0) => format!("{m} min"),
+        (m, s) => format!("{m} min {s} s"),
+    }
 }
 
 /// All keys, for completeness tests.
-pub const ALL_KEYS: [Key; 50] = [
+pub const ALL_KEYS: [Key; 65] = [
     Key::Live,
     Key::Connecting,
     Key::Disconnected,
@@ -154,6 +178,21 @@ pub const ALL_KEYS: [Key; 50] = [
     Key::VideoMode,
     Key::ModeCompressed,
     Key::FindSwitched,
+    Key::InstantReplay,
+    Key::ReplayOff,
+    Key::ReplayRecording,
+    Key::ReplayStarting,
+    Key::ReplayUnavailable,
+    Key::ReplayKeep,
+    Key::ReplayHint,
+    Key::SaveClip,
+    Key::OpenFolder,
+    Key::ToastClipSaved,
+    Key::ToastClipFailed,
+    Key::ToastTurnOnFirst,
+    Key::ToastReplayOn,
+    Key::ToastReplayOff,
+    Key::ToastSaving,
 ];
 
 /// Looks up `key` in `lang`. The matches have no wildcard arm, so adding a
@@ -217,6 +256,21 @@ fn en(key: Key) -> &'static str {
         Key::VideoMode => "Video mode",
         Key::ModeCompressed => "Compressed",
         Key::FindSwitched => "Switched to a compressed video mode because the USB port could not carry the uncompressed one. Use a USB 3 port and choose Auto in Settings to try again.",
+        Key::InstantReplay => "Instant replay",
+        Key::ReplayOff => "Off — turn it on to keep the last moments.",
+        Key::ReplayRecording => "Recording",
+        Key::ReplayStarting => "Starting…",
+        Key::ReplayUnavailable => "Not available on this PC.",
+        Key::ReplayKeep => "Keep the last",
+        Key::ReplayHint => "A clip has at least this much. Hotkey: {hotkey}",
+        Key::SaveClip => "Save clip",
+        Key::OpenFolder => "Open folder",
+        Key::ToastClipSaved => "Clip saved",
+        Key::ToastClipFailed => "Could not save the clip",
+        Key::ToastTurnOnFirst => "Turn on instant replay first",
+        Key::ToastReplayOn => "Instant replay is on",
+        Key::ToastReplayOff => "Instant replay is off",
+        Key::ToastSaving => "Saving clip…",
     }
 }
 
@@ -272,6 +326,21 @@ fn es(key: Key) -> &'static str {
         Key::VideoMode => "Modo de video",
         Key::ModeCompressed => "Comprimido",
         Key::FindSwitched => "Se cambió a un modo de video comprimido porque el puerto USB no podía con el modo sin comprimir. Usa un puerto USB 3 y elige «Automático» en Ajustes para volver a probar.",
+        Key::InstantReplay => "Repetición instantánea",
+        Key::ReplayOff => "Apagada: actívala para guardar los últimos momentos.",
+        Key::ReplayRecording => "Grabando",
+        Key::ReplayStarting => "Iniciando…",
+        Key::ReplayUnavailable => "No disponible en este PC.",
+        Key::ReplayKeep => "Guardar los últimos",
+        Key::ReplayHint => "Un clip tiene al menos este tiempo. Atajo: {hotkey}",
+        Key::SaveClip => "Guardar clip",
+        Key::OpenFolder => "Abrir carpeta",
+        Key::ToastClipSaved => "Clip guardado",
+        Key::ToastClipFailed => "No se pudo guardar el clip",
+        Key::ToastTurnOnFirst => "Activa primero la repetición instantánea",
+        Key::ToastReplayOn => "Repetición instantánea activada",
+        Key::ToastReplayOff => "Repetición instantánea desactivada",
+        Key::ToastSaving => "Guardando clip…",
     }
 }
 
@@ -299,6 +368,23 @@ mod tests {
     fn spanish_and_english_actually_differ_where_expected() {
         assert_eq!(tr(Lang::En, Key::Settings), "Settings");
         assert_eq!(tr(Lang::Es, Key::Settings), "Ajustes");
+    }
+
+    #[test]
+    fn durations_read_naturally() {
+        assert_eq!(duration_label(5), "5 s");
+        assert_eq!(duration_label(45), "45 s");
+        assert_eq!(duration_label(60), "1 min");
+        assert_eq!(duration_label(90), "1 min 30 s");
+        assert_eq!(duration_label(600), "10 min");
+        assert_eq!(duration_label(0), "0 s");
+    }
+
+    #[test]
+    fn the_replay_hint_keeps_its_placeholder_in_both_languages() {
+        for lang in [Lang::En, Lang::Es] {
+            assert!(tr(lang, Key::ReplayHint).contains("{hotkey}"), "{lang:?}");
+        }
     }
 
     #[test]

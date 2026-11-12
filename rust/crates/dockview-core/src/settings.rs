@@ -96,6 +96,27 @@ pub enum VideoModePref {
     Compressed,
 }
 
+/// Lengths offered for the instant-replay buffer, in seconds.
+pub const REPLAY_STEPS: [u32; 15] = [
+    5, 10, 15, 20, 30, 45, 60, 90, 120, 180, 240, 300, 420, 600, 900,
+];
+/// Default replay length.
+pub const DEFAULT_REPLAY_SECONDS: u32 = 30;
+/// Default video bitrate for the replay buffer, in megabits per second.
+pub const DEFAULT_REPLAY_MBPS: u32 = 40;
+
+/// Moves `current` one step along [`REPLAY_STEPS`] (`delta` of +1 or -1),
+/// snapping first to the nearest listed length. Stops at either end.
+pub fn step_replay_seconds(current: u32, delta: i32) -> u32 {
+    let nearest = REPLAY_STEPS
+        .iter()
+        .enumerate()
+        .min_by_key(|(_, s)| s.abs_diff(current))
+        .map_or(0, |(i, _)| i);
+    let index = (nearest as i32 + delta).clamp(0, REPLAY_STEPS.len() as i32 - 1) as usize;
+    REPLAY_STEPS[index]
+}
+
 /// Persisted application settings. Every field falls back to its default when
 /// missing from the file.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -121,6 +142,13 @@ pub struct AppSettings {
     pub language: LangMode,
     /// How the capture mode is chosen.
     pub video_mode: VideoModePref,
+    /// Seconds of footage the instant replay keeps and saves.
+    pub replay_seconds: u32,
+    /// Video bitrate of the instant-replay buffer, in Mbps.
+    pub replay_bitrate_mbps: u32,
+    /// Where clips are saved; `None` means the Videos\\Dockview folder.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub replay_folder: Option<String>,
 }
 
 impl Default for AppSettings {
@@ -135,6 +163,9 @@ impl Default for AppSettings {
             theme: ThemeMode::default(),
             language: LangMode::default(),
             video_mode: VideoModePref::default(),
+            replay_seconds: DEFAULT_REPLAY_SECONDS,
+            replay_bitrate_mbps: DEFAULT_REPLAY_MBPS,
+            replay_folder: None,
         }
     }
 }
@@ -146,6 +177,10 @@ impl AppSettings {
         self.audio_offset_ms = self
             .audio_offset_ms
             .clamp(-MAX_AUDIO_OFFSET_MS, MAX_AUDIO_OFFSET_MS);
+        self.replay_seconds = self
+            .replay_seconds
+            .clamp(REPLAY_STEPS[0], REPLAY_STEPS[REPLAY_STEPS.len() - 1]);
+        self.replay_bitrate_mbps = self.replay_bitrate_mbps.clamp(5, 100);
         self.volume = if self.volume.is_nan() {
             1.0
         } else {
@@ -229,6 +264,9 @@ mod tests {
             theme: ThemeMode::Light,
             language: LangMode::Es,
             video_mode: VideoModePref::Compressed,
+            replay_seconds: 120,
+            replay_bitrate_mbps: 25,
+            replay_folder: Some(r"D:\\Clips".into()),
         };
         let json = serde_json::to_string_pretty(&original).unwrap();
         let restored: AppSettings = serde_json::from_str(&json).unwrap();
@@ -286,6 +324,46 @@ mod tests {
             .contains(r#""videoMode":"compressed""#));
         let old: AppSettings = serde_json::from_str("{}").unwrap();
         assert_eq!(old.video_mode, VideoModePref::Auto);
+    }
+
+    #[test]
+    fn replay_settings_default_round_trip_and_stay_in_range() {
+        let defaults = AppSettings::default();
+        assert_eq!(defaults.replay_seconds, 30);
+        assert_eq!(defaults.replay_bitrate_mbps, 40);
+        assert!(defaults.replay_folder.is_none());
+
+        let wild = AppSettings {
+            replay_seconds: 99_999,
+            replay_bitrate_mbps: 0,
+            ..AppSettings::default()
+        }
+        .sanitized();
+        assert_eq!(wild.replay_seconds, 900);
+        assert_eq!(wild.replay_bitrate_mbps, 5);
+        let tiny = AppSettings {
+            replay_seconds: 1,
+            ..AppSettings::default()
+        }
+        .sanitized();
+        assert_eq!(tiny.replay_seconds, 5);
+    }
+
+    #[test]
+    fn replay_length_steps_walk_the_list_and_stop_at_the_ends() {
+        assert_eq!(step_replay_seconds(30, 1), 45);
+        assert_eq!(step_replay_seconds(30, -1), 20);
+        assert_eq!(step_replay_seconds(5, -1), 5, "stops at the shortest");
+        assert_eq!(step_replay_seconds(900, 1), 900, "stops at the longest");
+        // An unlisted value snaps to its nearest step before moving.
+        assert_eq!(step_replay_seconds(33, 1), 45);
+        assert_eq!(step_replay_seconds(200, -1), 120);
+    }
+
+    #[test]
+    fn the_listed_lengths_are_sorted_and_include_the_default() {
+        assert!(REPLAY_STEPS.windows(2).all(|w| w[0] < w[1]));
+        assert!(REPLAY_STEPS.contains(&DEFAULT_REPLAY_SECONDS));
     }
 
     #[test]

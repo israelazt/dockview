@@ -8,6 +8,10 @@
 compile_error!("Dockview only supports Windows.");
 
 mod cli;
+#[allow(dead_code)] // wired up by the instant-replay controls
+mod clips;
+#[allow(dead_code)] // wired up by the instant-replay controls
+mod hotkey;
 #[allow(dead_code)] // some strings are used by the upcoming live controls
 mod i18n;
 mod perf;
@@ -460,6 +464,7 @@ impl App {
             lang_mode: self.lang_mode(),
             video_mode: self.settings.video_mode,
             stats_open: self.stats_open,
+            replay: ui::controls::ReplayView::off(hotkey::LABEL),
         }
     }
 
@@ -490,6 +495,11 @@ impl App {
                 }
             }
             Action::SelectAudio(index) => self.select_audio(Some(index)),
+            // Instant replay is not wired to the recorder yet.
+            Action::ToggleReplay
+            | Action::ReplayLength(_)
+            | Action::SaveReplay
+            | Action::OpenReplayFolder => return,
             Action::ToggleStats => {
                 self.stats_open = !self.stats_open;
                 return;

@@ -6,6 +6,7 @@ pub mod gpu;
 pub mod input;
 pub mod stats;
 pub mod text;
+pub mod toast;
 
 use crate::theme::Color;
 use text::{Face, TextSystem, Weight};

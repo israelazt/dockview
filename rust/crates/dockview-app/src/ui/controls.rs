@@ -10,10 +10,11 @@ use std::f32::consts::TAU;
 use dockview_core::settings::{LangMode, RenderPreset, VideoModePref, MAX_AUDIO_OFFSET_MS};
 
 use super::input::Pointer;
+use super::stats::wrap_text;
 use super::text::Weight;
 use super::{Rect, TextStyle, Ui};
 use crate::i18n::{tr, Key, Lang};
-use crate::theme::{Theme, ThemeMode};
+use crate::theme::{Color, Theme, ThemeMode};
 
 /// Seconds of pointer inactivity before the controls fade out.
 pub const IDLE_HIDE_SECS: f32 = 3.0;
@@ -35,6 +36,8 @@ const POPOVER_SECS: f32 = 0.18;
 const POPOVER_RISE: f32 = 10.0;
 /// Period of the "connecting" pulse, in seconds.
 const PULSE_SECS: f32 = 1.2;
+/// Width of the instant-replay popover.
+const REPLAY_POPOVER_WIDTH: f32 = 324.0;
 /// Most devices listed per kind in the popover.
 const MAX_LISTED_DEVICES: usize = 5;
 
@@ -64,6 +67,9 @@ const ICON_FULLSCREEN: char = '\u{e112}';
 const ICON_EXIT_FULLSCREEN: char = '\u{e11a}';
 const ICON_CHECK: char = '\u{e06c}';
 const ICON_ACTIVITY: char = '\u{e038}';
+const ICON_REPLAY: char = '\u{e1f5}';
+const ICON_SAVE: char = '\u{e14d}';
+const ICON_FOLDER: char = '\u{e247}';
 
 const LABEL: TextStyle = TextStyle::new(13.0, Weight::Medium);
 const BODY: TextStyle = TextStyle::new(13.0, Weight::Regular);
@@ -87,6 +93,50 @@ pub enum StatusKind {
     Idle,
 }
 
+/// State of the instant-replay buffer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReplayState {
+    Off,
+    Starting,
+    Recording,
+    /// This PC cannot record (no hardware encoder, unsupported format).
+    Unavailable,
+}
+
+/// What the replay controls display.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ReplayView {
+    pub state: ReplayState,
+    /// A clip is being written right now.
+    pub saving: bool,
+    pub buffered_seconds: f32,
+    pub buffered_mb: f32,
+    /// Length of a clip, in seconds.
+    pub keep_seconds: u32,
+    pub folder: String,
+    pub hotkey: String,
+}
+
+impl ReplayView {
+    /// A turned-off replay with the given hotkey label.
+    pub fn off(hotkey: &str) -> Self {
+        Self {
+            state: ReplayState::Off,
+            saving: false,
+            buffered_seconds: 0.0,
+            buffered_mb: 0.0,
+            keep_seconds: 30,
+            folder: String::new(),
+            hotkey: hotkey.to_owned(),
+        }
+    }
+
+    /// Whether the buffer is on (recording or starting up).
+    pub fn is_on(&self) -> bool {
+        matches!(self.state, ReplayState::Starting | ReplayState::Recording)
+    }
+}
+
 /// Everything the controls display.
 #[derive(Debug, Clone)]
 pub struct Model {
@@ -107,6 +157,7 @@ pub struct Model {
     pub lang_mode: LangMode,
     pub video_mode: VideoModePref,
     pub stats_open: bool,
+    pub replay: ReplayView,
 }
 
 /// A change the user asked for.
@@ -122,6 +173,11 @@ pub enum Action {
     SetLang(LangMode),
     SetVideoMode(VideoModePref),
     ToggleStats,
+    ToggleReplay,
+    /// Move the clip length one step longer (+1) or shorter (-1).
+    ReplayLength(i32),
+    SaveReplay,
+    OpenReplayFolder,
 }
 
 /// Identifies an interactive (or occluding) region.
@@ -141,6 +197,17 @@ enum Hit {
     Lang(usize),
     VideoMode(usize),
     Stats,
+    /// Pill button that opens the replay popover.
+    Replay,
+    /// Pill button that saves the replay.
+    ReplaySave,
+    ReplayToggle,
+    /// Only an animation key for the switch knob; never registered.
+    ReplayKnob,
+    ReplayShorter,
+    ReplayLonger,
+    ReplayPopSave,
+    ReplayFolder,
 }
 
 impl Hit {
@@ -161,12 +228,26 @@ impl Hit {
                 | Hit::Lang(_)
                 | Hit::VideoMode(_)
                 | Hit::Stats
+                | Hit::ReplayToggle
+                | Hit::ReplayShorter
+                | Hit::ReplayLonger
+                | Hit::ReplayPopSave
+                | Hit::ReplayFolder
         )
     }
 }
 
+/// Which popover is (or was last) open.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PopoverKind {
+    Settings,
+    Replay,
+}
+
 pub struct Controls {
     settings_open: bool,
+    replay_open: bool,
+    popover_kind: PopoverKind,
     always_visible: bool,
     visibility: f32,
     idle: f32,
@@ -197,6 +278,8 @@ impl Controls {
     pub fn new(always_visible: bool) -> Self {
         Self {
             settings_open: false,
+            replay_open: false,
+            popover_kind: PopoverKind::Settings,
             always_visible,
             visibility: if always_visible { 1.0 } else { 0.0 },
             idle: IDLE_HIDE_SECS,
@@ -238,11 +321,35 @@ impl Controls {
 
     /// Closes the popover; returns whether it was open.
     pub fn close_settings(&mut self) -> bool {
-        std::mem::replace(&mut self.settings_open, false)
+        let was_open = self.popover_target();
+        self.settings_open = false;
+        self.replay_open = false;
+        was_open
     }
 
     pub fn toggle_settings(&mut self) {
         self.settings_open = !self.settings_open;
+        if self.settings_open {
+            self.replay_open = false;
+            self.popover_kind = PopoverKind::Settings;
+        }
+    }
+
+    pub fn toggle_replay(&mut self) {
+        self.replay_open = !self.replay_open;
+        if self.replay_open {
+            self.settings_open = false;
+            self.popover_kind = PopoverKind::Replay;
+        }
+    }
+
+    pub fn replay_open(&self) -> bool {
+        self.replay_open
+    }
+
+    /// Whether a popover is meant to be showing (as opposed to fading out).
+    fn popover_target(&self) -> bool {
+        self.settings_open || self.replay_open
     }
 
     pub fn settings_open(&self) -> bool {
@@ -273,7 +380,10 @@ impl Controls {
             let eased = ease_out_cubic(self.popover_t);
             ui.set_opacity(self.visibility * eased);
             ui.set_offset(0.0, (1.0 - eased) * POPOVER_RISE);
-            self.draw_popover(ui, model, pill);
+            match self.popover_kind {
+                PopoverKind::Settings => self.draw_popover(ui, model, pill),
+                PopoverKind::Replay => self.draw_replay_popover(ui, model, pill),
+            }
             ui.set_offset(0.0, 0.0);
         }
         std::mem::swap(&mut self.hits, &mut self.next_hits);
@@ -295,7 +405,7 @@ impl Controls {
 
         let keep = self.always_visible
             || self.idle < IDLE_HIDE_SECS
-            || self.settings_open
+            || self.popover_target()
             || self.popover_t > 0.0
             || self.pressed.is_some()
             || over_ui;
@@ -318,7 +428,10 @@ impl Controls {
             self.pressed = self.hovered;
             match self.hovered {
                 Some(Hit::Volume) => self.drag_volume(model, pointer),
-                None if self.settings_open => self.settings_open = false,
+                None if self.popover_target() => {
+                    self.settings_open = false;
+                    self.replay_open = false;
+                }
                 _ => {}
             }
         } else if pointer.down && self.pressed == Some(Hit::Volume) {
@@ -359,6 +472,16 @@ impl Controls {
                 self.toggle_settings();
                 return;
             }
+            Hit::Replay => {
+                self.toggle_replay();
+                return;
+            }
+            Hit::ReplaySave | Hit::ReplayPopSave => Action::SaveReplay,
+            Hit::ReplayToggle => Action::ToggleReplay,
+            Hit::ReplayShorter => Action::ReplayLength(-1),
+            Hit::ReplayLonger => Action::ReplayLength(1),
+            Hit::ReplayFolder => Action::OpenReplayFolder,
+            Hit::ReplayKnob => return,
             Hit::Fullscreen => Action::ToggleFullscreen,
             Hit::SyncMinus => Action::SetSync(sync(-SYNC_STEP_MS)),
             Hit::SyncPlus => Action::SetSync(sync(SYNC_STEP_MS)),
@@ -377,13 +500,13 @@ impl Controls {
     /// Advances the popover open/close progress and forgets its transient
     /// animation state once it is fully closed.
     fn update_popover_progress(&mut self) {
-        let target = if self.settings_open { 1.0 } else { 0.0 };
+        let target = if self.popover_target() { 1.0 } else { 0.0 };
         self.popover_t = if self.animations {
             move_toward(self.popover_t, target, self.dt / POPOVER_SECS)
         } else {
             target
         };
-        if self.popover_t <= 0.0 && !self.settings_open {
+        if self.popover_t <= 0.0 && !self.popover_target() {
             self.segments = None;
             self.amounts.retain(|hit, _| !hit.in_popover());
         }
@@ -422,7 +545,7 @@ impl Controls {
 
     fn register(&mut self, hit: Hit, rect: Rect) {
         // A popover that is fading out must not receive clicks.
-        if hit.in_popover() && !self.settings_open {
+        if hit.in_popover() && !self.popover_target() {
             return;
         }
         self.next_hits.push((hit, rect));
@@ -492,8 +615,14 @@ impl Controls {
         let sync_block = sync_label_w + 10.0 + BUTTON + sync_value_w + BUTTON;
         let buttons_block = BUTTON * 2.0 + 4.0;
         let divider = GAP * 2.0 + 1.0;
-        let width =
-            PAD_X * 2.0 + status_block + volume_block + sync_block + buttons_block + divider * 3.0;
+        let replay_block = BUTTON * 2.0 + 4.0 + divider;
+        let width = PAD_X * 2.0
+            + status_block
+            + volume_block
+            + sync_block
+            + replay_block
+            + buttons_block
+            + divider * 3.0;
 
         let (screen_w, screen_h) = ui.logical_size();
         let pill = Rect::new(
@@ -571,6 +700,36 @@ impl Controls {
         x += BUTTON;
         x = divider_at(ui, t, x, cy);
 
+        // Instant replay: its options, and "save the last N".
+        let replay_open = self.replay_open;
+        self.icon_button(
+            ui,
+            m,
+            Hit::Replay,
+            ICON_REPLAY,
+            x + BUTTON / 2.0,
+            cy,
+            ICON_SIZE,
+            replay_open,
+        );
+        if m.replay.is_on() {
+            // A small red dot while the buffer is running.
+            let pulse = if m.replay.state == ReplayState::Starting && self.animations {
+                0.5 + 0.5 * (self.time * TAU / PULSE_SECS).sin().abs()
+            } else {
+                1.0
+            };
+            ui.rect(
+                Rect::new(x + BUTTON / 2.0 + 3.0, cy - 12.0, 9.0, 9.0),
+                4.5,
+                t.error.with_alpha(pulse),
+            );
+        }
+        x += BUTTON + 4.0;
+        self.save_button(ui, m, x + BUTTON / 2.0, cy);
+        x += BUTTON;
+        x = divider_at(ui, t, x, cy);
+
         // Actions.
         let open = self.settings_open;
         self.icon_button(
@@ -601,6 +760,262 @@ impl Controls {
         );
 
         pill
+    }
+
+    /// The pill's "save clip" button: dimmed while the buffer is off, and
+    /// pulsing while a clip is being written.
+    fn save_button(&mut self, ui: &mut Ui, m: &Model, cx: f32, cy: f32) {
+        let t = &m.theme;
+        let rect = Rect::new(cx - BUTTON / 2.0, cy - BUTTON / 2.0, BUTTON, BUTTON);
+        self.register(Hit::ReplaySave, rect);
+        let (hover, press) = self.amounts(Hit::ReplaySave);
+        let alpha = t.hover.a * (hover + 0.9 * press);
+        if alpha > 0.002 {
+            ui.rect(rect, BUTTON / 2.0, t.hover.with_alpha(alpha.min(1.0)));
+        }
+        let color = if m.replay.is_on() { t.text } else { t.text_dim };
+        let pulse = if m.replay.saving && self.animations {
+            0.45 + 0.55 * (0.5 + 0.5 * (self.time * TAU / 0.8).sin())
+        } else {
+            1.0
+        };
+        ui.icon(
+            ICON_SAVE,
+            cx,
+            cy,
+            ICON_SIZE * (1.0 - 0.1 * press),
+            color.with_alpha(color.a * pulse),
+        );
+    }
+
+    /// An on/off switch. The knob glides when `on` changes.
+    fn switch(&mut self, ui: &mut Ui, m: &Model, track: Rect, on: bool) {
+        let t = &m.theme;
+        let (amount, _) = self.animate(Hit::ReplayKnob, on, false);
+        let fill = lerp_color(t.track, t.accent, amount);
+        ui.rect(track, track.h / 2.0, fill);
+        let r = track.h / 2.0 - 2.0;
+        let knob_x = track.x + 2.0 + (track.w - track.h) * amount;
+        ui.rect(
+            Rect::new(knob_x, track.y + 2.0, r * 2.0, r * 2.0),
+            r,
+            Color::hex(0xFFFFFF, 1.0),
+        );
+    }
+
+    /// The replay popover: switch, clip length, save and folder.
+    fn draw_replay_popover(&mut self, ui: &mut Ui, m: &Model, pill: Rect) {
+        let t = &m.theme;
+        let r = &m.replay;
+        let lang = m.lang;
+        let width = REPLAY_POPOVER_WIDTH;
+        let inner_w = width - POPOVER_PAD * 2.0;
+        let small = TextStyle::new(12.5, Weight::Regular);
+        let hint_style = TextStyle::new(12.0, Weight::Regular);
+
+        let status = match r.state {
+            ReplayState::Off => tr(lang, Key::ReplayOff).to_owned(),
+            ReplayState::Starting => tr(lang, Key::ReplayStarting).to_owned(),
+            ReplayState::Unavailable => tr(lang, Key::ReplayUnavailable).to_owned(),
+            ReplayState::Recording => format!(
+                "{} · {} · {:.0} MB",
+                tr(lang, Key::ReplayRecording),
+                crate::i18n::duration_label(r.buffered_seconds.floor() as u32),
+                r.buffered_mb
+            ),
+        };
+        let status_lines = wrap_text(ui, &status, small, inner_w);
+        let hint = tr(lang, Key::ReplayHint).replace("{hotkey}", &r.hotkey);
+        let hint_lines = wrap_text(ui, &hint, hint_style, inner_w);
+
+        let title_h = 30.0;
+        let status_h = status_lines.len() as f32 * 18.0;
+        let hint_h = hint_lines.len() as f32 * 16.0;
+        let stepper_h = 40.0;
+        let button_h = 40.0;
+        let folder_h = 32.0;
+        let height = POPOVER_PAD * 2.0
+            + title_h
+            + 4.0
+            + status_h
+            + 14.0
+            + LABEL_HEIGHT
+            + stepper_h
+            + 8.0
+            + hint_h
+            + 14.0
+            + button_h
+            + 8.0
+            + folder_h;
+
+        let (screen_w, _) = ui.logical_size();
+        let anchor = self
+            .next_hits
+            .iter()
+            .find(|(h, _)| *h == Hit::Replay)
+            .map_or(pill.x + pill.w / 2.0, |(_, rect)| rect.center().0);
+        let x = (anchor - width / 2.0)
+            .min(screen_w - width - POPOVER_GAP)
+            .max(POPOVER_GAP)
+            .round();
+        let top = (pill.y - POPOVER_GAP - height).max(POPOVER_GAP).round();
+        let rect = Rect::new(x, top, width, height);
+        self.register(Hit::Popover, rect);
+        ui.shadow(rect, 20.0, 26.0, t.shadow);
+        ui.panel(rect, 20.0, t.surface, t.border, 1.0);
+
+        let inner_x = x + POPOVER_PAD;
+        let mut y = top + POPOVER_PAD;
+        let line_h = ui.measure("Ag", BODY).1;
+
+        // Title row: the whole row toggles the buffer.
+        let row = Rect::new(inner_x, y, inner_w, title_h);
+        self.register(Hit::ReplayToggle, row);
+        let (hover, press) = self.amounts(Hit::ReplayToggle);
+        let shade = t.hover.a * (hover * 0.6 + 0.9 * press);
+        if shade > 0.002 {
+            ui.rect(
+                Rect::new(row.x - 6.0, row.y - 2.0, row.w + 12.0, row.h + 4.0),
+                10.0,
+                t.hover.with_alpha(shade.min(1.0)),
+            );
+        }
+        let cy = y + title_h / 2.0;
+        let icon_color = if r.is_on() { t.error } else { t.text_dim };
+        ui.icon(ICON_REPLAY, inner_x + 10.0, cy, 17.0, icon_color);
+        ui.text(
+            tr(lang, Key::InstantReplay),
+            inner_x + 30.0,
+            cy - line_h / 2.0,
+            TextStyle::new(14.0, Weight::SemiBold),
+            t.text,
+        );
+        self.switch(
+            ui,
+            m,
+            Rect::new(inner_x + inner_w - 42.0, cy - 11.0, 42.0, 22.0),
+            r.is_on(),
+        );
+        y += title_h + 4.0;
+
+        for line in &status_lines {
+            ui.text(line, inner_x, y, small, t.text_dim);
+            y += 18.0;
+        }
+        y += 14.0;
+
+        // Clip length: [ − ]  value  [ + ]
+        ui.text(tr(lang, Key::ReplayKeep), inner_x, y, SECTION, t.text_dim);
+        y += LABEL_HEIGHT;
+        let track = Rect::new(inner_x, y, inner_w, stepper_h);
+        ui.rect(track, 12.0, t.segment_track);
+        let step_hits = [
+            (Hit::ReplayShorter, ICON_MINUS, track.x + 4.0),
+            (
+                Hit::ReplayLonger,
+                ICON_PLUS,
+                track.x + track.w - 4.0 - BUTTON,
+            ),
+        ];
+        for (hit, icon, bx) in step_hits {
+            let button = Rect::new(bx, y + (stepper_h - BUTTON) / 2.0, BUTTON, BUTTON);
+            self.register(hit, button);
+            let (hover, press) = self.amounts(hit);
+            let alpha = t.hover.a * (hover + 0.9 * press);
+            if alpha > 0.002 {
+                ui.rect(button, 10.0, t.hover.with_alpha(alpha.min(1.0)));
+            }
+            let (cx, cy) = button.center();
+            ui.icon(icon, cx, cy, 15.0 * (1.0 - 0.1 * press), t.text);
+        }
+        let value = crate::i18n::duration_label(r.keep_seconds);
+        let value_style = TextStyle::new(15.0, Weight::Medium).tabular();
+        let value_w = ui.measure(&value, value_style).0;
+        let value_h = ui.measure("Ag", value_style).1;
+        ui.text(
+            &value,
+            track.x + (track.w - value_w) / 2.0,
+            y + (stepper_h - value_h) / 2.0,
+            value_style,
+            t.text,
+        );
+        y += stepper_h + 8.0;
+
+        for line in &hint_lines {
+            ui.text(line, inner_x, y, hint_style, t.text_dim);
+            y += 16.0;
+        }
+        y += 14.0;
+
+        // Save button.
+        let button = Rect::new(inner_x, y, inner_w, button_h);
+        self.register(Hit::ReplayPopSave, button);
+        let (hover, press) = self.amounts(Hit::ReplayPopSave);
+        let enabled = r.is_on();
+        let (fill, label_color) = if enabled {
+            let on_accent = match t.appearance {
+                crate::theme::Appearance::Dark => Color::hex(0x04141F, 1.0),
+                crate::theme::Appearance::Light => Color::hex(0xFFFFFF, 1.0),
+            };
+            (t.accent, on_accent)
+        } else {
+            (t.segment_track, t.text_dim)
+        };
+        ui.rect(button, 12.0, fill);
+        let sheen = Color::hex(0xFFFFFF, 0.0).with_alpha(0.14 * hover + 0.14 * press);
+        if enabled && sheen.a > 0.002 {
+            ui.rect(button, 12.0, sheen);
+        }
+        let label = if r.saving {
+            tr(lang, Key::ToastSaving)
+        } else {
+            tr(lang, Key::SaveClip)
+        };
+        let label_style = TextStyle::new(13.5, Weight::SemiBold);
+        let label_w = ui.measure(label, label_style).0 + 26.0;
+        let label_h = ui.measure("Ag", label_style).1;
+        let start = button.x + (button.w - label_w) / 2.0;
+        ui.icon(
+            ICON_SAVE,
+            start + 8.0,
+            y + button_h / 2.0,
+            16.0,
+            label_color,
+        );
+        ui.text(
+            label,
+            start + 26.0,
+            y + (button_h - label_h) / 2.0,
+            label_style,
+            label_color,
+        );
+        y += button_h + 8.0;
+
+        // Folder.
+        let row = Rect::new(inner_x, y, inner_w, folder_h);
+        self.register(Hit::ReplayFolder, row);
+        let (hover, press) = self.amounts(Hit::ReplayFolder);
+        let alpha = t.hover.a * (hover + 0.9 * press);
+        if alpha > 0.002 {
+            ui.rect(row, 9.0, t.hover.with_alpha(alpha.min(1.0)));
+        }
+        let cy = y + folder_h / 2.0;
+        ui.icon(ICON_FOLDER, inner_x + 18.0, cy, 15.0, t.text_dim);
+        let open_label = tr(lang, Key::OpenFolder);
+        ui.text(open_label, inner_x + 36.0, cy - line_h / 2.0, BODY, t.text);
+        let used = 36.0 + ui.measure(open_label, BODY).0 + 12.0;
+        if inner_w - used > 40.0 {
+            let path = fit_text(ui, &r.folder, hint_style, inner_w - used - 8.0);
+            let path_w = ui.measure(&path, hint_style).0;
+            let path_h = ui.measure("Ag", hint_style).1;
+            ui.text(
+                &path,
+                inner_x + inner_w - path_w - 8.0,
+                cy - path_h / 2.0,
+                hint_style,
+                t.text_dim,
+            );
+        }
     }
 
     fn draw_slider(&mut self, ui: &mut Ui, m: &Model, bounds: Rect) {
@@ -955,6 +1370,18 @@ fn step_visibility(visibility: f32, show: bool, dt: f32) -> f32 {
     }
 }
 
+/// Blends two colours; `amount` 0.0 gives `a`, 1.0 gives `b`.
+fn lerp_color(a: Color, b: Color, amount: f32) -> Color {
+    let k = amount.clamp(0.0, 1.0);
+    let mix = |x: f32, y: f32| x + (y - x) * k;
+    Color {
+        r: mix(a.r, b.r),
+        g: mix(a.g, b.g),
+        b: mix(a.b, b.b),
+        a: mix(a.a, b.a),
+    }
+}
+
 /// Exponential smoothing of `current` towards `target`; snaps when close.
 fn smooth(current: f32, target: f32, dt: f32, rate: f32) -> f32 {
     let next = current + (target - current) * (1.0 - (-rate * dt).exp());
@@ -1045,6 +1472,7 @@ mod tests {
             lang_mode: LangMode::Auto,
             video_mode: VideoModePref::Auto,
             stats_open: false,
+            replay: ReplayView::off("Ctrl+Alt+S"),
         }
     }
 
@@ -1277,6 +1705,147 @@ mod tests {
             rig.frame(0.016);
         }
         assert_eq!(rig.controls.segments.unwrap()[3], 1.0);
+    }
+
+    fn recording_model(rig: &mut Rig) {
+        rig.model.replay = ReplayView {
+            state: ReplayState::Recording,
+            buffered_seconds: 42.0,
+            buffered_mb: 210.0,
+            keep_seconds: 30,
+            folder: r"C:\Users\Someone\Videos\Dockview".into(),
+            ..ReplayView::off("Ctrl+Alt+S")
+        };
+        rig.frame(0.016);
+    }
+
+    #[test]
+    fn the_replay_button_opens_its_own_popover_and_closes_settings() {
+        let mut rig = Rig::new(true);
+        rig.click_on(Hit::Settings);
+        assert!(rig.controls.settings_open() && !rig.controls.replay_open());
+        rig.click_on(Hit::Replay);
+        assert!(rig.controls.replay_open(), "replay popover is open");
+        assert!(!rig.controls.settings_open(), "only one popover at a time");
+        rig.click_on(Hit::Replay);
+        assert!(!rig.controls.replay_open(), "the button toggles it closed");
+    }
+
+    #[test]
+    fn clicking_outside_closes_the_replay_popover_too() {
+        let mut rig = Rig::new(true);
+        rig.click_on(Hit::Replay);
+        assert!(rig.controls.replay_open());
+        rig.click(40.0, 40.0);
+        assert!(!rig.controls.replay_open());
+    }
+
+    #[test]
+    fn escape_style_closing_handles_either_popover() {
+        let mut rig = Rig::new(true);
+        assert!(!rig.controls.close_settings(), "nothing was open");
+        rig.click_on(Hit::Replay);
+        assert!(rig.controls.close_settings());
+        rig.click_on(Hit::Settings);
+        assert!(rig.controls.close_settings());
+    }
+
+    #[test]
+    fn the_replay_popover_controls_emit_their_actions() {
+        let mut rig = Rig::new(true);
+        recording_model(&mut rig);
+        rig.click_on(Hit::Replay);
+        rig.click_on(Hit::ReplayToggle);
+        rig.click_on(Hit::ReplayShorter);
+        rig.click_on(Hit::ReplayLonger);
+        rig.click_on(Hit::ReplayPopSave);
+        rig.click_on(Hit::ReplayFolder);
+        assert_eq!(
+            rig.actions(),
+            vec![
+                Action::ToggleReplay,
+                Action::ReplayLength(-1),
+                Action::ReplayLength(1),
+                Action::SaveReplay,
+                Action::OpenReplayFolder,
+            ]
+        );
+        assert!(
+            rig.controls.replay_open(),
+            "using the options keeps it open"
+        );
+    }
+
+    #[test]
+    fn the_pill_save_button_emits_a_save_even_when_the_buffer_is_off() {
+        // The app answers with "turn on instant replay first".
+        let mut rig = Rig::new(true);
+        rig.click_on(Hit::ReplaySave);
+        assert_eq!(rig.actions(), vec![Action::SaveReplay]);
+    }
+
+    #[test]
+    fn the_replay_popover_stays_inside_the_window_in_both_languages_and_themes() {
+        for lang in [Lang::En, Lang::Es] {
+            for theme in [Theme::dark(), Theme::light()] {
+                let mut rig = Rig::new(true);
+                recording_model(&mut rig);
+                rig.model.lang = lang;
+                rig.model.theme = theme;
+                rig.frame(0.016);
+                rig.click_on(Hit::Replay);
+                let popover = rig.controls.rect_of(Hit::Popover);
+                assert!(
+                    popover.x >= 0.0 && popover.x + popover.w <= 1280.0,
+                    "{lang:?}"
+                );
+                assert!(
+                    popover.y >= 0.0 && popover.y + popover.h <= 720.0,
+                    "{lang:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn the_pill_still_fits_with_the_replay_buttons_in_both_languages() {
+        for lang in [Lang::En, Lang::Es] {
+            let mut rig = Rig::new(true);
+            rig.model.lang = lang;
+            rig.frame(0.016);
+            let pill = rig.controls.rect_of(Hit::Pill);
+            assert!(
+                pill.x >= 0.0 && pill.x + pill.w <= 1280.0,
+                "{lang:?}: {pill:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_switch_knob_glides_between_off_and_on() {
+        let mut rig = Rig::new(true);
+        rig.click_on(Hit::Replay);
+        for _ in 0..20 {
+            rig.frame(0.016);
+        }
+        let off = rig.controls.amounts[&Hit::ReplayKnob].0;
+        assert_eq!(off, 0.0);
+        recording_model(&mut rig);
+        let mid = rig.controls.amounts[&Hit::ReplayKnob].0;
+        assert!(mid > 0.0 && mid < 1.0, "gliding, got {mid}");
+        for _ in 0..60 {
+            rig.frame(0.016);
+        }
+        assert_eq!(rig.controls.amounts[&Hit::ReplayKnob].0, 1.0);
+    }
+
+    #[test]
+    fn colours_blend_linearly_and_clamp() {
+        let (a, b) = (Color::hex(0x000000, 0.0), Color::hex(0xFFFFFF, 1.0));
+        let mid = lerp_color(a, b, 0.5);
+        assert!((mid.r - 0.5).abs() < 1e-6 && (mid.a - 0.5).abs() < 1e-6);
+        assert_eq!(lerp_color(a, b, -3.0), a);
+        assert_eq!(lerp_color(a, b, 9.0), b);
     }
 
     #[test]
