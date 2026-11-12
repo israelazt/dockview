@@ -156,6 +156,19 @@ impl Drop for AudioEngine {
     }
 }
 
+/// The audio input Windows treats as the default, if there is one.
+pub fn default_capture_device() -> Option<AudioDevice> {
+    let _ = initialize_mta();
+    let device = DeviceEnumerator::new()
+        .ok()?
+        .get_default_device(Direction::Capture)
+        .ok()?;
+    Some(AudioDevice {
+        friendly_name: device.get_friendlyname().ok()?,
+        device_id: device.get_id().ok()?,
+    })
+}
+
 /// Lists the active audio capture endpoints.
 pub fn enumerate_audio_devices() -> Result<Vec<AudioDevice>, WasapiError> {
     let _ = initialize_mta();
@@ -172,7 +185,7 @@ pub fn enumerate_audio_devices() -> Result<Vec<AudioDevice>, WasapiError> {
     Ok(devices)
 }
 
-fn format() -> WaveFormat {
+pub(crate) fn format() -> WaveFormat {
     WaveFormat::new(
         32,
         32,

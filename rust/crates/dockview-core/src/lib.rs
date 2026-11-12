@@ -13,8 +13,6 @@ pub mod encode;
 pub mod frame;
 #[cfg(windows)]
 pub mod mf;
-#[cfg(windows)]
-pub mod mic;
 pub mod pcm;
 #[cfg(windows)]
 pub mod recorder;
@@ -22,8 +20,12 @@ pub mod recorder;
 pub mod recording;
 #[cfg(windows)]
 pub mod replay;
+#[cfg(windows)]
+pub mod screen;
 pub mod settings;
 pub mod stream;
+#[cfg(windows)]
+pub mod tap_capture;
 pub mod testsrc;
 
 pub fn version() -> &'static str {

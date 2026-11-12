@@ -25,21 +25,23 @@ use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use dockview_core::audio::{enumerate_audio_devices, AudioEngine, AudioStatus};
+use dockview_core::audio::{
+    default_capture_device, enumerate_audio_devices, AudioEngine, AudioStatus,
+};
 use dockview_core::capture::{CaptureOptions, CaptureStatus, VideoCapture};
-use dockview_core::device::{match_audio_to_video, AudioDevice, VideoDevice};
+use dockview_core::device::{match_audio_to_video, pick_microphone, AudioDevice, VideoDevice};
 use dockview_core::diagnostics::{
     diagnose, switch_helped, FallbackWatch, Finding, Snapshot, VideoState,
 };
 use dockview_core::frame::FrameSlot;
 use dockview_core::mf::{enumerate_video_devices, MfSession};
-use dockview_core::mic::MicCapture;
 use dockview_core::recorder::{RecorderStatus, ReplayRecorder, ReplaySettings, SaveHandle};
 use dockview_core::recording::{disk_free_bytes, EndReason, RecordingState, DISK_START_MIN_BYTES};
 use dockview_core::settings::{
     self, AppSettings, LangMode, RenderPreset, ThemeMode, VideoModePref, MAX_AUDIO_OFFSET_MS,
 };
 use dockview_core::stream::StreamInfo;
+use dockview_core::tap_capture::{CaptureSource, TapCapture as MicCapture};
 use dockview_core::testsrc::TestSource;
 use windows::Win32::Foundation::HWND;
 use winit::application::ApplicationHandler;
@@ -508,12 +510,42 @@ impl App {
             self.mic_level = 0.0;
             return;
         }
-        let Some(recorder) = &self.recorder else {
+        if self.recorder.is_none() {
             self.toast(i18n::Key::ToastTurnOnFirst, ToastKind::Info);
             return;
+        }
+        let device = self
+            .settings
+            .last_mic_device_id
+            .clone()
+            .or_else(|| self.automatic_mic());
+        let Some(recorder) = &self.recorder else {
+            return;
         };
-        let device = self.settings.last_mic_device_id.clone();
-        self.mic = Some(MicCapture::start(device, 1.0, recorder.mic_tap()));
+        eprintln!(
+            "microphone: {}",
+            device
+                .as_deref()
+                .and_then(|id| self.audio_devices.iter().find(|d| d.device_id == id))
+                .map_or("Windows default input".to_owned(), |d| d
+                    .friendly_name
+                    .clone())
+        );
+        self.mic = Some(MicCapture::start(
+            CaptureSource::Device(device),
+            1.0,
+            recorder.mic_tap(),
+        ));
+    }
+
+    /// The microphone to use when the user has not chosen one: Windows'
+    /// default, unless that is the capture card's own audio (see
+    /// [`dockview_core::device::pick_microphone`]).
+    fn automatic_mic(&self) -> Option<String> {
+        let default = on_helper_thread(|| Some(default_capture_device()));
+        let game_audio = self.audio_index.and_then(|i| self.audio_devices.get(i));
+        pick_microphone(&self.audio_devices, default.as_ref(), game_audio)
+            .map(|d| d.device_id.clone())
     }
 
     /// The longest replay this PC's memory allows, in seconds.

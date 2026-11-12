@@ -9,7 +9,7 @@ Objetivo: que Dockview sea la herramienta única para grabar y transmitir (LoL y
 | 1 ✅ | Micrófono en su pista del replay | Un clip trae mezcla, juego y micrófono |
 | 2 | **Spike** (hecho salvo la prueba con LoL): captura de pantalla/ventana + audio del sistema o del proceso, sin interfaz | Se conoce el coste en FPS, CPU y la sincronía con LoL abierto |
 | 2b | Spike de la Canon M50 Mark II como webcam | Se sabe si aparece en Media Foundation, y con qué resolución, FPS y retraso |
-| 3 | Fuentes y compositor | Dockview graba la pantalla con el replay actual |
+| 3 | **Captura de pantalla y de aplicaciones** (fuentes): ver la sección de abajo | Dockview graba un monitor o una app con su audio y el micrófono |
 | 4 | **Grabación normal** (inicio/fin): ver la sección de abajo | Una partida entera sin perder FPS |
 | 5 | Editor rápido (recorte, exportación horizontal y vertical) | Un clip listo para redes en menos de un minuto |
 | 6 | Streaming (RTMP) y escenas | Transmitir con una escena de dos capas |
@@ -123,3 +123,37 @@ Pendiente de probar a mano: desenchufar y volver a enchufar el cable USB de la c
 - **Acceso a lo último guardado**: «Abrir carpeta» abre el Explorador con **el último clip o grabación de la sesión seleccionado**; si no hay ninguno (o se movió), abre la carpeta.
 - Verificado con clics reales en la app: Normal → `replayBitrateMbps = 16` y la app sigue viva; «Cambiar…» abre el selector nativo y la carpeta elegida queda guardada.
 - No verificado: el aspecto visual de la calidad Normal frente a Alta con juego real, ni cuánto pesa de verdad una hora a 16 Mbps con movimiento (G-5).
+
+## Paso 3 — Captura de pantalla y de aplicaciones: plan
+
+Lo que se quiere: capturar **un monitor completo o una aplicación concreta**, con el **audio de todo el sistema o solo de esa aplicación**, **más el micrófono si está activo**, y que el replay y la grabación funcionen igual que con la capturadora.
+
+### Decisiones de diseño
+1. **Todo entra como frames NV12 en el mismo `FrameSlot`** que usa la capturadora. Así el visor, el replay, la grabación, las partes por cambio de resolución y todo lo hecho en G-1..G-4 funciona sin tocarse.
+2. **La conversión BGRA→NV12 se hace en la GPU** con el procesador de video de D3D11 (también escala y rellena con barras negras). A la RAM solo baja el frame NV12 (unos 3 MB por frame a 1080p), así que la CPU casi no se toca. Esto cierra la duda abierta del spike (convertir en CPU habría sido caro).
+3. **Tamaño de salida fijo**: el del origen al empezar, par y con tope de 1080 px de alto. Si una ventana se redimensiona, la imagen se reescala dentro del mismo lienzo: la grabación no se parte en partes.
+4. **Ritmo**: se pide a Windows 11 un intervalo mínimo entre frames ligeramente menor que el objetivo (hallazgo del spike: por defecto se pierde ~20 %). Windows entrega el último estado aunque la pantalla se quede quieta.
+5. **Audio**: monitor → loopback del **sistema**; ventana → loopback **solo del proceso** de esa app (y sus procesos hijos). Va a la pista «juego» del replay y la grabación, **sin reproducirse** (el audio ya suena por sí solo). El micrófono sigue siendo su propia pista.
+6. **La ventana de Dockview se excluye de la captura** cuando captura pantalla, para que la vista previa no se refleje a sí misma.
+
+### Fases
+| Fase | Qué | Se comprueba con |
+|---|---|---|
+| S-1 ✅ | Núcleo: listar monitores y ventanas; `ScreenCapture` (monitor o ventana → NV12 por GPU); captura de audio por loopback del sistema o de un proceso; herramienta `screen_record` | Grabar Edge y un monitor con audio; medir FPS, CPU y sincronía; ver que los colores son correctos |
+| S-2 | App: elegir la fuente (capturadora, monitor, ventana), enrutar el audio y excluir la ventana de Dockview | Con clics reales |
+| S-3 | Casos: ventana cerrada o minimizada, el programa se cierra, monitor que cambia, cursor | Pruebas |
+| S-4 | Prueba con LoL (anti-trampas, FPS del juego, coste) | La haces tú |
+
+### Resultados de S-1 (GTX 1660 Ti, dos monitores 1080p)
+
+| Prueba | Resultado |
+|---|---|
+| Ventana de Edge (1920×1032) con audio **solo de Edge** + micrófono | 13,7 s grabados. El audio del proceso llegó (RMS 0,054) y la mezcla lo lleva. Video y audio terminan con 50 ms de diferencia |
+| Monitor 1 con video en movimiento (audio del **sistema**) | **53 fps**, 18 Mbps, **32 % de un núcleo** (captura + conversión + codificación + audio) |
+| Monitor 0 (escritorio casi quieto) | 18 fps (la captura solo entrega frames cuando algo cambia), 7 % de un núcleo |
+| Colores | Correctos: se convirtió el primer frame NV12 a PNG y los tonos de piel y la geometría son los esperados (la conversión BGRA→NV12 de la GPU respeta BT.709 limitado y la disposición de planos) |
+| Frames entregados | Siempre de tamaño par, NV12, tope de 1080 px de alto; `stride == width` |
+
+Los frames de pantalla pasan por el mismo `FrameSlot`, así que el visor, el replay y la grabación (G-1..G-4) no cambiaron. Hay 7 tests del módulo (tamaños, encaje con barras negras, listado de monitores y ventanas, y una captura real del monitor principal).
+
+**Error del micrófono encontrado en esta fase y corregido.** Al grabar vi que la pista del micrófono salía en silencio absoluto. La causa: en el PC del autor la **entrada predeterminada de Windows es «HDMI (UGREEN 25173)», la propia capturadora**, y «Predeterminado de Windows» la abría como micrófono. Ahora el modo **«Automático»** usa la predeterminada salvo que parezca una capturadora (HDMI, capture, UGREEN, Elgato, AVerMedia, Magewell, Cam Link, Stereo Mix…) o sea el dispositivo del sonido del juego; entonces elige la mejor entrada restante, un micrófono real antes que el de una webcam. En este PC elige el **RØDE NT-USB Mini**. Verificado: la pista del micrófono pasó de RMS 0,0000 a 0,0015 con ruido ambiente y pitidos, y la mezcla lo incluye.

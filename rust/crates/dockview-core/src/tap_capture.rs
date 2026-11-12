@@ -1,23 +1,39 @@
-//! Microphone capture for the replay buffer.
+//! Audio capture that only feeds the recorder.
 //!
-//! Unlike [`crate::audio::AudioEngine`] this only listens: the microphone is
-//! never played back (that would feed back into the speakers). Every block goes
-//! to an [`AudioTap`] for the recorder, and its loudness is published so the
-//! interface can show that the microphone is live.
+//! Unlike [`crate::audio::AudioEngine`] this never plays anything back: a
+//! microphone played through the speakers would feed back, and the sound of a
+//! game or of the whole PC is already playing by itself. Every block goes to an
+//! [`AudioTap`], and its loudness is published so the interface can show that
+//! the source is live.
+//!
+//! The source is a microphone, the whole PC's sound (loopback of the default
+//! output) or the sound of one program and the programs it starts (process
+//! loopback, Windows 10 2004 or later).
 
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
-use wasapi::{initialize_mta, DeviceEnumerator, Direction, WasapiError};
+use wasapi::{initialize_mta, AudioClient, DeviceEnumerator, Direction, StreamMode, WasapiError};
 
-use crate::audio::{init_stream, AudioStatus};
+use crate::audio::{format, init_stream, AudioStatus};
 use crate::audio_sync::BYTES_PER_FRAME;
 use crate::pcm::AudioTap;
 
 const EVENT_TIMEOUT_MS: u32 = 100;
 const STOP_TIMEOUT: Duration = Duration::from_secs(2);
+
+/// What to listen to.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CaptureSource {
+    /// A microphone: the given device, or the Windows default when `None`.
+    Device(Option<String>),
+    /// Everything the PC plays on its default output.
+    SystemLoopback,
+    /// Only the program with this process id (and the programs it started).
+    ProcessLoopback(u32),
+}
 
 struct Shared {
     status: Mutex<AudioStatus>,
@@ -34,17 +50,17 @@ impl Shared {
     }
 }
 
-/// Listens to a microphone while it is alive. Dropping it releases the device.
-pub struct MicCapture {
+/// Listens to a [`CaptureSource`] while it is alive. Dropping it releases the
+/// device.
+pub struct TapCapture {
     stop: Arc<AtomicBool>,
     shared: Arc<Shared>,
     thread: Option<JoinHandle<()>>,
 }
 
-impl MicCapture {
-    /// Starts listening to `device_id`, or to the Windows default microphone
-    /// when `None`. Blocks go to `tap`.
-    pub fn start(device_id: Option<String>, gain: f32, tap: Arc<AudioTap>) -> Self {
+impl TapCapture {
+    /// Starts listening to `source`. Blocks go to `tap`.
+    pub fn start(source: CaptureSource, gain: f32, tap: Arc<AudioTap>) -> Self {
         let stop = Arc::new(AtomicBool::new(false));
         let shared = Arc::new(Shared {
             status: Mutex::new(AudioStatus::Starting),
@@ -55,9 +71,9 @@ impl MicCapture {
         let thread = {
             let (shared, stop) = (Arc::clone(&shared), Arc::clone(&stop));
             thread::Builder::new()
-                .name("mic-capture".into())
+                .name("audio-tap-capture".into())
                 .spawn(move || {
-                    if let Err(e) = capture_loop(&shared, &stop, device_id.as_deref()) {
+                    if let Err(e) = capture_loop(&shared, &stop, &source) {
                         if !stop.load(Ordering::Relaxed) {
                             shared.set_status(AudioStatus::Disconnected(e.to_string()));
                         }
@@ -66,7 +82,9 @@ impl MicCapture {
                 .ok()
         };
         if thread.is_none() {
-            shared.set_status(AudioStatus::Failed("could not start the microphone".into()));
+            shared.set_status(AudioStatus::Failed(
+                "could not start the audio capture".into(),
+            ));
         }
         Self {
             stop,
@@ -95,7 +113,7 @@ impl MicCapture {
     }
 }
 
-impl Drop for MicCapture {
+impl Drop for TapCapture {
     fn drop(&mut self) {
         self.stop.store(true, Ordering::Relaxed);
         if let Some(thread) = self.thread.take() {
@@ -110,7 +128,7 @@ impl Drop for MicCapture {
     }
 }
 
-/// Microphone gain is limited to a sensible range (0 = muted, up to 4x).
+/// Gain is limited to a sensible range (0 = muted, up to 4x).
 pub fn clamp_gain(gain: f32) -> f32 {
     if gain.is_nan() {
         1.0
@@ -129,19 +147,47 @@ pub fn apply_gain(samples: &mut [f32], gain: f32) -> f32 {
     peak
 }
 
+/// Opens the audio client for `source`, started and ready to read.
+fn open_client(source: &CaptureSource) -> Result<AudioClient, WasapiError> {
+    let enumerator = DeviceEnumerator::new()?;
+    let client = match source {
+        CaptureSource::Device(id) => {
+            let device = match id {
+                Some(id) => enumerator.get_device(id)?,
+                None => enumerator.get_default_device(Direction::Capture)?,
+            };
+            let mut client = device.get_iaudioclient()?;
+            init_stream(&mut client, Direction::Capture, false)?;
+            client
+        }
+        CaptureSource::SystemLoopback => {
+            // A loopback stream is a *capture* stream opened on the output device.
+            let device = enumerator.get_default_device(Direction::Render)?;
+            let mut client = device.get_iaudioclient()?;
+            init_stream(&mut client, Direction::Capture, false)?;
+            client
+        }
+        CaptureSource::ProcessLoopback(pid) => {
+            let mut client = AudioClient::new_application_loopback_client(*pid, true)?;
+            // Process loopback cannot report its period; the buffer size is ignored.
+            let mode = StreamMode::EventsShared {
+                autoconvert: true,
+                buffer_duration_hns: 0,
+            };
+            client.initialize_client(&format(), Direction::Capture, mode, None)?;
+            client
+        }
+    };
+    Ok(client)
+}
+
 fn capture_loop(
     shared: &Shared,
     stop: &AtomicBool,
-    device_id: Option<&str>,
+    source: &CaptureSource,
 ) -> Result<(), WasapiError> {
     let _ = initialize_mta();
-    let enumerator = DeviceEnumerator::new()?;
-    let device = match device_id {
-        Some(id) => enumerator.get_device(id)?,
-        None => enumerator.get_default_device(Direction::Capture)?,
-    };
-    let mut client = device.get_iaudioclient()?;
-    init_stream(&mut client, Direction::Capture, false)?;
+    let client = open_client(source)?;
     let event = client.set_get_eventhandle()?;
     let capture = client.get_audiocaptureclient()?;
     client.start_stream()?;
@@ -196,5 +242,15 @@ mod tests {
         assert_eq!(clamp_gain(9.0), 4.0);
         assert_eq!(clamp_gain(f32::NAN), 1.0);
         assert_eq!(clamp_gain(1.5), 1.5);
+    }
+
+    #[test]
+    fn a_source_is_compared_by_what_it_listens_to() {
+        assert_eq!(CaptureSource::Device(None), CaptureSource::Device(None));
+        assert_ne!(
+            CaptureSource::ProcessLoopback(1),
+            CaptureSource::ProcessLoopback(2)
+        );
+        assert_ne!(CaptureSource::SystemLoopback, CaptureSource::Device(None));
     }
 }

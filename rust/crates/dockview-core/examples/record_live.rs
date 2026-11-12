@@ -13,9 +13,9 @@ use dockview_core::capture::{CaptureOptions, VideoCapture};
 use dockview_core::device::match_audio_to_video;
 use dockview_core::frame::FrameSlot;
 use dockview_core::mf::{enumerate_video_devices, MfSession};
-use dockview_core::mic::MicCapture;
 use dockview_core::recorder::{RecorderStatus, ReplayRecorder, ReplaySettings};
 use dockview_core::recording::RecordingState;
+use dockview_core::tap_capture::{CaptureSource, TapCapture as MicCapture};
 
 use windows::Win32::Foundation::FILETIME;
 use windows::Win32::System::Threading::{GetCurrentProcess, GetProcessTimes};
@@ -84,7 +84,8 @@ fn main() -> windows::core::Result<()> {
     if let Some(audio) = &audio {
         audio.set_tap(Some(recorder.audio_tap()));
     }
-    let _mic = with_mic.then(|| MicCapture::start(None, 1.0, recorder.mic_tap()));
+    let _mic =
+        with_mic.then(|| MicCapture::start(CaptureSource::Device(None), 1.0, recorder.mic_tap()));
 
     // Wait for the recorder to be running, then record.
     let ready = Instant::now() + Duration::from_secs(10);
