@@ -101,6 +101,25 @@ struct App {
     cursor_hidden: bool,
 }
 
+/// Whether Windows allows UI animations ("Show animations in Windows").
+fn system_animations_enabled() -> bool {
+    use windows::core::BOOL;
+    use windows::Win32::UI::WindowsAndMessaging::{
+        SystemParametersInfoW, SPI_GETCLIENTAREAANIMATION, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS,
+    };
+    let mut enabled = BOOL(1);
+    // SAFETY: the out-pointer refers to a live BOOL, as SPI_GETCLIENTAREAANIMATION requires.
+    let result = unsafe {
+        SystemParametersInfoW(
+            SPI_GETCLIENTAREAANIMATION,
+            0,
+            Some((&mut enabled as *mut BOOL).cast()),
+            SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS(0),
+        )
+    };
+    result.map_or(true, |()| enabled.as_bool())
+}
+
 fn filter_for(preset: RenderPreset) -> Filter {
     match preset {
         RenderPreset::Performance => Filter::Nearest,
@@ -138,6 +157,8 @@ impl App {
     ) -> Self {
         let test_pattern = cli.test_pattern;
         let preview = cli.ui_preview;
+        // Screenshots must show the settled state, not a mid-transition frame.
+        let animations = cli.screenshot.is_none() && system_animations_enabled();
         let mut app = Self {
             slot,
             source: Source::None,
@@ -169,6 +190,8 @@ impl App {
             cursor_pointer: false,
             cursor_hidden: false,
         };
+
+        app.controls.set_animations(animations);
 
         if test_pattern {
             app.source = Source::Test(TestSource::start(Arc::clone(&app.slot), 1920, 1080, 30));

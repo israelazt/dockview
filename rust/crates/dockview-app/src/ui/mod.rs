@@ -80,6 +80,8 @@ pub struct Ui {
     scale: f32,
     viewport: (u32, u32),
     opacity: f32,
+    /// Logical-pixel translation applied to everything drawn (for slides).
+    offset: (f32, f32),
 }
 
 impl Ui {
@@ -90,6 +92,7 @@ impl Ui {
             scale: 1.0,
             viewport: (1, 1),
             opacity: 1.0,
+            offset: (0.0, 0.0),
         }
     }
 
@@ -100,6 +103,12 @@ impl Ui {
         self.viewport = viewport;
         self.scale = scale.max(0.5);
         self.opacity = 1.0;
+        self.offset = (0.0, 0.0);
+    }
+
+    /// Translates everything drawn from now on, in logical pixels.
+    pub fn set_offset(&mut self, dx: f32, dy: f32) {
+        self.offset = (dx, dy);
     }
 
     /// Multiplies the alpha of everything drawn from now on (for fades).
@@ -158,7 +167,7 @@ impl Ui {
     fn sdf_quad(&mut self, r: Rect, radius: f32, blur: f32, margin: f32, color: Color) {
         let s = self.scale;
         let (w, h) = (r.w * s, r.h * s);
-        let (x, y) = (r.x * s, r.y * s);
+        let (x, y) = ((r.x + self.offset.0) * s, (r.y + self.offset.1) * s);
         let pad = margin * s.max(1.0) + 1.0;
         let (half_w, half_h) = (w / 2.0, h / 2.0);
         let shape = [
@@ -239,7 +248,10 @@ impl Ui {
         let scale = self.scale;
         let shaped = self.text.shape(s, size * scale, face, tabular);
         // Snap the origin to whole pixels so glyph edges stay crisp.
-        let (ox, oy) = ((x * scale).round(), (y * scale).round());
+        let (ox, oy) = (
+            ((x + self.offset.0) * scale).round(),
+            ((y + self.offset.1) * scale).round(),
+        );
         let atlas = text::ATLAS_SIZE as f32;
         let rgba = self.tint(color);
 
@@ -359,6 +371,21 @@ mod tests {
         assert_eq!(ui.vertices().len(), 12);
         assert_eq!(ui.vertices()[0].color, t.border.to_array());
         assert_eq!(ui.vertices()[6].color, t.surface.to_array());
+    }
+
+    #[test]
+    fn offset_translates_shapes_and_text_and_resets_each_frame() {
+        let mut ui = ui();
+        ui.rect(Rect::new(10.0, 10.0, 20.0, 20.0), 2.0, Theme::dark().text);
+        let plain = ui.vertices()[0].pos;
+        ui.begin((1280, 720), 1.0);
+        ui.set_offset(5.0, 7.0);
+        ui.rect(Rect::new(10.0, 10.0, 20.0, 20.0), 2.0, Theme::dark().text);
+        let moved = ui.vertices()[0].pos;
+        assert_eq!((moved[0] - plain[0], moved[1] - plain[1]), (5.0, 7.0));
+        ui.begin((1280, 720), 1.0);
+        ui.rect(Rect::new(10.0, 10.0, 20.0, 20.0), 2.0, Theme::dark().text);
+        assert_eq!(ui.vertices()[0].pos, plain);
     }
 
     #[test]

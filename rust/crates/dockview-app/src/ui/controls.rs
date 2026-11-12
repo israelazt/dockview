@@ -4,6 +4,9 @@
 //! what is hovered/pressed using the *previous* frame's hit rectangles,
 //! emits [`Action`]s, and draws. The application applies the actions.
 
+use std::collections::HashMap;
+use std::f32::consts::TAU;
+
 use dockview_core::settings::{LangMode, RenderPreset, MAX_AUDIO_OFFSET_MS};
 
 use super::input::Pointer;
@@ -20,6 +23,18 @@ pub const FADE_SECS: f32 = 0.2;
 pub const SYNC_STEP_MS: i32 = 10;
 /// Volume change per scroll notch.
 pub const WHEEL_VOLUME_STEP: f32 = 0.05;
+/// Smoothing rate for hover fades (higher is faster; ~95% in 3/rate seconds).
+const HOVER_RATE: f32 = 22.0;
+/// Smoothing rate for the pressed state.
+const PRESS_RATE: f32 = 34.0;
+/// Smoothing rate for the sliding selection indicator.
+const SLIDE_RATE: f32 = 20.0;
+/// Time the popover takes to open or close, in seconds.
+const POPOVER_SECS: f32 = 0.18;
+/// How far the popover rises while opening, in logical pixels.
+const POPOVER_RISE: f32 = 10.0;
+/// Period of the "connecting" pulse, in seconds.
+const PULSE_SECS: f32 = 1.2;
 /// Most devices listed per kind in the popover.
 const MAX_LISTED_DEVICES: usize = 5;
 
@@ -104,7 +119,7 @@ pub enum Action {
 }
 
 /// Identifies an interactive (or occluding) region.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum Hit {
     Pill,
     Popover,
@@ -125,6 +140,19 @@ impl Hit {
     fn is_widget(self) -> bool {
         !matches!(self, Hit::Pill | Hit::Popover)
     }
+
+    /// Belongs to the settings popover.
+    fn in_popover(self) -> bool {
+        matches!(
+            self,
+            Hit::Popover
+                | Hit::Video(_)
+                | Hit::Audio(_)
+                | Hit::Preset(_)
+                | Hit::Theme(_)
+                | Hit::Lang(_)
+        )
+    }
 }
 
 pub struct Controls {
@@ -140,6 +168,17 @@ pub struct Controls {
     next_hits: Vec<(Hit, Rect)>,
     volume_track: Rect,
     actions: Vec<Action>,
+    animations: bool,
+    /// Seconds since creation; drives the looping pulse.
+    time: f32,
+    /// Duration of the frame being processed.
+    dt: f32,
+    /// Smoothed (hover, pressed) amounts per widget, 0.0–1.0.
+    amounts: HashMap<Hit, (f32, f32)>,
+    /// Popover open/close progress, 0.0–1.0 (linear in time).
+    popover_t: f32,
+    /// Animated position of each segmented control's indicator.
+    segments: Option<[f32; 3]>,
 }
 
 impl Controls {
@@ -158,7 +197,19 @@ impl Controls {
             next_hits: Vec::new(),
             volume_track: Rect::new(0.0, 0.0, 1.0, 1.0),
             actions: Vec::new(),
+            animations: true,
+            time: 0.0,
+            dt: 0.0,
+            amounts: HashMap::new(),
+            popover_t: 0.0,
+            segments: None,
         }
+    }
+
+    /// Turns motion on or off (off snaps every transition, honouring the
+    /// Windows "show animations" setting).
+    pub fn set_animations(&mut self, on: bool) {
+        self.animations = on;
     }
 
     pub fn take_actions(&mut self) -> Vec<Action> {
@@ -190,6 +241,8 @@ impl Controls {
 
     /// Runs one frame: input, then drawing.
     pub fn frame(&mut self, ui: &mut Ui, model: &Model, pointer: &Pointer, dt: f32) {
+        self.dt = dt;
+        self.time = (self.time + dt) % 3600.0;
         self.update_visibility(pointer, dt);
         if self.visibility <= 0.0 {
             self.hits.clear();
@@ -200,12 +253,18 @@ impl Controls {
 
         self.hovered = self.hit_at(pointer.pos);
         self.interact(model, pointer);
+        // After input, so a click that opens the popover starts animating at once.
+        self.update_popover_progress();
 
         ui.set_opacity(self.visibility);
         self.next_hits.clear();
         let pill = self.draw_pill(ui, model);
-        if self.settings_open {
+        if self.popover_t > 0.0 {
+            let eased = ease_out_cubic(self.popover_t);
+            ui.set_opacity(self.visibility * eased);
+            ui.set_offset(0.0, (1.0 - eased) * POPOVER_RISE);
             self.draw_popover(ui, model, pill);
+            ui.set_offset(0.0, 0.0);
         }
         std::mem::swap(&mut self.hits, &mut self.next_hits);
         ui.set_opacity(1.0);
@@ -227,6 +286,7 @@ impl Controls {
         let keep = self.always_visible
             || self.idle < IDLE_HIDE_SECS
             || self.settings_open
+            || self.popover_t > 0.0
             || self.pressed.is_some()
             || over_ui;
         self.visibility = step_visibility(self.visibility, keep, dt);
@@ -302,6 +362,44 @@ impl Controls {
         self.actions.push(action);
     }
 
+    /// Advances the popover open/close progress and forgets its transient
+    /// animation state once it is fully closed.
+    fn update_popover_progress(&mut self) {
+        let target = if self.settings_open { 1.0 } else { 0.0 };
+        self.popover_t = if self.animations {
+            move_toward(self.popover_t, target, self.dt / POPOVER_SECS)
+        } else {
+            target
+        };
+        if self.popover_t <= 0.0 && !self.settings_open {
+            self.segments = None;
+            self.amounts.retain(|hit, _| !hit.in_popover());
+        }
+    }
+
+    /// Eases `current` towards `target`; snaps when animations are off.
+    fn approach(&self, current: f32, target: f32, rate: f32) -> f32 {
+        if self.animations {
+            smooth(current, target, self.dt, rate)
+        } else {
+            target
+        }
+    }
+
+    /// Updates and returns the smoothed (hover, pressed) amounts of `hit`.
+    fn animate(&mut self, hit: Hit, hover: bool, press: bool) -> (f32, f32) {
+        let (h, p) = self.amounts.get(&hit).copied().unwrap_or((0.0, 0.0));
+        let h = self.approach(h, if hover { 1.0 } else { 0.0 }, HOVER_RATE);
+        let p = self.approach(p, if press { 1.0 } else { 0.0 }, PRESS_RATE);
+        self.amounts.insert(hit, (h, p));
+        (h, p)
+    }
+
+    fn amounts(&mut self, hit: Hit) -> (f32, f32) {
+        let (hover, press) = (self.is_hovered(hit), self.is_pressed(hit));
+        self.animate(hit, hover, press)
+    }
+
     fn is_hovered(&self, hit: Hit) -> bool {
         self.hovered == Some(hit)
     }
@@ -311,6 +409,10 @@ impl Controls {
     }
 
     fn register(&mut self, hit: Hit, rect: Rect) {
+        // A popover that is fading out must not receive clicks.
+        if hit.in_popover() && !self.settings_open {
+            return;
+        }
         self.next_hits.push((hit, rect));
     }
 
@@ -330,17 +432,14 @@ impl Controls {
     ) {
         let rect = Rect::new(cx - BUTTON / 2.0, cy - BUTTON / 2.0, BUTTON, BUTTON);
         self.register(hit, rect);
-        let shade = if self.is_pressed(hit) {
-            Some(m.theme.hover.with_alpha((m.theme.hover.a * 1.9).min(1.0)))
-        } else if self.is_hovered(hit) || active {
-            Some(m.theme.hover)
-        } else {
-            None
-        };
-        if let Some(color) = shade {
-            ui.rect(rect, BUTTON / 2.0, color);
+        let (hover, press) = self.amounts(hit);
+        let strength = hover.max(if active { 1.0 } else { 0.0 });
+        let alpha = m.theme.hover.a * (strength + 0.9 * press);
+        if alpha > 0.002 {
+            ui.rect(rect, BUTTON / 2.0, m.theme.hover.with_alpha(alpha.min(1.0)));
         }
-        ui.icon(icon, cx, cy, size, m.theme.text);
+        // The icon dips slightly under the finger.
+        ui.icon(icon, cx, cy, size * (1.0 - 0.1 * press), m.theme.text);
     }
 
     fn draw_pill(&mut self, ui: &mut Ui, m: &Model) -> Rect {
@@ -401,8 +500,17 @@ impl Controls {
         let text_y = cy - line_h / 2.0;
         let mut x = pill.x + PAD_X;
 
-        // Status.
-        ui.rect(Rect::new(x, cy - 4.0, 8.0, 8.0), 4.0, dot);
+        // Status. While connecting, the dot pulses gently.
+        let pulse = if m.status == StatusKind::Connecting && self.animations {
+            0.55 + 0.45 * (0.5 + 0.5 * (self.time * TAU / PULSE_SECS).sin())
+        } else {
+            1.0
+        };
+        ui.rect(
+            Rect::new(x, cy - 4.0, 8.0, 8.0),
+            4.0,
+            dot.with_alpha(dot.a * pulse),
+        );
         x += 16.0;
         ui.text(status, x, text_y, LABEL, t.text);
         x += status_w + 12.0;
@@ -500,9 +608,23 @@ impl Controls {
             2.0,
             t.accent,
         );
-        let active = self.is_hovered(Hit::Volume) || self.pressed == Some(Hit::Volume);
-        let r = if active { 7.0 } else { 6.0 };
+        let dragging = self.pressed == Some(Hit::Volume);
+        let (grow, _) = self.animate(
+            Hit::Volume,
+            self.is_hovered(Hit::Volume) || dragging,
+            dragging,
+        );
         let knob_x = track.x + track.w * value;
+        // A soft halo and a slightly larger knob while the slider is in use.
+        let halo = 6.0 + 6.0 * grow;
+        if grow > 0.01 {
+            ui.rect(
+                Rect::new(knob_x - halo, cy - halo, halo * 2.0, halo * 2.0),
+                halo,
+                t.accent.with_alpha(0.22 * grow),
+            );
+        }
+        let r = 6.0 + 1.0 * grow;
         ui.rect(Rect::new(knob_x - r, cy - r, r * 2.0, r * 2.0), r, t.text);
     }
 
@@ -524,6 +646,18 @@ impl Controls {
         let inner_x = x + POPOVER_PAD;
         let inner_w = POPOVER_WIDTH - POPOVER_PAD * 2.0;
         let mut y = y + POPOVER_PAD;
+
+        // Indicator positions: start at the current choice, then slide.
+        let targets = [
+            PRESETS.iter().position(|v| *v == m.preset).unwrap_or(1) as f32,
+            THEMES.iter().position(|v| *v == m.theme_mode).unwrap_or(0) as f32,
+            LANGS.iter().position(|v| *v == m.lang_mode).unwrap_or(0) as f32,
+        ];
+        let mut slide = self.segments.unwrap_or(targets);
+        for (position, target) in slide.iter_mut().zip(targets) {
+            *position = self.approach(*position, target, SLIDE_RATE);
+        }
+        self.segments = Some(slide);
 
         y = self.device_section(
             ui,
@@ -563,6 +697,7 @@ impl Controls {
             Key::ImageQuality,
             presets,
             preset_selected,
+            slide[0],
             Hit::Preset,
             inner_x,
             y,
@@ -582,6 +717,7 @@ impl Controls {
             Key::Theme,
             themes,
             theme_selected,
+            slide[1],
             Hit::Theme,
             inner_x,
             y,
@@ -601,6 +737,7 @@ impl Controls {
             Key::Language,
             langs,
             lang_selected,
+            slide[2],
             Hit::Lang,
             inner_x,
             y,
@@ -641,10 +778,10 @@ impl Controls {
             let row = Rect::new(x, y, w, ROW_HEIGHT);
             self.register(hit(i), row);
             let is_selected = selected == Some(i);
-            if self.is_pressed(hit(i)) {
-                ui.rect(row, 9.0, t.hover.with_alpha((t.hover.a * 1.9).min(1.0)));
-            } else if self.is_hovered(hit(i)) {
-                ui.rect(row, 9.0, t.hover);
+            let (hover, press) = self.amounts(hit(i));
+            let alpha = t.hover.a * (hover + 0.9 * press);
+            if alpha > 0.002 {
+                ui.rect(row, 9.0, t.hover.with_alpha(alpha.min(1.0)));
             }
             let label = fit_text(ui, name, BODY, w - 20.0 - 28.0);
             let line_h = ui.measure("Ag", BODY).1;
@@ -678,6 +815,7 @@ impl Controls {
         title: Key,
         labels: [&str; 3],
         selected: usize,
+        position: f32,
         hit: fn(usize) -> Hit,
         x: f32,
         mut y: f32,
@@ -693,6 +831,15 @@ impl Controls {
         let style = TextStyle::new(12.5, Weight::Medium);
         let line_h = ui.measure("Ag", style).1;
 
+        // The active indicator glides between segments.
+        let indicator = Rect::new(
+            x + 3.0 + segment_w * position,
+            y + 3.0,
+            segment_w,
+            ROW_HEIGHT - 6.0,
+        );
+        ui.rect(indicator, 8.0, t.segment_active);
+
         for (i, label) in labels.iter().enumerate() {
             let segment = Rect::new(
                 x + 3.0 + segment_w * i as f32,
@@ -701,10 +848,10 @@ impl Controls {
                 ROW_HEIGHT - 6.0,
             );
             self.register(hit(i), segment);
-            if i == selected {
-                ui.rect(segment, 8.0, t.segment_active);
-            } else if self.is_hovered(hit(i)) {
-                ui.rect(segment, 8.0, t.hover);
+            let (hover, press) = self.amounts(hit(i));
+            let alpha = t.hover.a * (hover + 0.9 * press);
+            if i != selected && alpha > 0.002 {
+                ui.rect(segment, 8.0, t.hover.with_alpha(alpha.min(1.0)));
             }
             let color = if i == selected { t.text } else { t.text_dim };
             let text = fit_text(ui, label, style, segment_w - 8.0);
@@ -739,6 +886,30 @@ fn step_visibility(visibility: f32, show: bool, dt: f32) -> f32 {
     } else {
         (visibility - step).max(0.0)
     }
+}
+
+/// Exponential smoothing of `current` towards `target`; snaps when close.
+fn smooth(current: f32, target: f32, dt: f32, rate: f32) -> f32 {
+    let next = current + (target - current) * (1.0 - (-rate * dt).exp());
+    if (target - next).abs() < 0.002 {
+        target
+    } else {
+        next
+    }
+}
+
+/// Moves `current` towards `target` by at most `step`.
+fn move_toward(current: f32, target: f32, step: f32) -> f32 {
+    if current < target {
+        (current + step).min(target)
+    } else {
+        (current - step).max(target)
+    }
+}
+
+/// Fast start, gentle landing.
+fn ease_out_cubic(t: f32) -> f32 {
+    1.0 - (1.0 - t.clamp(0.0, 1.0)).powi(3)
 }
 
 /// Rounds a 0–1 volume to whole percent so values stay stable and exact.
@@ -1127,6 +1298,158 @@ mod tests {
         es.frame(0.016);
         en.frame(0.016);
         assert!(es.controls.rect_of(Hit::Pill).w > en.controls.rect_of(Hit::Pill).w);
+    }
+
+    #[test]
+    fn smoothing_converges_monotonically_and_snaps() {
+        let mut v = 0.0;
+        let mut last = 0.0;
+        for _ in 0..120 {
+            v = smooth(v, 1.0, 0.016, HOVER_RATE);
+            assert!(v >= last && v <= 1.0);
+            last = v;
+        }
+        assert_eq!(v, 1.0, "close values snap exactly onto the target");
+        assert!(
+            smooth(0.0, 1.0, 0.016, HOVER_RATE) < 0.5,
+            "one frame is a small step"
+        );
+    }
+
+    #[test]
+    fn easing_endpoints_and_direction() {
+        assert_eq!(ease_out_cubic(0.0), 0.0);
+        assert_eq!(ease_out_cubic(1.0), 1.0);
+        assert!(ease_out_cubic(0.5) > 0.5, "ease-out leads a linear ramp");
+        assert_eq!(move_toward(0.9, 1.0, 0.5), 1.0);
+        assert_eq!(move_toward(0.2, 0.0, 0.5), 0.0);
+    }
+
+    #[test]
+    fn hover_fades_in_and_out_instead_of_jumping() {
+        let mut rig = Rig::new(true);
+        let (x, y) = rig.controls.rect_of(Hit::Fullscreen).center();
+        rig.move_to(x, y);
+        rig.frame(0.016);
+        let early = rig.controls.amounts[&Hit::Fullscreen].0;
+        assert!(early > 0.0 && early < 1.0, "mid-fade, got {early}");
+        for _ in 0..30 {
+            rig.frame(0.016);
+        }
+        assert_eq!(rig.controls.amounts[&Hit::Fullscreen].0, 1.0);
+
+        rig.move_to(20.0, 20.0);
+        rig.frame(0.016);
+        let leaving = rig.controls.amounts[&Hit::Fullscreen].0;
+        assert!(leaving > 0.0 && leaving < 1.0, "fading out, got {leaving}");
+    }
+
+    #[test]
+    fn pressing_a_button_dips_it() {
+        let mut rig = Rig::new(true);
+        let (x, y) = rig.controls.rect_of(Hit::Fullscreen).center();
+        rig.move_to(x, y);
+        rig.pointer.press();
+        for _ in 0..10 {
+            rig.frame(0.016);
+        }
+        assert!(rig.controls.amounts[&Hit::Fullscreen].1 > 0.5);
+    }
+
+    #[test]
+    fn popover_opens_over_the_configured_time_and_fades_out_non_interactively() {
+        let mut rig = Rig::new(true);
+        rig.click_on(Hit::Settings);
+        assert!(rig.controls.popover_t > 0.0 && rig.controls.popover_t < 1.0);
+        for _ in 0..20 {
+            rig.frame(0.016);
+        }
+        assert_eq!(rig.controls.popover_t, 1.0);
+
+        rig.click_on(Hit::Settings); // close
+        assert!(!rig.controls.settings_open());
+        assert!(rig.controls.popover_t > 0.0, "still fading out");
+        let drawn = rig.ui.vertices().len();
+        assert!(drawn > 0);
+        assert!(
+            rig.controls.hits.iter().all(|(h, _)| !h.in_popover()),
+            "a closing popover must not take clicks"
+        );
+        for _ in 0..30 {
+            rig.frame(0.016);
+        }
+        assert_eq!(rig.controls.popover_t, 0.0);
+        assert!(
+            rig.controls.segments.is_none() && rig.controls.amounts.keys().all(|h| !h.in_popover())
+        );
+    }
+
+    #[test]
+    fn selection_indicator_slides_between_segments() {
+        let mut rig = Rig::new(true);
+        rig.click_on(Hit::Settings);
+        for _ in 0..30 {
+            rig.frame(0.016);
+        }
+        assert_eq!(rig.controls.segments.unwrap()[1], 0.0, "starts on Auto");
+
+        rig.model.theme_mode = ThemeMode::Light; // as if the click was applied
+        rig.frame(0.016);
+        let middle = rig.controls.segments.unwrap()[1];
+        assert!(middle > 0.0 && middle < 2.0, "sliding, got {middle}");
+        for _ in 0..60 {
+            rig.frame(0.016);
+        }
+        assert_eq!(rig.controls.segments.unwrap()[1], 2.0);
+    }
+
+    #[test]
+    fn indicator_starts_on_the_current_choice_without_sliding_in() {
+        let mut rig = Rig::new(true);
+        rig.model.lang_mode = LangMode::Es;
+        rig.frame(0.016);
+        rig.click_on(Hit::Settings);
+        assert_eq!(rig.controls.segments.unwrap()[2], 2.0);
+    }
+
+    #[test]
+    fn disabling_animations_makes_everything_instant() {
+        let mut rig = Rig::new(true);
+        rig.controls.set_animations(false);
+        rig.click_on(Hit::Settings);
+        assert_eq!(rig.controls.popover_t, 1.0);
+        let (x, y) = rig.controls.rect_of(Hit::Fullscreen).center();
+        rig.move_to(x, y);
+        assert_eq!(rig.controls.amounts[&Hit::Fullscreen].0, 1.0);
+        rig.model.theme_mode = ThemeMode::Dark;
+        rig.frame(0.016);
+        assert_eq!(rig.controls.segments.unwrap()[1], 1.0);
+    }
+
+    #[test]
+    fn connecting_status_pulses_but_live_does_not() {
+        let alpha_of_dot = |rig: &Rig| {
+            rig.ui
+                .vertices()
+                .iter()
+                .find(|v| v.shape[3] == 0.0 && v.shape[0] == 4.0)
+                .map(|v| v.color[3])
+        };
+        let mut rig = Rig::new(true);
+        rig.model.status = StatusKind::Connecting;
+        let mut seen = Vec::new();
+        for _ in 0..40 {
+            rig.frame(0.05);
+            seen.push(alpha_of_dot(&rig).unwrap());
+        }
+        let (lo, hi) = seen
+            .iter()
+            .fold((f32::MAX, f32::MIN), |(lo, hi), a| (lo.min(*a), hi.max(*a)));
+        assert!(hi - lo > 0.3, "pulse range {lo}..{hi}");
+
+        rig.model.status = StatusKind::Live;
+        rig.frame(0.05);
+        assert_eq!(alpha_of_dot(&rig), Some(1.0));
     }
 
     #[test]

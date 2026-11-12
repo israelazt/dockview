@@ -24,7 +24,7 @@ Una interfaz elegante y mínima que casi no se ve: el video ocupa toda la ventan
 
 **Tipografía:** Inter 13 px para cuerpo, 11 px para etiquetas, pesos Regular y Medium. Los números (fps, volumen, ms) usan celdas de ancho fijo para que no "bailen" al cambiar.
 
-**Movimiento:** fundido de 200 ms al mostrar/ocultar; el cursor se oculta con los controles en pantalla completa.
+**Movimiento:** fundido de 200 ms al mostrar/ocultar los controles; hover y pulsado con fundido (~120 ms) y el icono se encoge un poco al pulsar; el popover aparece con fundido y subiendo 10 px (180 ms) y se cierra igual; el indicador de los controles segmentados se desliza entre opciones; la bolita del volumen crece con un halo al usarla; el punto de estado pulsa mientras conecta. Se respeta el ajuste de Windows «Mostrar animaciones»: si está desactivado, todo es instantáneo. El cursor se oculta con los controles en pantalla completa.
 
 **Atajos:** se mantienen todos los actuales; los controles en pantalla son una vía adicional.
 
