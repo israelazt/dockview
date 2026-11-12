@@ -37,6 +37,10 @@ use dockview_core::frame::FrameSlot;
 use dockview_core::mf::{enumerate_video_devices, MfSession};
 use dockview_core::recorder::{RecorderStatus, ReplayRecorder, ReplaySettings, SaveHandle};
 use dockview_core::recording::{disk_free_bytes, EndReason, RecordingState, DISK_START_MIN_BYTES};
+use dockview_core::screen::{
+    list_monitors, list_windows, CaptureTarget, MonitorInfo, ScreenCapture, ScreenOptions,
+    ScreenStatus, WindowInfo,
+};
 use dockview_core::settings::{
     self, AppSettings, LangMode, RenderPreset, ThemeMode, VideoModePref, MAX_AUDIO_OFFSET_MS,
 };
@@ -44,6 +48,9 @@ use dockview_core::stream::StreamInfo;
 use dockview_core::tap_capture::{CaptureSource, TapCapture as MicCapture};
 use dockview_core::testsrc::TestSource;
 use windows::Win32::Foundation::HWND;
+use windows::Win32::UI::WindowsAndMessaging::{
+    SetWindowDisplayAffinity, WDA_EXCLUDEFROMCAPTURE, WDA_NONE,
+};
 use winit::application::ApplicationHandler;
 use winit::dpi::{LogicalSize, PhysicalSize};
 use winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
@@ -57,7 +64,10 @@ use i18n::{Lang, LangModeExt};
 use perf::ProcessSampler;
 use render::{Filter, Renderer};
 use theme::{Appearance, Theme, ThemeModeExt};
-use ui::controls::{Action, Controls, MicState, MicView, Model, RecState, RecView, StatusKind};
+use ui::controls::{
+    Action, Controls, CurrentSource, MicState, MicView, Model, RecState, RecView, SourcesView,
+    StatusKind,
+};
 use ui::gpu::UiGpu;
 use ui::input::Pointer;
 use ui::stats::{Stats, StatsPanel};
@@ -66,6 +76,8 @@ use ui::Ui;
 
 /// Seconds after an automatic mode switch before its effect is judged.
 const SWITCH_CHECK_SECS: u32 = 7;
+/// How often the lists of monitors and windows are refreshed while shown.
+const SOURCES_REFRESH: Duration = Duration::from_millis(1500);
 /// Delay before trying to reopen a capture device that went away.
 const RECONNECT_DELAY: Duration = Duration::from_secs(2);
 /// How long the event loop waits for a new frame before checking events.
@@ -84,7 +96,20 @@ enum Source {
         capture: VideoCapture,
         retry_at: Option<Instant>,
     },
+    /// A monitor or a window, captured by Windows Graphics Capture.
+    Screen(ScreenCapture),
     None,
+}
+
+/// What is being shown and recorded.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SourceKind {
+    /// The selected capture card.
+    Capture,
+    /// A monitor (its handle).
+    Monitor(isize),
+    /// A window (its handle) and the program that owns it.
+    Window { handle: isize, pid: u32 },
 }
 
 struct App {
@@ -147,6 +172,14 @@ struct App {
     mic: Option<MicCapture>,
     /// Recording was asked for while the buffer was still starting.
     record_when_ready: bool,
+    /// Whether the card, a monitor or a window is being captured.
+    source_kind: SourceKind,
+    /// The sound of the PC or of one program, while a screen is captured.
+    loopback: Option<MicCapture>,
+    /// What can be captured, refreshed while the source popover is open.
+    monitors: Vec<MonitorInfo>,
+    windows: Vec<WindowInfo>,
+    sources_refreshed: Instant,
     /// The newest clip or recording saved this session, to show in Explorer.
     last_saved: Option<std::path::PathBuf>,
     /// The low-disk warning was already shown for this recording.
@@ -271,6 +304,11 @@ impl App {
             total_ram: perf::total_ram_bytes(),
             mic: None,
             record_when_ready: false,
+            source_kind: SourceKind::Capture,
+            loopback: None,
+            monitors: Vec::new(),
+            windows: Vec::new(),
+            sources_refreshed: Instant::now(),
             last_saved: None,
             low_disk_warned: false,
             mic_level: 0.0,
@@ -289,6 +327,10 @@ impl App {
             }
             if app.cli.open_replay {
                 app.controls.toggle_replay();
+            }
+            if app.cli.open_sources {
+                app.refresh_sources();
+                app.controls.toggle_sources();
             }
             app.start_replay_services();
             if app.cli.mic {
@@ -329,6 +371,8 @@ impl App {
 
         app.select_video(video);
         app.select_audio(audio);
+        app.refresh_sources();
+        app.restore_screen();
         app.start_replay_services();
         if app.cli.mic {
             app.set_mic(true);
@@ -382,16 +426,11 @@ impl App {
                     fps: 60,
                 },
             );
-            if let Some(audio) = &self.audio {
-                audio.set_tap(Some(recorder.audio_tap()));
-            }
             self.recorder = Some(recorder);
         } else {
-            if let Some(audio) = &self.audio {
-                audio.set_tap(None);
-            }
             self.recorder = None;
         }
+        self.route_audio();
     }
 
     /// Names for the microphone list: the Windows default, then every input.
@@ -556,6 +595,144 @@ impl App {
     /// Brings a saved length that is too long for this PC down to the limit.
     fn clamp_replay_length(&mut self) {
         self.settings.replay_seconds = self.settings.replay_seconds.min(self.replay_limit());
+    }
+
+    /// Points the recorder's game-sound input at the right place: the capture
+    /// card's audio, or the loopback of the PC (a monitor) or of one program (a
+    /// window). Neither is played back by Dockview.
+    fn route_audio(&mut self) {
+        self.loopback = None;
+        let tap = self.recorder.as_ref().map(ReplayRecorder::audio_tap);
+        match self.source_kind {
+            SourceKind::Capture => {
+                if let Some(audio) = &self.audio {
+                    audio.set_tap(tap);
+                }
+            }
+            SourceKind::Monitor(_) | SourceKind::Window { .. } => {
+                let source = match self.source_kind {
+                    SourceKind::Window { pid, .. } => CaptureSource::ProcessLoopback(pid),
+                    _ => CaptureSource::SystemLoopback,
+                };
+                if let Some(tap) = tap {
+                    self.loopback = Some(MicCapture::start(source, 1.0, tap));
+                }
+            }
+        }
+    }
+
+    /// Hides Dockview's own window from the capture, so a captured screen does
+    /// not show the viewer inside itself.
+    fn set_capture_exclusion(&self, on: bool) {
+        if let Some(hwnd) = self.window_hwnd() {
+            let affinity = if on { WDA_EXCLUDEFROMCAPTURE } else { WDA_NONE };
+            // SAFETY: a plain call on our own window; it fails harmlessly on
+            // Windows versions that do not support it.
+            unsafe {
+                let _ = SetWindowDisplayAffinity(hwnd, affinity);
+            }
+        }
+    }
+
+    /// Captures a monitor or a window instead of the capture card.
+    fn start_screen(&mut self, target: CaptureTarget, kind: SourceKind) {
+        if self.cli.test_pattern {
+            return;
+        }
+        self.source = Source::None; // releases the capture card
+        self.audio = None; // the card's sound is not needed
+        self.video_size = (0, 0);
+        self.source_kind = kind;
+        self.set_capture_exclusion(true);
+        self.source = Source::Screen(ScreenCapture::start(
+            target,
+            ScreenOptions::default(),
+            Arc::clone(&self.slot),
+        ));
+        self.route_audio();
+    }
+
+    fn refresh_sources(&mut self) {
+        self.monitors = list_monitors();
+        let own = std::process::id();
+        self.windows = list_windows()
+            .into_iter()
+            .filter(|w| w.process_id != own)
+            .collect();
+        self.sources_refreshed = Instant::now();
+    }
+
+    /// Starts on a monitor or a window when the command line or the last
+    /// session asked for one.
+    fn restore_screen(&mut self) {
+        if let Some(text) = self.cli.capture_window.clone() {
+            let needle = text.to_lowercase();
+            let found = self
+                .windows
+                .iter()
+                .find(|w| w.title.to_lowercase().contains(&needle))
+                .cloned();
+            match found {
+                Some(w) => self.start_screen(
+                    CaptureTarget::Window(w.handle),
+                    SourceKind::Window {
+                        handle: w.handle,
+                        pid: w.process_id,
+                    },
+                ),
+                None => eprintln!("no window matches '{text}'"),
+            }
+            return;
+        }
+        let wanted = self
+            .cli
+            .screen
+            .or_else(|| self.settings.last_monitor.map(|i| i as usize));
+        if let Some(monitor) = wanted.and_then(|i| self.monitors.get(i)) {
+            let handle = monitor.handle;
+            self.start_screen(CaptureTarget::Monitor(handle), SourceKind::Monitor(handle));
+        }
+    }
+
+    /// The monitors and windows for the source popover.
+    fn sources_view(&self, lang: Lang) -> SourcesView {
+        let monitors = self
+            .monitors
+            .iter()
+            .enumerate()
+            .map(|(i, m)| {
+                format!(
+                    "{} {} · {}×{}{}",
+                    i18n::tr(lang, i18n::Key::SourceScreenWord),
+                    i + 1,
+                    m.width,
+                    m.height,
+                    if m.primary {
+                        format!(" ({})", i18n::tr(lang, i18n::Key::SourcePrimary))
+                    } else {
+                        String::new()
+                    }
+                )
+            })
+            .collect();
+        let windows = self.windows.iter().map(|w| w.title.clone()).collect();
+        let current = match self.source_kind {
+            SourceKind::Capture => CurrentSource::Capture,
+            SourceKind::Monitor(handle) => CurrentSource::Monitor(
+                self.monitors
+                    .iter()
+                    .position(|m| m.handle == handle)
+                    .unwrap_or(0),
+            ),
+            SourceKind::Window { handle, .. } => {
+                CurrentSource::Window(self.windows.iter().position(|w| w.handle == handle))
+            }
+        };
+        SourcesView {
+            monitors,
+            windows,
+            current,
+        }
     }
 
     /// Starts the buffer over, for a change that needs a new encoder. The
@@ -737,10 +914,17 @@ impl App {
         if self.cli.test_pattern {
             return; // the synthetic source stays; only the selection changes
         }
+        let from_screen = self.source_kind != SourceKind::Capture;
+        if from_screen {
+            self.source_kind = SourceKind::Capture;
+            self.settings.last_monitor = None;
+            self.set_capture_exclusion(false);
+        }
         self.video_size = (0, 0);
         // Drop the old capture first so it releases the device.
         self.source = Source::None;
         let Some(device) = index.and_then(|i| self.video_devices.get(i)) else {
+            self.route_audio();
             return;
         };
         self.settings.last_video_device_symbolic_link = Some(device.symbolic_link.clone());
@@ -748,6 +932,10 @@ impl App {
             capture: self.start_capture(&device.symbolic_link.clone()),
             retry_at: None,
         };
+        if from_screen {
+            // The card's sound was stopped while a screen was captured.
+            self.select_audio(self.audio_index);
+        }
     }
 
     fn start_capture(&self, symbolic_link: &str) -> VideoCapture {
@@ -764,8 +952,8 @@ impl App {
     /// Starts the audio pipeline for the audio device at `index` (or stops).
     fn select_audio(&mut self, index: Option<usize>) {
         self.audio_index = index;
-        if self.cli.test_pattern {
-            return;
+        if self.cli.test_pattern || self.source_kind != SourceKind::Capture {
+            return; // while a screen is captured, its own sound is used
         }
         self.audio = None;
         let Some(device) = index.and_then(|i| self.audio_devices.get(i)) else {
@@ -861,6 +1049,11 @@ impl App {
                     StatusKind::Problem
                 }
             },
+            Source::Screen(capture) => match capture.status() {
+                ScreenStatus::Running { .. } => StatusKind::Live,
+                ScreenStatus::Starting => StatusKind::Connecting,
+                ScreenStatus::Ended(_) | ScreenStatus::Failed(_) => StatusKind::Problem,
+            },
         };
         let resolution = if self.video_size.0 > 0 {
             // The rate is unknown for the first second; show just the height.
@@ -908,6 +1101,7 @@ impl App {
             mic_selected: Some(self.mic_selected()),
             mic: self.mic_view(),
             rec: self.rec_view(),
+            sources: self.sources_view(self.lang_mode().resolve(self.system_lang)),
         }
     }
 
@@ -957,6 +1151,25 @@ impl App {
                     i18n::Key::ToastReplayOff
                 };
                 self.toast(key, ToastKind::Info);
+            }
+            Action::SelectMonitor(index) => {
+                if let Some(monitor) = self.monitors.get(index) {
+                    let handle = monitor.handle;
+                    self.start_screen(CaptureTarget::Monitor(handle), SourceKind::Monitor(handle));
+                    self.settings.last_monitor = Some(index as u32);
+                }
+            }
+            Action::SelectWindow(index) => {
+                if let Some(window) = self.windows.get(index).cloned() {
+                    self.start_screen(
+                        CaptureTarget::Window(window.handle),
+                        SourceKind::Window {
+                            handle: window.handle,
+                            pid: window.process_id,
+                        },
+                    );
+                    self.settings.last_monitor = None;
+                }
             }
             Action::ToggleRecord => {
                 self.toggle_record();
@@ -1090,6 +1303,11 @@ impl App {
                 CaptureStatus::Running { .. } | CaptureStatus::Stopped => VideoState::Running,
                 CaptureStatus::Starting => VideoState::Connecting,
                 CaptureStatus::Disconnected { .. } | CaptureStatus::Failed(_) => VideoState::Lost,
+            },
+            Source::Screen(capture) => match capture.status() {
+                ScreenStatus::Running { .. } => VideoState::Running,
+                ScreenStatus::Starting => VideoState::Connecting,
+                ScreenStatus::Ended(_) | ScreenStatus::Failed(_) => VideoState::Lost,
             },
         };
         let monitor_hz = self
@@ -1234,7 +1452,7 @@ impl App {
                 CaptureStatus::Running { native, .. } => Some(native),
                 _ => None,
             },
-            Source::None => None,
+            Source::Screen(_) | Source::None => None,
         }
     }
 
@@ -1379,6 +1597,22 @@ impl App {
 
     /// Restarts the capture thread if the device was lost.
     fn maintain_source(&mut self) {
+        if let Source::Screen(capture) = &self.source {
+            // The window went away or cannot be captured: back to the card.
+            let lost = match capture.status() {
+                ScreenStatus::Ended(_) => Some(i18n::Key::ToastSourceLost),
+                ScreenStatus::Failed(e) => {
+                    eprintln!("screen capture failed: {e}");
+                    Some(i18n::Key::ToastSourceFailed)
+                }
+                _ => None,
+            };
+            if let Some(key) = lost {
+                self.toast(key, ToastKind::Error);
+                self.select_video(self.video_index);
+            }
+            return;
+        }
         let Some(device) = self.video_index.and_then(|i| self.video_devices.get(i)) else {
             return;
         };
@@ -1563,6 +1797,9 @@ impl ApplicationHandler for App {
             return;
         }
         self.maintain_source();
+        if self.controls.sources_open() && self.sources_refreshed.elapsed() > SOURCES_REFRESH {
+            self.refresh_sources();
+        }
         self.update_stats();
         self.poll_replay();
         // Redraw for new video, for input, and while the controls are on

@@ -140,7 +140,7 @@ Lo que se quiere: capturar **un monitor completo o una aplicación concreta**, c
 | Fase | Qué | Se comprueba con |
 |---|---|---|
 | S-1 ✅ | Núcleo: listar monitores y ventanas; `ScreenCapture` (monitor o ventana → NV12 por GPU); captura de audio por loopback del sistema o de un proceso; herramienta `screen_record` | Grabar Edge y un monitor con audio; medir FPS, CPU y sincronía; ver que los colores son correctos |
-| S-2 | App: elegir la fuente (capturadora, monitor, ventana), enrutar el audio y excluir la ventana de Dockview | Con clics reales |
+| S-2 ✅ | App: elegir la fuente (capturadora, monitor, ventana), enrutar el audio y excluir la ventana de Dockview | Con clics reales |
 | S-3 | Casos: ventana cerrada o minimizada, el programa se cierra, monitor que cambia, cursor | Pruebas |
 | S-4 | Prueba con LoL (anti-trampas, FPS del juego, coste) | La haces tú |
 
@@ -157,3 +157,14 @@ Lo que se quiere: capturar **un monitor completo o una aplicación concreta**, c
 Los frames de pantalla pasan por el mismo `FrameSlot`, así que el visor, el replay y la grabación (G-1..G-4) no cambiaron. Hay 7 tests del módulo (tamaños, encaje con barras negras, listado de monitores y ventanas, y una captura real del monitor principal).
 
 **Error del micrófono encontrado en esta fase y corregido.** Al grabar vi que la pista del micrófono salía en silencio absoluto. La causa: en el PC del autor la **entrada predeterminada de Windows es «HDMI (UGREEN 25173)», la propia capturadora**, y «Predeterminado de Windows» la abría como micrófono. Ahora el modo **«Automático»** usa la predeterminada salvo que parezca una capturadora (HDMI, capture, UGREEN, Elgato, AVerMedia, Magewell, Cam Link, Stereo Mix…) o sea el dispositivo del sonido del juego; entonces elige la mejor entrada restante, un micrófono real antes que el de una webcam. En este PC elige el **RØDE NT-USB Mini**. Verificado: la pista del micrófono pasó de RMS 0,0000 a 0,0015 con ruido ambiente y pitidos, y la mezcla lo incluye.
+
+### Resultados de S-2
+
+- **Botón de fuente** en la píldora (icono de monitor, a la izquierda de Ajustes). Abre un popover con tres listas: **Capturadora** (los dispositivos de siempre), **Pantalla** («Pantalla 1 · 1920×1080 (principal)», «Pantalla 2 …») y **Ventana de aplicación** (las 8 ventanas más al frente; se actualiza cada 1,5 s mientras está abierto; no lista las ventanas de Dockview). Elegir una cambia la fuente al instante y el popover sigue abierto.
+- **Audio enrutado solo**: con la capturadora suena y se graba el audio de la tarjeta (como siempre); con un **monitor** se graba el **sonido del sistema**; con una **ventana**, **solo el sonido de ese programa**. En pantalla y ventana Dockview **no reproduce** ese audio (ya suena solo) y detiene el de la tarjeta. El micrófono sigue siendo su propia pista. Al volver a la capturadora, su audio se reanuda.
+- **La ventana de Dockview se excluye de la captura** mientras captura pantalla (`WDA_EXCLUDEFROMCAPTURE`) y se restablece al volver a la capturadora.
+- Si **la ventana capturada se cierra o no se puede capturar**, sale un aviso y se vuelve a la capturadora.
+- Se recuerda el **último monitor** (no las ventanas, que son volátiles): si la última sesión fue un monitor, arranca en él. Para arrancar directamente: `--screen N` (monitor) o `--window "texto del título"`.
+- El replay, la grabación, el micrófono, las partes por cambio de resolución y el aviso de disco funcionan igual con cualquier fuente.
+- Verificado con la app real: `--window YouTube --record` capturó Edge (58 fps en el visor), grabó con el audio solo de Edge (RMS 0,11); con clics reales se pasó de la ventana a una cámara de video y la marca de selección se movió. 4 tests nuevos de los controles (acciones, un solo popover a la vez, cabe en 720p con muchas ventanas).
+- **Límites conocidos**: la lista de ventanas muestra solo las 8 más al frente; un juego en **pantalla completa exclusiva** puede no capturarse (usar modo ventana sin bordes); no se ha probado con LoL ni con su anti-trampas (S-4).

@@ -197,6 +197,10 @@ pub struct AppSettings {
     /// microphone itself always starts off: it is turned on by hand each session.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_mic_device_id: Option<String>,
+    /// The monitor (by position in the list, 0 is the primary) that was being
+    /// captured when the program closed; `None` means the capture card.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_monitor: Option<u32>,
     /// Audio sync offset in milliseconds (-300..=300).
     pub audio_offset_ms: i32,
     /// Master volume (0.0..=1.0).
@@ -229,6 +233,7 @@ impl Default for AppSettings {
             last_video_device_symbolic_link: None,
             last_audio_device_id: None,
             last_mic_device_id: None,
+            last_monitor: None,
             audio_offset_ms: 0,
             volume: 1.0,
             was_fullscreen: false,
@@ -325,6 +330,7 @@ mod tests {
         assert!(s.last_video_device_symbolic_link.is_none());
         assert!(s.last_audio_device_id.is_none());
         assert!(s.last_mic_device_id.is_none());
+        assert!(s.last_monitor.is_none());
     }
 
     #[test]
@@ -333,6 +339,7 @@ mod tests {
             last_video_device_symbolic_link: Some(r"\\?\usb#vid_1234".into()),
             last_audio_device_id: Some("{0.0.1.00000000}.{abc}".into()),
             last_mic_device_id: Some("{0.0.1.00000000}.{mic}".into()),
+            last_monitor: Some(1),
             audio_offset_ms: -150,
             volume: 0.75,
             was_fullscreen: true,

@@ -28,10 +28,16 @@ pub struct Cli {
     pub open_settings: bool,
     /// Start with the instant-replay popover open.
     pub open_replay: bool,
+    /// Start with the source popover open.
+    pub open_sources: bool,
     /// Start with the microphone on (for tests and screenshots; it is off by default).
     pub mic: bool,
     /// Start recording right away (for tests and screenshots).
     pub record: bool,
+    /// Start by capturing this monitor (0 is the primary) instead of the card.
+    pub screen: Option<usize>,
+    /// Start by capturing the first window whose title contains this text.
+    pub capture_window: Option<String>,
     /// Start with the statistics panel open.
     pub show_stats: bool,
     /// Preview only: show sample problems in the diagnosis.
@@ -98,8 +104,17 @@ impl Cli {
                 }
                 "--open-settings" => cli.open_settings = true,
                 "--open-replay" => cli.open_replay = true,
+                "--open-sources" => cli.open_sources = true,
                 "--mic" => cli.mic = true,
                 "--record" => cli.record = true,
+                "--screen" => {
+                    cli.screen = Some(
+                        value("--screen")?
+                            .parse()
+                            .map_err(|_| "--screen needs a number".to_string())?,
+                    )
+                }
+                "--window" => cli.capture_window = Some(value("--window")?),
                 "--stats" => cli.show_stats = true,
                 "--video" => cli.video = Some(value("--video")?),
                 "--log-stats" => cli.log_stats = Some(PathBuf::from(value("--log-stats")?)),

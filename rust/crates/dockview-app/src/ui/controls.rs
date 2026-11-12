@@ -43,6 +43,8 @@ const PULSE_SECS: f32 = 1.2;
 const REPLAY_POPOVER_WIDTH: f32 = 324.0;
 /// Most devices listed per kind in the popover.
 const MAX_LISTED_DEVICES: usize = 5;
+/// Windows shown in the source popover (the frontmost ones).
+const MAX_LISTED_WINDOWS: usize = 8;
 
 const PILL_HEIGHT: f32 = 56.0;
 const BOTTOM_MARGIN: f32 = 28.0;
@@ -73,6 +75,7 @@ const ICON_ACTIVITY: char = '\u{e038}';
 const ICON_REPLAY: char = '\u{e1f5}';
 const ICON_SAVE: char = '\u{e14d}';
 const ICON_FOLDER: char = '\u{e247}';
+const ICON_SOURCE: char = '\u{e11d}';
 const ICON_MIC: char = '\u{e118}';
 const ICON_MIC_OFF: char = '\u{e119}';
 
@@ -109,6 +112,26 @@ pub enum ReplayState {
     Recording,
     /// This PC cannot record (no hardware encoder, unsupported format).
     Unavailable,
+}
+
+/// What is being shown and recorded.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum CurrentSource {
+    /// The selected capture card.
+    #[default]
+    Capture,
+    /// A monitor, by position in the list.
+    Monitor(usize),
+    /// A window, by position in the list (`None` if it is not listed any more).
+    Window(Option<usize>),
+}
+
+/// The monitors and windows that can be captured.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct SourcesView {
+    pub monitors: Vec<String>,
+    pub windows: Vec<String>,
+    pub current: CurrentSource,
 }
 
 /// State of a whole-session recording.
@@ -242,6 +265,7 @@ pub struct Model {
     pub replay: ReplayView,
     pub mic: MicView,
     pub rec: RecView,
+    pub sources: SourcesView,
 }
 
 /// A change the user asked for.
@@ -253,6 +277,10 @@ pub enum Action {
     SelectVideo(usize),
     SelectAudio(usize),
     SelectMic(usize),
+    /// Capture this monitor (position in the list).
+    SelectMonitor(usize),
+    /// Capture this window (position in the list).
+    SelectWindow(usize),
     ToggleMic,
     /// Start or stop recording the session.
     ToggleRecord,
@@ -282,6 +310,10 @@ enum Hit {
     Settings,
     Fullscreen,
     Video(usize),
+    /// Pill button that opens the source popover.
+    Sources,
+    SourceMonitor(usize),
+    SourceWindow(usize),
     Audio(usize),
     MicDevice(usize),
     Preset(usize),
@@ -321,6 +353,8 @@ impl Hit {
             self,
             Hit::Popover
                 | Hit::Video(_)
+                | Hit::SourceMonitor(_)
+                | Hit::SourceWindow(_)
                 | Hit::Audio(_)
                 | Hit::MicDevice(_)
                 | Hit::MicToggle
@@ -345,11 +379,13 @@ impl Hit {
 enum PopoverKind {
     Settings,
     Replay,
+    Sources,
 }
 
 pub struct Controls {
     settings_open: bool,
     replay_open: bool,
+    sources_open: bool,
     popover_kind: PopoverKind,
     always_visible: bool,
     visibility: f32,
@@ -384,6 +420,7 @@ impl Controls {
         Self {
             settings_open: false,
             replay_open: false,
+            sources_open: false,
             popover_kind: PopoverKind::Settings,
             always_visible,
             visibility: if always_visible { 1.0 } else { 0.0 },
@@ -430,6 +467,7 @@ impl Controls {
         let was_open = self.popover_target();
         self.settings_open = false;
         self.replay_open = false;
+        self.sources_open = false;
         was_open
     }
 
@@ -437,6 +475,7 @@ impl Controls {
         self.settings_open = !self.settings_open;
         if self.settings_open {
             self.replay_open = false;
+            self.sources_open = false;
             self.popover_kind = PopoverKind::Settings;
         }
     }
@@ -445,8 +484,23 @@ impl Controls {
         self.replay_open = !self.replay_open;
         if self.replay_open {
             self.settings_open = false;
+            self.sources_open = false;
             self.popover_kind = PopoverKind::Replay;
         }
+    }
+
+    pub fn toggle_sources(&mut self) {
+        self.sources_open = !self.sources_open;
+        if self.sources_open {
+            self.settings_open = false;
+            self.replay_open = false;
+            self.popover_kind = PopoverKind::Sources;
+        }
+    }
+
+    /// Whether the source popover is open (the app refreshes its lists then).
+    pub fn sources_open(&self) -> bool {
+        self.sources_open
     }
 
     pub fn replay_open(&self) -> bool {
@@ -455,7 +509,7 @@ impl Controls {
 
     /// Whether a popover is meant to be showing (as opposed to fading out).
     fn popover_target(&self) -> bool {
-        self.settings_open || self.replay_open
+        self.settings_open || self.replay_open || self.sources_open
     }
 
     pub fn settings_open(&self) -> bool {
@@ -489,6 +543,7 @@ impl Controls {
             match self.popover_kind {
                 PopoverKind::Settings => self.draw_popover(ui, model, pill),
                 PopoverKind::Replay => self.draw_replay_popover(ui, model, pill),
+                PopoverKind::Sources => self.draw_sources_popover(ui, model, pill),
             }
             ui.set_offset(0.0, 0.0);
         }
@@ -537,6 +592,7 @@ impl Controls {
                 None if self.popover_target() => {
                     self.settings_open = false;
                     self.replay_open = false;
+                    self.sources_open = false;
                 }
                 _ => {}
             }
@@ -582,6 +638,10 @@ impl Controls {
                 self.toggle_replay();
                 return;
             }
+            Hit::Sources => {
+                self.toggle_sources();
+                return;
+            }
             Hit::ReplaySave | Hit::ReplayPopSave => Action::SaveReplay,
             Hit::Record => Action::ToggleRecord,
             Hit::ReplayToggle => Action::ToggleReplay,
@@ -597,6 +657,8 @@ impl Controls {
             Hit::SyncMinus => Action::SetSync(sync(-SYNC_STEP_MS)),
             Hit::SyncPlus => Action::SetSync(sync(SYNC_STEP_MS)),
             Hit::Video(i) => Action::SelectVideo(i),
+            Hit::SourceMonitor(i) => Action::SelectMonitor(i),
+            Hit::SourceWindow(i) => Action::SelectWindow(i),
             Hit::Audio(i) => Action::SelectAudio(i),
             Hit::Preset(i) => Action::SetPreset(PRESETS[i]),
             Hit::Theme(i) => Action::SetTheme(THEMES[i]),
@@ -724,7 +786,7 @@ impl Controls {
         let status_block = 8.0 + 8.0 + status_w + 12.0 + res_w;
         let volume_block = ICON_SIZE + 10.0 + SLIDER_WIDTH + 10.0 + percent_w;
         let sync_block = sync_label_w + 10.0 + BUTTON + sync_value_w + BUTTON;
-        let buttons_block = BUTTON * 2.0 + 4.0;
+        let buttons_block = BUTTON * 3.0 + 8.0;
         let divider = GAP * 2.0 + 1.0;
         let replay_block = BUTTON * 3.0 + 8.0 + divider;
         let width = PAD_X * 2.0
@@ -848,6 +910,18 @@ impl Controls {
         x = divider_at(ui, t, x, cy);
 
         // Actions.
+        let sources_open = self.sources_open;
+        self.icon_button(
+            ui,
+            m,
+            Hit::Sources,
+            ICON_SOURCE,
+            x + BUTTON / 2.0,
+            cy,
+            ICON_SIZE,
+            sources_open,
+        );
+        x += BUTTON + 4.0;
         let open = self.settings_open;
         self.icon_button(
             ui,
@@ -902,6 +976,76 @@ impl Controls {
             cy,
             ICON_SIZE * (1.0 - 0.1 * press),
             color.with_alpha(color.a * pulse),
+        );
+    }
+
+    /// The source popover: capture cards, monitors and application windows.
+    fn draw_sources_popover(&mut self, ui: &mut Ui, m: &Model, pill: Rect) {
+        let t = &m.theme;
+        let height = sources_height(m);
+        let (screen_w, _) = ui.logical_size();
+        let x = (pill.x + pill.w - POPOVER_WIDTH)
+            .min(screen_w - POPOVER_WIDTH - POPOVER_GAP)
+            .max(POPOVER_GAP)
+            .round();
+        let y = (pill.y - POPOVER_GAP - height).max(POPOVER_GAP).round();
+        let rect = Rect::new(x, y, POPOVER_WIDTH, height);
+        self.register(Hit::Popover, rect);
+        ui.shadow(rect, 20.0, 26.0, t.shadow);
+        ui.panel(rect, 20.0, t.surface, t.border, 1.0);
+
+        let inner_x = x + POPOVER_PAD;
+        let inner_w = POPOVER_WIDTH - POPOVER_PAD * 2.0;
+        let mut y = y + POPOVER_PAD;
+        let current = m.sources.current;
+        let capture_selected = (current == CurrentSource::Capture)
+            .then_some(m.video_selected)
+            .flatten();
+        let monitor_selected = match current {
+            CurrentSource::Monitor(i) => Some(i),
+            _ => None,
+        };
+        let window_selected = match current {
+            CurrentSource::Window(i) => i,
+            _ => None,
+        };
+        y = self.list_section(
+            ui,
+            m,
+            Key::SourceCapture,
+            &m.video_devices,
+            capture_selected,
+            Hit::Video,
+            inner_x,
+            y,
+            inner_w,
+            MAX_LISTED_DEVICES,
+        );
+        y += SECTION_GAP;
+        y = self.list_section(
+            ui,
+            m,
+            Key::SourceScreen,
+            &m.sources.monitors,
+            monitor_selected,
+            Hit::SourceMonitor,
+            inner_x,
+            y,
+            inner_w,
+            MAX_LISTED_DEVICES,
+        );
+        y += SECTION_GAP;
+        self.list_section(
+            ui,
+            m,
+            Key::SourceApp,
+            &m.sources.windows,
+            window_selected,
+            Hit::SourceWindow,
+            inner_x,
+            y,
+            inner_w,
+            MAX_LISTED_WINDOWS,
         );
     }
 
@@ -1528,8 +1672,37 @@ impl Controls {
         selected: Option<usize>,
         hit: fn(usize) -> Hit,
         x: f32,
+        y: f32,
+        w: f32,
+    ) -> f32 {
+        self.list_section(
+            ui,
+            m,
+            title,
+            devices,
+            selected,
+            hit,
+            x,
+            y,
+            w,
+            MAX_LISTED_DEVICES,
+        )
+    }
+
+    /// A titled list of choices (at most `limit` rows), one of them ticked.
+    #[allow(clippy::too_many_arguments)]
+    fn list_section(
+        &mut self,
+        ui: &mut Ui,
+        m: &Model,
+        title: Key,
+        devices: &[String],
+        selected: Option<usize>,
+        hit: fn(usize) -> Hit,
+        x: f32,
         mut y: f32,
         w: f32,
+        limit: usize,
     ) -> f32 {
         let t = &m.theme;
         ui.text(tr(m.lang, title), x, y, SECTION, t.text_dim);
@@ -1547,7 +1720,7 @@ impl Controls {
             return y + ROW_HEIGHT;
         }
 
-        for (i, name) in devices.iter().take(MAX_LISTED_DEVICES).enumerate() {
+        for (i, name) in devices.iter().take(limit).enumerate() {
             let row = Rect::new(x, y, w, ROW_HEIGHT);
             self.register(hit(i), row);
             let is_selected = selected == Some(i);
@@ -1707,6 +1880,16 @@ fn divider_at(ui: &mut Ui, theme: &Theme, x: f32, cy: f32) -> f32 {
     x + GAP * 2.0 + 1.0
 }
 
+/// Height of the source popover for `m`.
+fn sources_height(m: &Model) -> f32 {
+    let section = |n: usize, limit: usize| LABEL_HEIGHT + n.clamp(1, limit) as f32 * ROW_HEIGHT;
+    POPOVER_PAD * 2.0
+        + section(m.video_devices.len(), MAX_LISTED_DEVICES)
+        + section(m.sources.monitors.len(), MAX_LISTED_DEVICES)
+        + section(m.sources.windows.len(), MAX_LISTED_WINDOWS)
+        + SECTION_GAP * 2.0
+}
+
 /// Height of the settings popover for `m`.
 fn popover_height(m: &Model) -> f32 {
     let list_rows = |n: usize| n.clamp(1, MAX_LISTED_DEVICES) as f32 * ROW_HEIGHT;
@@ -1769,6 +1952,7 @@ mod tests {
             replay: ReplayView::off("Ctrl+Alt+S"),
             mic: MicView::off(),
             rec: RecView::idle(),
+            sources: SourcesView::default(),
         }
     }
 
@@ -2044,6 +2228,72 @@ mod tests {
         assert!(rig.controls.close_settings());
         rig.click_on(Hit::Settings);
         assert!(rig.controls.close_settings());
+    }
+
+    fn many_sources() -> SourcesView {
+        SourcesView {
+            monitors: vec![
+                "Screen 1 · 1920×1080 (primary)".into(),
+                "Screen 2 · 1920×1080".into(),
+            ],
+            windows: (0..12)
+                .map(|i| format!("Application window number {i}"))
+                .collect(),
+            current: CurrentSource::Capture,
+        }
+    }
+
+    #[test]
+    fn the_source_popover_emits_a_choice_for_each_kind_of_source() {
+        let mut rig = Rig::new(true);
+        rig.model.sources = many_sources();
+        rig.click_on(Hit::Sources);
+        assert!(rig.controls.sources_open());
+        rig.click_on(Hit::Video(0));
+        rig.click_on(Hit::SourceMonitor(1));
+        rig.click_on(Hit::SourceWindow(3));
+        assert_eq!(
+            rig.actions(),
+            vec![
+                Action::SelectVideo(0),
+                Action::SelectMonitor(1),
+                Action::SelectWindow(3),
+            ]
+        );
+        assert!(
+            rig.controls.sources_open(),
+            "choosing keeps the popover open"
+        );
+    }
+
+    #[test]
+    fn only_one_popover_is_open_at_a_time_including_sources() {
+        let mut rig = Rig::new(true);
+        rig.click_on(Hit::Settings);
+        rig.click_on(Hit::Sources);
+        assert!(rig.controls.sources_open() && !rig.controls.settings_open());
+        rig.click_on(Hit::Replay);
+        assert!(rig.controls.replay_open() && !rig.controls.sources_open());
+        rig.click_on(Hit::Sources);
+        assert!(rig.controls.sources_open() && !rig.controls.replay_open());
+        rig.click(40.0, 40.0);
+        assert!(!rig.controls.sources_open(), "a click outside closes it");
+    }
+
+    #[test]
+    fn the_source_popover_with_many_windows_fits_a_720p_window() {
+        for lang in [Lang::En, Lang::Es] {
+            let mut rig = Rig::new(true);
+            rig.model.lang = lang;
+            rig.model.sources = many_sources();
+            rig.model.sources.current = CurrentSource::Window(Some(2));
+            rig.frame(0.016); // lay out for the new language before aiming at a button
+            rig.click_on(Hit::Sources);
+            rig.frame(0.016);
+            let popover = rig.controls.rect_of(Hit::Popover);
+            assert!(popover.y >= 0.0, "{lang:?}: top at {}", popover.y);
+            assert!(popover.y + popover.h <= 720.0, "{lang:?}");
+        }
     }
 
     #[test]
