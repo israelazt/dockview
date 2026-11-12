@@ -141,7 +141,7 @@ Lo que se quiere: capturar **un monitor completo o una aplicación concreta**, c
 |---|---|---|
 | S-1 ✅ | Núcleo: listar monitores y ventanas; `ScreenCapture` (monitor o ventana → NV12 por GPU); captura de audio por loopback del sistema o de un proceso; herramienta `screen_record` | Grabar Edge y un monitor con audio; medir FPS, CPU y sincronía; ver que los colores son correctos |
 | S-2 ✅ | App: elegir la fuente (capturadora, monitor, ventana), enrutar el audio y excluir la ventana de Dockview | Con clics reales |
-| S-3 | Casos: ventana cerrada o minimizada, el programa se cierra, monitor que cambia, cursor | Pruebas |
+| S-3 ✅ | Casos: ventana cerrada o minimizada, el programa se cierra, monitor que cambia, cursor | Pruebas |
 | S-4 | Prueba con LoL (anti-trampas, FPS del juego, coste) | La haces tú |
 
 ### Resultados de S-1 (GTX 1660 Ti, dos monitores 1080p)
@@ -168,6 +168,20 @@ Los frames de pantalla pasan por el mismo `FrameSlot`, así que el visor, el rep
 - El replay, la grabación, el micrófono, las partes por cambio de resolución y el aviso de disco funcionan igual con cualquier fuente.
 - Verificado con la app real: `--window YouTube --record` capturó Edge (58 fps en el visor), grabó con el audio solo de Edge (RMS 0,11); con clics reales se pasó de la ventana a una cámara de video y la marca de selección se movió. 4 tests nuevos de los controles (acciones, un solo popover a la vez, cabe en 720p con muchas ventanas).
 - **Límites conocidos**: la lista de ventanas muestra solo las 8 más al frente; un juego en **pantalla completa exclusiva** puede no capturarse (usar modo ventana sin bordes); no se ha probado con LoL ni con su anti-trampas (S-4).
+
+### Resultados de S-3 (sin cambios de código: todo se comportó bien)
+
+| Caso | Cómo se probó | Resultado |
+|---|---|---|
+| **Cerrar Dockview mientras graba** | `--test-pattern --record`, cierre normal de la ventana (`CloseMainWindow`, como la X) a los 9 s | La app salió en **0,22 s** y el MP4 es legible (191 frames, 6,35 s). El `Drop` del grabador cierra el archivo |
+| **La ventana capturada se cierra durante una grabación** | `--window` sobre un formulario que se cierra solo, con `--record` | Sale el aviso, la app vuelve a la capturadora y **la grabación sigue** en el mismo archivo: 28 s, audio y video terminan juntos (1497 frames) |
+| **La ventana capturada se minimiza durante una grabación** | `screen_record`, minimizada 6 s a mitad | Archivo continuo de 24,96 s: audio y video terminan con 20 ms de diferencia; al restaurar, la captura se reanuda sola. Mientras está minimizada el video queda en el último frame (Windows no entrega frames) |
+| **Monitor o ventana que cambia de tamaño** | Revisión del código (`screen.rs`): al cambiar `ContentSize` se recrean los buffers y la imagen se reescala al tamaño fijo del video | No se provocó un cambio real de resolución en el monitor del autor |
+| **Cursor** | `ScreenOptions::cursor` (activado por defecto) | Sigue visible en la captura; no hay interruptor en la interfaz |
+
+Detalles a tener en cuenta:
+- La captura de pantalla **solo entrega frames cuando algo cambia**, así que con una ventana quieta el recuento de frames es bajo (es normal; el archivo mantiene la duración correcta).
+- Al perderse la fuente en plena grabación, el video pasa a la capturadora sin cortar el archivo; si no hubiera capturadora o señal, actúa el aviso de «sin señal» de G-3.
 
 ## Tooltips (2026-11-12)
 
