@@ -2,6 +2,8 @@
 //! Platform-independent logic lives here so it can be unit tested.
 
 pub mod device;
+#[cfg(windows)]
+pub mod mf;
 pub mod settings;
 pub mod stream;
 
