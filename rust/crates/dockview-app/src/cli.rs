@@ -4,13 +4,50 @@
 //! dockview.exe [--test-pattern] [--ui-preview] [--theme auto|dark|light]
 //!              [--lang auto|en|es] [--scale N] [--open-settings] [--stats]
 //!              [--log-stats FILE.csv] [--video NAME]
-//!              [--screenshot FILE.png]
+//!              [--screenshot FILE.png] [--pip SOURCE] [--pip-size N]
 //! ```
+//!
+//! `--pip` draws a second source in the bottom-right corner of the picture
+//! (a scene of two layers): `video:NAME`, `monitor:N` or `window:TEXT`.
 
 use std::path::PathBuf;
 
 use crate::i18n::LangMode;
 use crate::theme::ThemeMode;
+
+/// A source to draw in the corner of the picture.
+#[derive(Debug, Clone, PartialEq)]
+pub enum PipSpec {
+    /// The capture device whose name contains this text.
+    Video(String),
+    /// The monitor at this position (0 is the primary).
+    Monitor(usize),
+    /// The first window whose title contains this text.
+    Window(String),
+}
+
+impl PipSpec {
+    /// Parses `kind:value`.
+    pub fn parse(text: &str) -> Result<Self, String> {
+        let (kind, value) = text
+            .split_once(':')
+            .ok_or_else(|| format!("--pip needs kind:value, e.g. monitor:1 (got '{text}')"))?;
+        if value.is_empty() {
+            return Err(format!("--pip {kind}: needs a value"));
+        }
+        match kind {
+            "video" => Ok(Self::Video(value.to_owned())),
+            "window" => Ok(Self::Window(value.to_owned())),
+            "monitor" => value
+                .parse()
+                .map(Self::Monitor)
+                .map_err(|_| format!("--pip monitor: '{value}' is not a number")),
+            other => Err(format!(
+                "--pip: unknown kind '{other}' (use video, monitor or window)"
+            )),
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Cli {
@@ -48,6 +85,10 @@ pub struct Cli {
     pub video: Option<String>,
     /// Render a few frames, save the window as a PNG and exit.
     pub screenshot: Option<PathBuf>,
+    /// A second source drawn in the bottom-right corner (a two-layer scene).
+    pub pip: Option<PipSpec>,
+    /// Width of that corner picture as a fraction of the whole (default 0.28).
+    pub pip_size: Option<f32>,
 }
 
 impl Cli {
@@ -120,6 +161,18 @@ impl Cli {
                 "--log-stats" => cli.log_stats = Some(PathBuf::from(value("--log-stats")?)),
                 "--demo-findings" => cli.demo_findings = true,
                 "--screenshot" => cli.screenshot = Some(PathBuf::from(value("--screenshot")?)),
+                "--pip" => cli.pip = Some(PipSpec::parse(&value("--pip")?)?),
+                "--pip-size" => {
+                    let text = value("--pip-size")?;
+                    cli.pip_size = Some(
+                        text.parse::<f32>()
+                            .ok()
+                            .filter(|v| (0.1..=0.6).contains(v))
+                            .ok_or_else(|| {
+                                format!("--pip-size needs a number from 0.1 to 0.6, got '{text}'")
+                            })?,
+                    );
+                }
                 other => return Err(format!("unknown option '{other}'")),
             }
         }
@@ -133,6 +186,35 @@ mod tests {
 
     fn parse(args: &[&str]) -> Result<Cli, String> {
         Cli::parse(args.iter().map(|s| s.to_string()))
+    }
+
+    #[test]
+    fn pip_takes_a_kind_and_a_value() {
+        assert_eq!(
+            parse(&["--pip", "video:C7"]).unwrap().pip,
+            Some(PipSpec::Video("C7".into()))
+        );
+        assert_eq!(
+            parse(&["--pip=monitor:1"]).unwrap().pip,
+            Some(PipSpec::Monitor(1))
+        );
+        assert_eq!(
+            parse(&["--pip", "window:Mi juego"]).unwrap().pip,
+            Some(PipSpec::Window("Mi juego".into()))
+        );
+        assert!(parse(&["--pip", "monitor"]).is_err());
+        assert!(parse(&["--pip", "monitor:x"]).is_err());
+        assert!(parse(&["--pip", "cosa:1"]).is_err());
+        assert!(parse(&["--pip", "video:"]).is_err());
+        assert!(parse(&["--pip"]).is_err());
+    }
+
+    #[test]
+    fn pip_size_must_be_a_sensible_fraction() {
+        assert_eq!(parse(&["--pip-size", "0.3"]).unwrap().pip_size, Some(0.3));
+        assert!(parse(&["--pip-size", "0.05"]).is_err());
+        assert!(parse(&["--pip-size", "2"]).is_err());
+        assert!(parse(&["--pip-size", "big"]).is_err());
     }
 
     #[test]
