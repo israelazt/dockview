@@ -168,3 +168,14 @@ Los frames de pantalla pasan por el mismo `FrameSlot`, así que el visor, el rep
 - El replay, la grabación, el micrófono, las partes por cambio de resolución y el aviso de disco funcionan igual con cualquier fuente.
 - Verificado con la app real: `--window YouTube --record` capturó Edge (58 fps en el visor), grabó con el audio solo de Edge (RMS 0,11); con clics reales se pasó de la ventana a una cámara de video y la marca de selección se movió. 4 tests nuevos de los controles (acciones, un solo popover a la vez, cabe en 720p con muchas ventanas).
 - **Límites conocidos**: la lista de ventanas muestra solo las 8 más al frente; un juego en **pantalla completa exclusiva** puede no capturarse (usar modo ventana sin bordes); no se ha probado con LoL ni con su anti-trampas (S-4).
+
+## Tooltips (2026-11-12)
+
+Cada control explica qué hace al dejar el ratón encima medio segundo (aparece con un fundido corto; desaparece al pulsar o al moverse a otro control).
+
+- **Botones de la píldora**: fuente, repetición instantánea, guardar clip (con los segundos y el atajo, o «actívala para guardar clips» si está apagada), grabar (cambia según el estado: empezar / cancelar / detener, con Ctrl+Alt+R), ajustes, pantalla completa (con F o Esc), volumen y los dos botones de sincronía de audio (adelantar o retrasar el sonido, con las flechas).
+- **Dentro de los popovers**: interruptor del replay, menos o más tiempo, micrófono, abrir o cambiar la carpeta, calidad Normal o Alta, modo de video Auto o Comprimido, estadísticas y los tres modos de imagen. Salen **a la izquierda del popover** para no tapar las filas vecinas; los de la píldora salen encima del botón. Siempre dentro de la ventana.
+- El botón que acaba de abrir un popover no muestra tooltip.
+- Las filas de dispositivos, monitores y ventanas no llevan tooltip: su etiqueta ya lo dice todo.
+- Textos en español e inglés (27 nuevos), probados para que no quede ningún `{marcador}` sin rellenar.
+- Corregido de paso: el texto del micrófono en español se salía del popover; ahora es más corto.

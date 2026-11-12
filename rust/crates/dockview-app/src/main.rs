@@ -789,6 +789,7 @@ impl App {
     fn replay_view(&self) -> ui::controls::ReplayView {
         use ui::controls::{ReplayState, ReplayView};
         let mut view = ReplayView::off(hotkey::LABEL);
+        view.record_hotkey = hotkey::RECORD_LABEL.to_owned();
         view.keep_seconds = self.settings.replay_seconds;
         view.bitrate_mbps = self.settings.replay_bitrate_mbps;
         view.memory_bytes = settings::replay_memory_bytes(

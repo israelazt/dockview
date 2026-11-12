@@ -43,6 +43,11 @@ const PULSE_SECS: f32 = 1.2;
 const REPLAY_POPOVER_WIDTH: f32 = 324.0;
 /// Most devices listed per kind in the popover.
 const MAX_LISTED_DEVICES: usize = 5;
+/// How long the pointer rests on a control before its tooltip appears.
+const TOOLTIP_DELAY_SECS: f32 = 0.5;
+/// Fade-in time of a tooltip.
+const TOOLTIP_FADE_SECS: f32 = 0.12;
+const TOOLTIP_MAX_WIDTH: f32 = 280.0;
 /// Windows shown in the source popover (the frontmost ones).
 const MAX_LISTED_WINDOWS: usize = 8;
 
@@ -213,7 +218,10 @@ pub struct ReplayView {
     /// Video bitrate of the buffer and the recordings, in Mbps.
     pub bitrate_mbps: u32,
     pub folder: String,
+    /// The hotkey that saves a clip.
     pub hotkey: String,
+    /// The hotkey that starts and stops a recording.
+    pub record_hotkey: String,
 }
 
 impl ReplayView {
@@ -230,6 +238,7 @@ impl ReplayView {
             bitrate_mbps: 40,
             folder: String::new(),
             hotkey: hotkey.to_owned(),
+            record_hotkey: String::new(),
         }
     }
 
@@ -409,6 +418,9 @@ pub struct Controls {
     popover_t: f32,
     /// Animated position of each segmented control's indicator.
     segments: Option<[f32; 4]>,
+    /// The control the pointer is resting on, and for how long (seconds).
+    tip_hit: Option<Hit>,
+    tip_time: f32,
     /// Animated position of the quality selector in the replay popover.
     quality_slide: Option<f32>,
 }
@@ -438,6 +450,8 @@ impl Controls {
             amounts: HashMap::new(),
             popover_t: 0.0,
             segments: None,
+            tip_hit: None,
+            tip_time: 0.0,
             quality_slide: None,
         }
     }
@@ -529,6 +543,7 @@ impl Controls {
         }
 
         self.hovered = self.hit_at(pointer.pos);
+        self.update_tooltip_timer(pointer);
         self.interact(model, pointer);
         // After input, so a click that opens the popover starts animating at once.
         self.update_popover_progress();
@@ -547,8 +562,97 @@ impl Controls {
             }
             ui.set_offset(0.0, 0.0);
         }
+        ui.set_opacity(self.visibility);
+        self.draw_tooltip(ui, model);
         std::mem::swap(&mut self.hits, &mut self.next_hits);
         ui.set_opacity(1.0);
+    }
+
+    // --------------------------------------------------------------- tooltips
+
+    /// Counts how long the pointer has rested on the same control. Pressing
+    /// (or dragging) hides the tooltip.
+    fn update_tooltip_timer(&mut self, pointer: &Pointer) {
+        let hovered = self.hovered.filter(|h| h.is_widget());
+        if hovered != self.tip_hit || pointer.down {
+            self.tip_hit = hovered;
+            self.tip_time = 0.0;
+        } else {
+            self.tip_time += self.dt;
+        }
+    }
+
+    /// Draws the tooltip of the control under the pointer, once it has rested
+    /// there long enough.
+    fn draw_tooltip(&mut self, ui: &mut Ui, m: &Model) {
+        let Some(hit) = self.tip_hit else {
+            return;
+        };
+        if self.tip_time < TOOLTIP_DELAY_SECS {
+            return;
+        }
+        // The button that opened a popover needs no explanation any more.
+        let opened_it = match hit {
+            Hit::Replay => self.replay_open,
+            Hit::Settings => self.settings_open,
+            Hit::Sources => self.sources_open,
+            _ => false,
+        };
+        if opened_it {
+            return;
+        }
+        let Some(text) = tooltip_for(hit, m) else {
+            return;
+        };
+        let Some(anchor) = self
+            .next_hits
+            .iter()
+            .rev()
+            .find(|(h, _)| *h == hit)
+            .map(|(_, r)| *r)
+        else {
+            return;
+        };
+        let t = &m.theme;
+        let style = TextStyle::new(12.5, Weight::Medium);
+        let lines = wrap_text(ui, &text, style, TOOLTIP_MAX_WIDTH);
+        let text_w = lines
+            .iter()
+            .map(|l| ui.measure(l, style).0)
+            .fold(0.0f32, f32::max);
+        let line_h = 17.0;
+        let (w, h) = (text_w + 20.0, lines.len() as f32 * line_h + 14.0);
+        let (screen_w, _) = ui.logical_size();
+
+        // Items inside a popover get their tooltip to the left of it (so it
+        // does not cover the neighbouring rows); the pill's buttons get it above.
+        let popover = self
+            .next_hits
+            .iter()
+            .rev()
+            .find(|(h, _)| *h == Hit::Popover)
+            .map(|(_, r)| *r);
+        let beside = popover.filter(|p| hit.in_popover() && p.x - w - 10.0 >= 8.0);
+        let (x, y) = match beside {
+            Some(p) => (p.x - w - 10.0, anchor.y + anchor.h / 2.0 - h / 2.0),
+            None => (anchor.x + anchor.w / 2.0 - w / 2.0, anchor.y - h - 8.0),
+        };
+        let x = x.clamp(8.0, (screen_w - w - 8.0).max(8.0)).round();
+        let y = y.max(8.0).round();
+
+        let fade = if self.animations {
+            ((self.tip_time - TOOLTIP_DELAY_SECS) / TOOLTIP_FADE_SECS).clamp(0.0, 1.0)
+        } else {
+            1.0
+        };
+        let rect = Rect::new(x, y, w.round(), h);
+        ui.set_opacity(self.visibility * fade);
+        ui.shadow(rect, 10.0, 14.0, t.shadow);
+        ui.panel(rect, 10.0, t.surface, t.border, 1.0);
+        for (i, line) in lines.iter().enumerate() {
+            ui.text(line, x + 10.0, y + 7.0 + i as f32 * line_h, style, t.text);
+        }
+        ui.set_opacity(self.visibility);
     }
 
     // ------------------------------------------------------------ visibility
@@ -1880,6 +1984,53 @@ fn divider_at(ui: &mut Ui, theme: &Theme, x: f32, cy: f32) -> f32 {
     x + GAP * 2.0 + 1.0
 }
 
+/// What a control does, for its tooltip. `None` for backgrounds and for rows
+/// whose label already says everything (a device name, a window title).
+fn tooltip_for(hit: Hit, m: &Model) -> Option<String> {
+    let r = &m.replay;
+    let key = match hit {
+        Hit::Sources => Key::TipSources,
+        Hit::Replay => Key::TipReplay,
+        Hit::ReplaySave | Hit::ReplayPopSave if r.is_on() => Key::TipSave,
+        Hit::ReplaySave | Hit::ReplayPopSave => Key::TipSaveOff,
+        Hit::Record => match m.rec.state {
+            RecState::Idle => Key::TipRecord,
+            RecState::Starting => Key::TipRecordCancel,
+            RecState::Recording => Key::TipRecordStop,
+        },
+        Hit::Settings => Key::TipSettings,
+        Hit::Fullscreen if m.fullscreen => Key::TipExitFullscreen,
+        Hit::Fullscreen => Key::TipFullscreen,
+        Hit::Volume => Key::TipVolume,
+        Hit::SyncMinus => Key::TipSyncEarlier,
+        Hit::SyncPlus => Key::TipSyncLater,
+        Hit::ReplayToggle => Key::TipReplayToggle,
+        Hit::ReplayShorter => Key::TipReplayShorter,
+        Hit::ReplayLonger => Key::TipReplayLonger,
+        Hit::MicToggle => Key::TipMicToggle,
+        Hit::ReplayFolder => Key::TipFolderOpen,
+        Hit::ReplayChangeFolder => Key::TipFolderChange,
+        Hit::Quality(0) => Key::TipQualityNormal,
+        Hit::Quality(_) => Key::TipQualityHigh,
+        Hit::VideoMode(0) => Key::TipVideoAuto,
+        Hit::VideoMode(_) => Key::TipVideoCompressed,
+        Hit::Stats => Key::TipStats,
+        Hit::Preset(0) => Key::TipPresetPerformance,
+        Hit::Preset(1) => Key::TipPresetBalanced,
+        Hit::Preset(_) => Key::TipPresetQuality,
+        _ => return None,
+    };
+    let hotkey = match hit {
+        Hit::Record => &r.record_hotkey,
+        _ => &r.hotkey,
+    };
+    Some(
+        tr(m.lang, key)
+            .replace("{seconds}", &crate::i18n::duration_label(r.keep_seconds))
+            .replace("{hotkey}", hotkey),
+    )
+}
+
 /// Height of the source popover for `m`.
 fn sources_height(m: &Model) -> f32 {
     let section = |n: usize, limit: usize| LABEL_HEIGHT + n.clamp(1, limit) as f32 * ROW_HEIGHT;
@@ -2240,6 +2391,141 @@ mod tests {
                 .map(|i| format!("Application window number {i}"))
                 .collect(),
             current: CurrentSource::Capture,
+        }
+    }
+
+    #[test]
+    fn every_control_has_a_tooltip_in_both_languages_with_nothing_left_to_fill_in() {
+        let hits = [
+            Hit::Sources,
+            Hit::Replay,
+            Hit::ReplaySave,
+            Hit::ReplayPopSave,
+            Hit::Record,
+            Hit::Settings,
+            Hit::Fullscreen,
+            Hit::Volume,
+            Hit::SyncMinus,
+            Hit::SyncPlus,
+            Hit::ReplayToggle,
+            Hit::ReplayShorter,
+            Hit::ReplayLonger,
+            Hit::MicToggle,
+            Hit::ReplayFolder,
+            Hit::ReplayChangeFolder,
+            Hit::Quality(0),
+            Hit::Quality(1),
+            Hit::VideoMode(0),
+            Hit::VideoMode(1),
+            Hit::Stats,
+            Hit::Preset(0),
+            Hit::Preset(1),
+            Hit::Preset(2),
+        ];
+        for lang in [Lang::En, Lang::Es] {
+            let mut m = model();
+            m.lang = lang;
+            m.replay = ReplayView {
+                record_hotkey: "Ctrl+Alt+R".into(),
+                ..ReplayView::off("Ctrl+Alt+S")
+            };
+            for hit in hits {
+                let text = tooltip_for(hit, &m).unwrap_or_else(|| panic!("{hit:?} has no tooltip"));
+                assert!(
+                    !text.trim().is_empty() && !text.contains(['{', '}']),
+                    "{lang:?} {hit:?}: {text}"
+                );
+            }
+        }
+        // Backgrounds and plain list rows say nothing.
+        let m = model();
+        assert_eq!(tooltip_for(Hit::Pill, &m), None);
+        assert_eq!(tooltip_for(Hit::Popover, &m), None);
+        assert_eq!(tooltip_for(Hit::Video(0), &m), None);
+    }
+
+    #[test]
+    fn tooltips_name_the_hotkey_and_follow_the_state() {
+        let mut m = model();
+        m.replay = ReplayView {
+            state: ReplayState::Recording,
+            keep_seconds: 30,
+            record_hotkey: "Ctrl+Alt+R".into(),
+            ..ReplayView::off("Ctrl+Alt+S")
+        };
+        let save = tooltip_for(Hit::ReplaySave, &m).unwrap();
+        assert!(
+            save.contains("30 s") && save.contains("Ctrl+Alt+S"),
+            "{save}"
+        );
+        assert!(tooltip_for(Hit::Record, &m)
+            .unwrap()
+            .contains("Start recording (Ctrl+Alt+R)"));
+        m.rec.state = RecState::Recording;
+        assert!(tooltip_for(Hit::Record, &m)
+            .unwrap()
+            .contains("Stop recording"));
+        m.fullscreen = true;
+        assert!(tooltip_for(Hit::Fullscreen, &m)
+            .unwrap()
+            .contains("Leave fullscreen"));
+        m.replay.state = ReplayState::Off;
+        assert!(tooltip_for(Hit::ReplaySave, &m).unwrap().contains("off"));
+    }
+
+    #[test]
+    fn a_tooltip_appears_after_resting_on_a_button_and_not_before() {
+        let mut rig = Rig::new(true);
+        let (x, y) = rig.controls.rect_of(Hit::Fullscreen).center();
+        rig.move_to(x, y);
+        let before = rig.ui.vertices().len();
+        rig.frame(0.2);
+        assert_eq!(rig.ui.vertices().len(), before, "too early for a tooltip");
+        rig.frame(0.4); // 0.6 s resting
+        rig.frame(0.2);
+        assert!(rig.ui.vertices().len() > before, "the tooltip is drawn");
+    }
+
+    #[test]
+    fn pressing_hides_the_tooltip_and_moving_away_resets_the_wait() {
+        let mut rig = Rig::new(true);
+        let (x, y) = rig.controls.rect_of(Hit::Settings).center();
+        rig.move_to(x, y);
+        rig.frame(0.6);
+        rig.frame(0.1);
+        let shown = rig.ui.vertices().len();
+        rig.pointer.press();
+        rig.frame(0.1);
+        assert!(rig.ui.vertices().len() < shown, "no tooltip while pressed");
+        rig.pointer.release();
+        // Another button: the wait starts again.
+        let (x2, y2) = rig.controls.rect_of(Hit::Fullscreen).center();
+        rig.move_to(x2, y2);
+        rig.frame(0.1);
+        let early = rig.ui.vertices().len();
+        rig.frame(0.5);
+        rig.frame(0.1);
+        assert!(rig.ui.vertices().len() > early);
+    }
+
+    #[test]
+    fn a_tooltip_stays_inside_the_window_even_on_the_last_button() {
+        for lang in [Lang::En, Lang::Es] {
+            let mut rig = Rig::new(true);
+            rig.model.lang = lang;
+            rig.frame(0.016);
+            let button = rig.controls.rect_of(Hit::Fullscreen);
+            let (x, y) = button.center();
+            rig.move_to(x, y);
+            rig.frame(0.7);
+            rig.frame(0.2);
+            let max_x = rig
+                .ui
+                .vertices()
+                .iter()
+                .map(|v| v.pos[0])
+                .fold(0.0f32, f32::max);
+            assert!(max_x <= 1280.0 + 2.0, "{lang:?}: drawn up to x={max_x}");
         }
     }
 
