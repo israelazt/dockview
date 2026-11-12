@@ -1,7 +1,7 @@
 //! Captures from the first video device for a few seconds and reports fps,
 //! dropped frames and timestamp behaviour.
 //!
-//! Run with: `cargo run -p dockview-core --example capture_probe [seconds] [mode_index]`
+//! Run with: `cargo run -p dockview-core --example capture_probe [seconds] [mode_index] [name_filter]`
 
 use std::sync::Arc;
 use std::thread;
@@ -23,7 +23,13 @@ fn main() -> windows::core::Result<()> {
         let session = MfSession::start()?;
         enumerate_video_devices(&session)?
     };
-    let Some(device) = devices.first() else {
+    let filter = std::env::args().nth(3).map(|f| f.to_lowercase());
+    let device = devices.iter().find(|d| {
+        filter
+            .as_deref()
+            .is_none_or(|f| d.friendly_name.to_lowercase().contains(f))
+    });
+    let Some(device) = device else {
         println!("No video capture devices found.");
         return Ok(());
     };
