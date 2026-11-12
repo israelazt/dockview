@@ -16,9 +16,9 @@ use windows::Win32::Media::MediaFoundation::{
     MFAudioFormat_AAC, MFAudioFormat_PCM, MFCreateAttributes, MFCreateMediaType,
     MFCreateMemoryBuffer, MFCreateSample, MFCreateSinkWriterFromURL, MFMediaType_Audio,
     MFMediaType_Video, MFSampleExtension_CleanPoint, MFTEnumEx, MFT_FRIENDLY_NAME_Attribute,
-    MFVideoFormat_H264, MFVideoFormat_NV12, MFVideoInterlace_Progressive,
-    MFT_CATEGORY_VIDEO_ENCODER, MFT_ENUM_FLAG_HARDWARE, MFT_ENUM_FLAG_SORTANDFILTER,
-    MFT_MESSAGE_COMMAND_DRAIN, MFT_MESSAGE_NOTIFY_BEGIN_STREAMING,
+    MFTranscodeContainerType_FMPEG4, MFVideoFormat_H264, MFVideoFormat_NV12,
+    MFVideoInterlace_Progressive, MFT_CATEGORY_VIDEO_ENCODER, MFT_ENUM_FLAG_HARDWARE,
+    MFT_ENUM_FLAG_SORTANDFILTER, MFT_MESSAGE_COMMAND_DRAIN, MFT_MESSAGE_NOTIFY_BEGIN_STREAMING,
     MFT_MESSAGE_NOTIFY_END_STREAMING, MFT_MESSAGE_NOTIFY_START_OF_STREAM, MFT_OUTPUT_DATA_BUFFER,
     MFT_OUTPUT_STREAM_PROVIDES_SAMPLES, MFT_REGISTER_TYPE_INFO, MF_EVENT_FLAG_NO_WAIT,
     MF_E_NO_EVENTS_AVAILABLE, MF_E_TRANSFORM_NEED_MORE_INPUT, MF_LOW_LATENCY,
@@ -28,7 +28,7 @@ use windows::Win32::Media::MediaFoundation::{
     MF_MT_AVG_BITRATE, MF_MT_DEFAULT_STRIDE, MF_MT_FRAME_RATE, MF_MT_FRAME_SIZE,
     MF_MT_INTERLACE_MODE, MF_MT_MAJOR_TYPE, MF_MT_MPEG2_PROFILE, MF_MT_MPEG_SEQUENCE_HEADER,
     MF_MT_PIXEL_ASPECT_RATIO, MF_MT_SUBTYPE, MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS,
-    MF_SINK_WRITER_DISABLE_THROTTLING, MF_TRANSFORM_ASYNC_UNLOCK,
+    MF_SINK_WRITER_DISABLE_THROTTLING, MF_TRANSCODE_CONTAINERTYPE, MF_TRANSFORM_ASYNC_UNLOCK,
 };
 use windows::Win32::System::Com::CoTaskMemFree;
 use windows::Win32::System::Variant::{
@@ -494,12 +494,15 @@ pub struct Mp4Remuxer {
 impl Mp4Remuxer {
     /// `sequence_header` is the encoder's SPS/PPS blob, if it exposes one.
     /// `audio_tracks` is how many AAC tracks the file gets (0 for none).
+    /// `fragmented` writes a fragmented MP4, which stays valid if the program
+    /// stops halfway (used for long recordings).
     pub fn create(
         _session: &MfSession,
         path: &Path,
         settings: &EncodeSettings,
         sequence_header: Option<&[u8]>,
         audio_tracks: usize,
+        fragmented: bool,
     ) -> Result<Self> {
         let EncodeSettings {
             width,
@@ -511,9 +514,15 @@ impl Mp4Remuxer {
         // output type, which makes it pass the samples through untouched.
         unsafe {
             let mut attrs: Option<IMFAttributes> = None;
-            MFCreateAttributes(&mut attrs, 1)?;
+            MFCreateAttributes(&mut attrs, 2)?;
             let attrs = attrs.ok_or_else(|| Error::new(E_FAIL, "no attribute store"))?;
             attrs.SetUINT32(&MF_SINK_WRITER_DISABLE_THROTTLING, 1)?;
+            if fragmented {
+                attrs.SetGUID(
+                    &MF_TRANSCODE_CONTAINERTYPE,
+                    &MFTranscodeContainerType_FMPEG4,
+                )?;
+            }
             let url = HSTRING::from(path.as_os_str());
             let writer = MFCreateSinkWriterFromURL(&url, None, &attrs)?;
 

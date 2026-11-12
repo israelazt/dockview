@@ -10,7 +10,7 @@ Objetivo: que Dockview sea la herramienta única para grabar y transmitir (LoL y
 | 2 | **Spike** (hecho salvo la prueba con LoL): captura de pantalla/ventana + audio del sistema o del proceso, sin interfaz | Se conoce el coste en FPS, CPU y la sincronía con LoL abierto |
 | 2b | Spike de la Canon M50 Mark II como webcam | Se sabe si aparece en Media Foundation, y con qué resolución, FPS y retraso |
 | 3 | Fuentes y compositor | Dockview graba la pantalla con el replay actual |
-| 4 | Grabación normal (inicio/fin) con codificador por hardware | Una partida entera sin perder FPS |
+| 4 | **Grabación normal** (inicio/fin): ver la sección de abajo | Una partida entera sin perder FPS |
 | 5 | Editor rápido (recorte, exportación horizontal y vertical) | Un clip listo para redes en menos de un minuto |
 | 6 | Streaming (RTMP) y escenas | Transmitir con una escena de dos capas |
 
@@ -65,3 +65,25 @@ screen_probe.exe --window "League of Legends" --audio process --min-interval-ms 
 ```
 
 Si LoL corre en pantalla completa exclusiva y la ventana no se captura, repetir sin `--window` (captura del monitor) y con `--audio system`.
+
+## Grabación normal (paso 4) — plan
+
+Caso de uso: alguien se sienta a jugar, graba la partida (para sacar un clip o hacer una guía) y sube el MP4 a YouTube. Atajo **Ctrl+Alt+R**; sin pre-roll en la primera versión.
+
+Decisiones: se codifica **una sola vez** (la grabación reutiliza los frames comprimidos del replay); el archivo es un **MP4 fragmentado**, que sigue siendo válido si el programa se cierra mal; el audio lleva siempre **tres pistas** (mezcla, juego, micrófono) para que encender el micrófono a mitad de una guía no se pierda; la calidad se ofrece como «Normal» y «Alta», sin hablar de bitrates; funciona con cualquier fuente que alimente al recorder (capturadora hoy, pantalla cuando llegue el paso 3).
+
+| Fase | Qué | Estado |
+|---|---|---|
+| G-1 | Escritor de archivo en el núcleo: empieza en un fotograma clave, video y tres pistas en directo | ✅ |
+| G-2 | Botón, atajo Ctrl+Alt+R, cronómetro, punto rojo y avisos | pendiente |
+| G-3 | Casos incómodos: poco espacio en disco, capturadora desconectada, cambio de resolución (hoy cierra el archivo; después abrirá una parte 2), cerrar la app grabando | pendiente |
+| G-4 | Ajuste de calidad, carpeta y acceso a la última grabación | pendiente |
+| G-5 | Prueba de 1 hora con la capturadora: CPU, GPU, RAM, deriva de audio y tamaño | pendiente |
+
+### Resultados de G-1 (UGREEN 25173, 1080p60)
+
+- Grabación de 39 s: **2354 frames, 60,0 fps exactos**, audio y video terminan con 20 ms de diferencia, 126 fragmentos, tres pistas de audio.
+- CPU del proceso grabando (captura + codificación + audio + micrófono + archivo): **~25 % de un núcleo**.
+- **Corte forzado** (proceso matado a los ~14 s): el archivo conserva **12,07 s de video y las tres pistas de audio completas** hasta el último fragmento. Windows lo abre como video 1920×1080 pero no sabe su duración (la cabecera de duración se escribe al cerrar); los reproductores lo reproducen igualmente.
+- El bitrate real depende de la imagen: con una pantalla casi estática salió ~1 Mbps aunque el objetivo era 20 Mbps. Con movimiento real subirá; hay que medirlo en G-5 con juego.
+- Herramientas: `record_live` (graba N segundos de la capturadora) y `file_check` (cuenta muestras por pista, sin decodificar).

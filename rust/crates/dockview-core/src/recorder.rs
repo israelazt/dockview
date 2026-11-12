@@ -5,6 +5,7 @@
 //! a window out of the ring and writes it to an MP4 *without re-encoding*, on
 //! its own short-lived thread so the live view is never held up.
 
+use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -15,6 +16,7 @@ use crate::encode::{sequence_header, EncodeSettings, EncodedFrame, H264Encoder, 
 use crate::frame::{Frame, FrameSlot, FrameTap, PixelFormat};
 use crate::mf::MfSession;
 use crate::pcm::{frames_to_ticks, AudioTap, PcmRing};
+use crate::recording::{audio_track_count, ActiveRecording, RecordingInfo, RecordingState};
 use crate::replay::ReplayRing;
 
 /// Frames the tap may hold before it starts dropping (about 130 ms at 60 fps).
@@ -58,7 +60,21 @@ pub enum RecorderStatus {
     Failed(String),
 }
 
+/// A request for the recording, picked up by the recorder thread.
+enum RecCommand {
+    Start(PathBuf),
+    Stop,
+}
+
 struct Shared {
+    /// Requests in order, so a quick start-then-stop is not lost.
+    rec_commands: Mutex<VecDeque<RecCommand>>,
+    rec_state: Mutex<RecordingState>,
+    /// Footage written to the recording, as `f64` bits.
+    rec_seconds: AtomicU64,
+    rec_path: Mutex<Option<PathBuf>>,
+    /// Outcome of the last recording, until the interface collects it.
+    rec_result: Mutex<Option<Result<SavedClip, String>>>,
     /// The zero of the shared timeline: video and audio are both stamped
     /// relative to this instant.
     epoch: Instant,
@@ -78,6 +94,11 @@ struct Shared {
 impl Default for Shared {
     fn default() -> Self {
         Self {
+            rec_commands: Mutex::new(VecDeque::new()),
+            rec_state: Mutex::new(RecordingState::Idle),
+            rec_seconds: AtomicU64::new(0),
+            rec_path: Mutex::new(None),
+            rec_result: Mutex::new(None),
             epoch: Instant::now(),
             pcm: Mutex::new(PcmRing::new(0.0)),
             mic_pcm: Mutex::new(PcmRing::new(0.0)),
@@ -280,6 +301,76 @@ impl ReplayRecorder {
         }
     }
 
+    /// Starts recording the whole session to `path` (a fragmented MP4). The
+    /// file begins at the next keyframe, within about a second.
+    pub fn start_recording(&self, path: PathBuf) -> Result<(), String> {
+        if self.status() != RecorderStatus::Recording {
+            return Err("the recorder is not running yet".into());
+        }
+        let mut state = self
+            .shared
+            .rec_state
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        if *state != RecordingState::Idle {
+            return Err("already recording".into());
+        }
+        *state = RecordingState::Starting;
+        self.shared
+            .rec_result
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .take();
+        self.shared
+            .rec_commands
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .push_back(RecCommand::Start(path));
+        Ok(())
+    }
+
+    /// Ends the recording; the result arrives through
+    /// [`ReplayRecorder::take_recording_result`].
+    pub fn stop_recording(&self) {
+        self.shared
+            .rec_commands
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .push_back(RecCommand::Stop);
+    }
+
+    pub fn recording(&self) -> RecordingInfo {
+        let state = *self
+            .shared
+            .rec_state
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let bytes = self
+            .shared
+            .rec_path
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .as_ref()
+            .filter(|_| state == RecordingState::Recording)
+            .and_then(|p| std::fs::metadata(p).ok())
+            .map_or(0, |m| m.len());
+        RecordingInfo {
+            state,
+            seconds: f64::from_bits(self.shared.rec_seconds.load(Ordering::Relaxed)),
+            bytes,
+        }
+    }
+
+    /// The outcome of a recording that has ended, once (whether you stopped it
+    /// or it ended by itself).
+    pub fn take_recording_result(&self) -> Option<Result<SavedClip, String>> {
+        self.shared
+            .rec_result
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .take()
+    }
+
     fn with_ring<T>(&self, f: impl FnOnce(&ReplayRing) -> T) -> Option<T> {
         self.shared
             .ring
@@ -395,7 +486,7 @@ fn write_clip(
         std::fs::create_dir_all(dir).map_err(|e| format!("could not create the folder: {e}"))?;
     }
     let session = MfSession::start().map_err(|e| e.message())?;
-    let mut remux = Mp4Remuxer::create(&session, path, &settings, header, tracks.len())
+    let mut remux = Mp4Remuxer::create(&session, path, &settings, header, tracks.len(), false)
         .map_err(|e| e.message())?;
 
     // Interleave audio and video by time so the MP4 is written in order.
@@ -451,9 +542,12 @@ fn run(
     };
     let mut encoder: Option<(H264Encoder, EncodeSettings)> = None;
     let mut scratch: Vec<u8> = Vec::new();
+    let mut rec = RecCtx::default();
 
     while !stop.load(Ordering::Relaxed) {
         drain_audio(audio, mic, shared);
+        rec_commands(&mut rec, shared);
+        rec_pump(&mut rec, shared);
         let Some(frame) = tap.take(POLL) else {
             continue;
         };
@@ -475,7 +569,11 @@ fn run(
             .as_ref()
             .is_none_or(|(_, current)| *current != wanted)
         {
-            // A new stream (first frame, or the resolution changed).
+            // A new stream (first frame, or the resolution changed). A file
+            // cannot change size halfway, so a running recording ends here.
+            if let Some(active) = rec.active.take() {
+                rec_finish(active, shared);
+            }
             match H264Encoder::new(&session, &wanted) {
                 Ok(e) => {
                     encoder = Some((e, wanted));
@@ -522,6 +620,7 @@ fn run(
                         *shared.header.lock().unwrap_or_else(|e| e.into_inner()) = header;
                     }
                     shared.encoded_frames.fetch_add(1, Ordering::Relaxed);
+                    rec_on_frame(&mut rec, shared, &session, &wanted, &encoded);
                     if let Some(ring) = shared
                         .ring
                         .lock()
@@ -537,8 +636,125 @@ fn run(
         }
         tap.recycle(frame);
     }
+    // Closing the program while recording still finishes the file.
+    if let Some(active) = rec.active.take() {
+        rec_finish(active, shared);
+    } else if rec.pending.take().is_some() {
+        rec_end(shared, Err("stopped before the first frame".into()));
+    }
     if let Some((mut encoder, _)) = encoder {
         let _ = encoder.flush();
+    }
+}
+
+/// The recording's state on the recorder thread.
+#[derive(Default)]
+struct RecCtx {
+    /// Asked to start; waiting for a keyframe.
+    pending: Option<PathBuf>,
+    active: Option<ActiveRecording>,
+}
+
+fn rec_end(shared: &Shared, result: Result<SavedClip, String>) {
+    *shared.rec_state.lock().unwrap_or_else(|e| e.into_inner()) = RecordingState::Idle;
+    shared.rec_seconds.store(0f64.to_bits(), Ordering::Relaxed);
+    *shared.rec_result.lock().unwrap_or_else(|e| e.into_inner()) = Some(result);
+}
+
+fn rec_finish(active: ActiveRecording, shared: &Shared) {
+    let result = {
+        let game = shared.pcm.lock().unwrap_or_else(|e| e.into_inner());
+        let mic = shared.mic_pcm.lock().unwrap_or_else(|e| e.into_inner());
+        active.finish(&game, &mic)
+    };
+    rec_end(shared, result);
+}
+
+/// Applies the start and stop requests, in order.
+fn rec_commands(rec: &mut RecCtx, shared: &Shared) {
+    let queued: Vec<RecCommand> = shared
+        .rec_commands
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .drain(..)
+        .collect();
+    for command in queued {
+        match command {
+            RecCommand::Start(path) if rec.active.is_none() && rec.pending.is_none() => {
+                rec.pending = Some(path);
+            }
+            RecCommand::Start(_) => {}
+            RecCommand::Stop => {
+                if let Some(active) = rec.active.take() {
+                    rec_finish(active, shared);
+                } else if rec.pending.take().is_some() {
+                    rec_end(shared, Err("stopped before the first frame".into()));
+                }
+            }
+        }
+    }
+}
+
+/// Writes the audio that has arrived to the recording.
+fn rec_pump(rec: &mut RecCtx, shared: &Shared) {
+    let Some(active) = rec.active.as_mut() else {
+        return;
+    };
+    let result = {
+        let game = shared.pcm.lock().unwrap_or_else(|e| e.into_inner());
+        let mic = shared.mic_pcm.lock().unwrap_or_else(|e| e.into_inner());
+        active.pump_audio(&game, &mic, false)
+    };
+    if let Err(e) = result {
+        // The file stays valid up to the last fragment; just stop writing.
+        rec.active = None;
+        rec_end(shared, Err(e));
+    }
+}
+
+/// Gives a freshly compressed frame to the recording: starts the file at the
+/// first keyframe after the request, then writes every frame.
+fn rec_on_frame(
+    rec: &mut RecCtx,
+    shared: &Shared,
+    session: &MfSession,
+    settings: &EncodeSettings,
+    encoded: &EncodedFrame,
+) {
+    if let Some(active) = rec.active.as_mut() {
+        match active.write_frame(encoded) {
+            Ok(()) => shared
+                .rec_seconds
+                .store(active.seconds().to_bits(), Ordering::Relaxed),
+            Err(e) => {
+                rec.active = None;
+                rec_end(shared, Err(e));
+            }
+        }
+    } else if rec.pending.is_some() && encoded.keyframe {
+        let Some(path) = rec.pending.take() else {
+            return;
+        };
+        let header = shared
+            .header
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
+        let tracks = {
+            let game = shared.pcm.lock().unwrap_or_else(|e| e.into_inner());
+            let mic = shared.mic_pcm.lock().unwrap_or_else(|e| e.into_inner());
+            audio_track_count(!game.is_empty(), !mic.is_empty())
+        };
+        match ActiveRecording::begin(session, &path, settings, header.as_deref(), tracks, encoded) {
+            Ok(active) => {
+                *shared.rec_path.lock().unwrap_or_else(|e| e.into_inner()) =
+                    Some(active.path().to_owned());
+                *shared.rec_state.lock().unwrap_or_else(|e| e.into_inner()) =
+                    RecordingState::Recording;
+                rec.active = Some(active);
+            }
+            Err(e) => rec_end(shared, Err(e)),
+        }
     }
 }
 
@@ -853,6 +1069,120 @@ mod tests {
         assert!((0.13..0.23).contains(&mic.1), "mic RMS {:.3}", mic.1);
         assert!(fourth.is_none(), "exactly three audio tracks");
         assert!(second.is_none(), "no microphone, no second audio track");
+    }
+
+    fn wait_for_recording_result(recorder: &ReplayRecorder) -> Result<SavedClip, String> {
+        let deadline = Instant::now() + Duration::from_secs(20);
+        loop {
+            if let Some(result) = recorder.take_recording_result() {
+                return result;
+            }
+            assert!(Instant::now() < deadline, "the recording never finished");
+            thread::sleep(Duration::from_millis(20));
+        }
+    }
+
+    #[test]
+    fn a_recording_is_a_fragmented_file_with_video_and_three_audio_tracks() {
+        let Some((recorder, _source)) = record(0.2) else {
+            return;
+        };
+        let stop = Arc::new(AtomicBool::new(false));
+        let feeders = [
+            feed_sine(recorder.audio_tap(), 0.5, 440.0, Arc::clone(&stop)),
+            feed_sine(recorder.mic_tap(), 0.25, 880.0, Arc::clone(&stop)),
+        ];
+        thread::sleep(Duration::from_secs(2)); // let audio reach the rings first
+
+        let path =
+            std::env::temp_dir().join(format!("dockview-recording-{}.mp4", std::process::id()));
+        recorder.start_recording(path.clone()).expect("starts");
+        assert!(
+            recorder.start_recording(path.clone()).is_err(),
+            "a second start is refused"
+        );
+        thread::sleep(Duration::from_secs(5));
+        let info = recorder.recording();
+        assert_eq!(info.state, RecordingState::Recording);
+        assert!(info.seconds > 2.5, "{info:?}");
+        assert!(info.bytes > 0, "the file grows while recording");
+
+        recorder.stop_recording();
+        let saved = wait_for_recording_result(&recorder).expect("the recording was saved");
+        stop.store(true, Ordering::Relaxed);
+        for f in feeders {
+            let _ = f.join();
+        }
+        assert_eq!(recorder.recording().state, RecordingState::Idle);
+
+        let bytes = std::fs::read(&path).expect("the file exists");
+        let fragmented = bytes.windows(4).any(|w| w == b"moof");
+        let tracks: Vec<_> = (0..3).map(|n| audio_track_summary(&path, n)).collect();
+        let _ = std::fs::remove_file(&path);
+
+        assert!(fragmented, "the file must be a fragmented MP4");
+        assert!((4.0..7.5).contains(&saved.seconds), "{}", saved.seconds);
+        // The reader lists the tracks last-added first: mic, game, mix.
+        let [mic, game, mix] = [tracks[0], tracks[1], tracks[2]].map(|t| t.expect("track decodes"));
+        for (name, (seconds, _)) in [("mix", mix), ("game", game), ("mic", mic)] {
+            assert!(
+                (seconds - saved.seconds).abs() < 0.3,
+                "{name} {seconds:.2}s vs video {:.2}s",
+                saved.seconds
+            );
+        }
+        assert!((0.33..0.46).contains(&mix.1), "mix RMS {:.3}", mix.1);
+        assert!((0.28..0.45).contains(&game.1), "game RMS {:.3}", game.1);
+        assert!((0.13..0.23).contains(&mic.1), "mic RMS {:.3}", mic.1);
+    }
+
+    #[test]
+    fn a_recording_cut_off_halfway_still_plays() {
+        let Some((recorder, _source)) = record(0.2) else {
+            return;
+        };
+        let stop = Arc::new(AtomicBool::new(false));
+        let feeder = feed_sine(recorder.audio_tap(), 0.5, 440.0, Arc::clone(&stop));
+        thread::sleep(Duration::from_secs(2));
+
+        let path = std::env::temp_dir().join(format!("dockview-cutoff-{}.mp4", std::process::id()));
+        let copy =
+            std::env::temp_dir().join(format!("dockview-cutoff-copy-{}.mp4", std::process::id()));
+        recorder.start_recording(path.clone()).expect("starts");
+        thread::sleep(Duration::from_secs(6));
+        // What is on disk right now is what a crash would leave behind.
+        std::fs::copy(&path, &copy).expect("copies the unfinished file");
+        recorder.stop_recording();
+        let _ = wait_for_recording_result(&recorder);
+        stop.store(true, Ordering::Relaxed);
+        let _ = feeder.join();
+
+        let left_behind = audio_track_summary(&copy, 0);
+        let _ = std::fs::remove_file(&path);
+        let _ = std::fs::remove_file(&copy);
+        let (seconds, _) = left_behind.expect("the unfinished file still opens and decodes");
+        assert!(seconds > 1.5, "only {seconds:.2}s survived of about 6");
+    }
+
+    #[test]
+    fn a_recording_asked_for_but_stopped_at_once_reports_an_error() {
+        let Some((recorder, _source)) = record(0.2) else {
+            return;
+        };
+        let ready = Instant::now() + Duration::from_secs(5);
+        while recorder.status() != RecorderStatus::Recording && Instant::now() < ready {
+            thread::sleep(Duration::from_millis(20));
+        }
+        let path = std::env::temp_dir().join(format!("dockview-never-{}.mp4", std::process::id()));
+        recorder.start_recording(path.clone()).expect("starts");
+        recorder.stop_recording();
+        // Either it never began (error) or a keyframe was so close that it did.
+        let result = wait_for_recording_result(&recorder);
+        let _ = std::fs::remove_file(&path);
+        if let Err(e) = result {
+            assert!(e.contains("before the first frame"), "{e}");
+        }
+        assert_eq!(recorder.recording().state, RecordingState::Idle);
     }
 
     #[test]

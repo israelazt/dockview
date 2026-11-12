@@ -19,6 +19,8 @@ pub mod pcm;
 #[cfg(windows)]
 pub mod recorder;
 #[cfg(windows)]
+pub mod recording;
+#[cfg(windows)]
 pub mod replay;
 pub mod settings;
 pub mod stream;
