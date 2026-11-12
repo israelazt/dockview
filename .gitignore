@@ -31,3 +31,9 @@ coverage/
 # OS
 Thumbs.db
 .DS_Store
+
+# Rust
+rust/target/
+
+# Skill symlinks (real files live in .agents/skills)
+.claude/skills/

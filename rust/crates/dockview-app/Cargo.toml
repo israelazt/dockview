@@ -1,0 +1,8 @@
+[package]
+name = "dockview"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+dockview-core = { path = "../dockview-core" }
