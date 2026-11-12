@@ -6,19 +6,30 @@
 
 use std::path::Path;
 
-use windows::core::{Error, Result, HSTRING};
-use windows::Win32::Foundation::E_FAIL;
+use windows::core::{Error, Interface, Result, HSTRING};
+use windows::Win32::Foundation::{E_FAIL, VARIANT_BOOL};
 use windows::Win32::Media::MediaFoundation::{
-    eAVEncH264VProfile_High, IMFActivate, IMFAttributes, IMFSinkWriter, MFCreateAttributes,
-    MFCreateMediaType, MFCreateMemoryBuffer, MFCreateSample, MFCreateSinkWriterFromURL,
-    MFMediaType_Video, MFTEnumEx, MFT_FRIENDLY_NAME_Attribute, MFVideoFormat_H264,
-    MFVideoFormat_NV12, MFVideoInterlace_Progressive, MFT_CATEGORY_VIDEO_ENCODER,
-    MFT_ENUM_FLAG_HARDWARE, MFT_ENUM_FLAG_SORTANDFILTER, MFT_REGISTER_TYPE_INFO, MF_MT_AVG_BITRATE,
+    eAVEncH264VProfile_High, CODECAPI_AVEncCommonMeanBitRate, CODECAPI_AVEncCommonRateControlMode,
+    CODECAPI_AVEncMPVDefaultBPictureCount, CODECAPI_AVEncMPVGOPSize, CODECAPI_AVLowLatencyMode,
+    ICodecAPI, IMFActivate, IMFAttributes, IMFMediaEventGenerator, IMFMediaType, IMFSinkWriter,
+    IMFTransform, METransformDrainComplete, METransformHaveOutput, METransformNeedInput,
+    MFCreateAttributes, MFCreateMediaType, MFCreateMemoryBuffer, MFCreateSample,
+    MFCreateSinkWriterFromURL, MFMediaType_Video, MFSampleExtension_CleanPoint, MFTEnumEx,
+    MFT_FRIENDLY_NAME_Attribute, MFVideoFormat_H264, MFVideoFormat_NV12,
+    MFVideoInterlace_Progressive, MFT_CATEGORY_VIDEO_ENCODER, MFT_ENUM_FLAG_HARDWARE,
+    MFT_ENUM_FLAG_SORTANDFILTER, MFT_MESSAGE_COMMAND_DRAIN, MFT_MESSAGE_NOTIFY_BEGIN_STREAMING,
+    MFT_MESSAGE_NOTIFY_END_STREAMING, MFT_MESSAGE_NOTIFY_START_OF_STREAM, MFT_OUTPUT_DATA_BUFFER,
+    MFT_OUTPUT_STREAM_PROVIDES_SAMPLES, MFT_REGISTER_TYPE_INFO, MF_EVENT_FLAG_NO_WAIT,
+    MF_E_NO_EVENTS_AVAILABLE, MF_E_TRANSFORM_NEED_MORE_INPUT, MF_LOW_LATENCY, MF_MT_AVG_BITRATE,
     MF_MT_DEFAULT_STRIDE, MF_MT_FRAME_RATE, MF_MT_FRAME_SIZE, MF_MT_INTERLACE_MODE,
-    MF_MT_MAJOR_TYPE, MF_MT_MPEG2_PROFILE, MF_MT_PIXEL_ASPECT_RATIO, MF_MT_SUBTYPE,
-    MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS, MF_SINK_WRITER_DISABLE_THROTTLING,
+    MF_MT_MAJOR_TYPE, MF_MT_MPEG2_PROFILE, MF_MT_MPEG_SEQUENCE_HEADER, MF_MT_PIXEL_ASPECT_RATIO,
+    MF_MT_SUBTYPE, MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS, MF_SINK_WRITER_DISABLE_THROTTLING,
+    MF_TRANSFORM_ASYNC_UNLOCK,
 };
 use windows::Win32::System::Com::CoTaskMemFree;
+use windows::Win32::System::Variant::{
+    VARIANT, VARIANT_0, VARIANT_0_0, VARIANT_0_0_0, VT_BOOL, VT_UI4,
+};
 
 use crate::mf::{get_string, MfSession};
 
@@ -175,6 +186,421 @@ impl Mp4Writer {
     pub fn finish(self) -> Result<()> {
         // SAFETY: the writer is valid and was started with BeginWriting.
         unsafe { self.writer.Finalize() }
+    }
+}
+
+// ===========================================================================
+// Direct control of the encoder: compressed samples out, no file involved.
+// ===========================================================================
+
+/// One compressed H.264 access unit (Annex B), ready to be stored or muxed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EncodedFrame {
+    pub data: Vec<u8>,
+    /// Presentation time in 100 ns units.
+    pub timestamp: i64,
+    /// Duration in 100 ns units.
+    pub duration: i64,
+    /// A clean point: decoding can start here.
+    pub keyframe: bool,
+}
+
+/// How long to wait for the encoder to ask for more input before giving up.
+const NEED_INPUT_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(500);
+
+/// A hardware H.264 encoder driven frame by frame.
+///
+/// Hardware encoders are asynchronous Media Foundation transforms: they
+/// announce "I want input" and "I have output" through events, which this
+/// type pumps for the caller.
+pub struct H264Encoder {
+    transform: IMFTransform,
+    events: IMFMediaEventGenerator,
+    /// Frames the encoder said it can accept.
+    need_input: u32,
+    frame_len: usize,
+    frame_duration: i64,
+    provides_samples: bool,
+    output_buffer_len: u32,
+}
+
+impl H264Encoder {
+    /// Opens the first hardware H.264 encoder. Fails when there is none.
+    pub fn new(_session: &MfSession, settings: &EncodeSettings) -> Result<Self> {
+        let EncodeSettings {
+            width,
+            height,
+            fps,
+            bitrate_bps,
+        } = *settings;
+        let output_info = MFT_REGISTER_TYPE_INFO {
+            guidMajorType: MFMediaType_Video,
+            guidSubtype: MFVideoFormat_H264,
+        };
+        // SAFETY: documented MFT setup sequence; every pointer outlives its call.
+        unsafe {
+            let mut array: *mut Option<IMFActivate> = std::ptr::null_mut();
+            let mut count = 0u32;
+            MFTEnumEx(
+                MFT_CATEGORY_VIDEO_ENCODER,
+                MFT_ENUM_FLAG_HARDWARE | MFT_ENUM_FLAG_SORTANDFILTER,
+                None,
+                Some(&output_info),
+                &mut array,
+                &mut count,
+            )?;
+            if array.is_null() || count == 0 {
+                return Err(Error::new(E_FAIL, "no hardware H.264 encoder"));
+            }
+            let slots = std::slice::from_raw_parts_mut(array, count as usize);
+            let first = slots.iter_mut().find_map(Option::take);
+            for slot in slots.iter_mut() {
+                drop(slot.take());
+            }
+            CoTaskMemFree(Some(array as *const _));
+            let activate = first.ok_or_else(|| Error::new(E_FAIL, "no hardware H.264 encoder"))?;
+            let transform: IMFTransform = activate.ActivateObject()?;
+
+            // Asynchronous MFTs must be unlocked before use.
+            let attributes = transform.GetAttributes()?;
+            attributes.SetUINT32(&MF_TRANSFORM_ASYNC_UNLOCK, 1)?;
+            let _ = attributes.SetUINT32(&MF_LOW_LATENCY, 1);
+
+            // Output (H.264) first, then input (NV12).
+            let out = MFCreateMediaType()?;
+            out.SetGUID(&MF_MT_MAJOR_TYPE, &MFMediaType_Video)?;
+            out.SetGUID(&MF_MT_SUBTYPE, &MFVideoFormat_H264)?;
+            out.SetUINT32(&MF_MT_AVG_BITRATE, bitrate_bps)?;
+            out.SetUINT32(&MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive.0 as u32)?;
+            out.SetUINT64(&MF_MT_FRAME_SIZE, pack(width, height))?;
+            out.SetUINT64(&MF_MT_FRAME_RATE, pack(fps, 1))?;
+            out.SetUINT64(&MF_MT_PIXEL_ASPECT_RATIO, pack(1, 1))?;
+            out.SetUINT32(&MF_MT_MPEG2_PROFILE, eAVEncH264VProfile_High.0 as u32)?;
+            transform.SetOutputType(0, &out, 0)?;
+
+            let input = MFCreateMediaType()?;
+            input.SetGUID(&MF_MT_MAJOR_TYPE, &MFMediaType_Video)?;
+            input.SetGUID(&MF_MT_SUBTYPE, &MFVideoFormat_NV12)?;
+            input.SetUINT32(&MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive.0 as u32)?;
+            input.SetUINT64(&MF_MT_FRAME_SIZE, pack(width, height))?;
+            input.SetUINT64(&MF_MT_FRAME_RATE, pack(fps, 1))?;
+            input.SetUINT64(&MF_MT_PIXEL_ASPECT_RATIO, pack(1, 1))?;
+            transform.SetInputType(0, &input, 0)?;
+
+            // Best-effort tuning: constant bitrate, a keyframe every second so
+            // the buffer can be cut cleanly, no B-frames (lower latency).
+            if let Ok(codec) = transform.cast::<ICodecAPI>() {
+                let set = |key: &windows::core::GUID, value: u32| {
+                    let variant = variant_u32(value);
+                    let _ = codec.SetValue(key, &variant);
+                };
+                set(&CODECAPI_AVEncCommonRateControlMode, 0); // CBR
+                set(&CODECAPI_AVEncCommonMeanBitRate, bitrate_bps);
+                set(&CODECAPI_AVEncMPVGOPSize, fps);
+                set(&CODECAPI_AVEncMPVDefaultBPictureCount, 0);
+                let _ = codec.SetValue(&CODECAPI_AVLowLatencyMode, &variant_bool(true));
+            }
+
+            let info = transform.GetOutputStreamInfo(0)?;
+            let provides_samples = info.dwFlags & MFT_OUTPUT_STREAM_PROVIDES_SAMPLES.0 as u32 != 0;
+
+            transform.ProcessMessage(MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, 0)?;
+            transform.ProcessMessage(MFT_MESSAGE_NOTIFY_START_OF_STREAM, 0)?;
+            let events: IMFMediaEventGenerator = transform.cast()?;
+
+            Ok(Self {
+                transform,
+                events,
+                need_input: 0,
+                frame_len: nv12_len(width, height),
+                frame_duration: frame_duration_100ns(fps),
+                provides_samples,
+                output_buffer_len: info.cbSize.max(1 << 20),
+            })
+        }
+    }
+
+    /// The compressed stream's media type. After the first frames it carries
+    /// the sequence header (SPS/PPS) needed to build an MP4 without
+    /// re-encoding.
+    pub fn output_type(&self) -> Result<IMFMediaType> {
+        // SAFETY: plain query on a configured transform.
+        unsafe { self.transform.GetOutputCurrentType(0) }
+    }
+
+    /// Feeds one tightly packed NV12 frame and returns every compressed frame
+    /// the encoder has produced so far (usually the previous one or two).
+    pub fn encode(&mut self, nv12: &[u8], timestamp_100ns: i64) -> Result<Vec<EncodedFrame>> {
+        if nv12.len() < self.frame_len {
+            return Err(Error::new(
+                E_FAIL,
+                "NV12 frame is smaller than the configured size",
+            ));
+        }
+        let mut out = Vec::new();
+        let deadline = std::time::Instant::now() + NEED_INPUT_TIMEOUT;
+        while self.need_input == 0 {
+            self.pump_events(&mut out, false)?;
+            if self.need_input == 0 {
+                if std::time::Instant::now() > deadline {
+                    return Err(Error::new(E_FAIL, "encoder did not ask for more input"));
+                }
+                std::thread::sleep(std::time::Duration::from_millis(1));
+            }
+        }
+
+        // SAFETY: the memory buffer is large enough for `frame_len` bytes and
+        // is only written while locked.
+        unsafe {
+            let buffer = MFCreateMemoryBuffer(self.frame_len as u32)?;
+            let mut data: *mut u8 = std::ptr::null_mut();
+            buffer.Lock(&mut data, None, None)?;
+            std::ptr::copy_nonoverlapping(nv12.as_ptr(), data, self.frame_len);
+            buffer.Unlock()?;
+            buffer.SetCurrentLength(self.frame_len as u32)?;
+            let sample = MFCreateSample()?;
+            sample.AddBuffer(&buffer)?;
+            sample.SetSampleTime(timestamp_100ns)?;
+            sample.SetSampleDuration(self.frame_duration)?;
+            self.transform.ProcessInput(0, &sample, 0)?;
+        }
+        self.need_input -= 1;
+        self.pump_events(&mut out, false)?;
+        Ok(out)
+    }
+
+    /// Finishes the stream: returns the frames still inside the encoder.
+    pub fn flush(&mut self) -> Result<Vec<EncodedFrame>> {
+        let mut out = Vec::new();
+        // SAFETY: plain message to a streaming transform.
+        unsafe {
+            self.transform
+                .ProcessMessage(MFT_MESSAGE_COMMAND_DRAIN, 0)?;
+        }
+        self.pump_events(&mut out, true)?;
+        Ok(out)
+    }
+
+    /// Handles queued events: counts input requests and collects outputs.
+    /// With `until_drained`, waits for the end-of-drain event.
+    fn pump_events(&mut self, out: &mut Vec<EncodedFrame>, until_drained: bool) -> Result<()> {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        loop {
+            // SAFETY: GetEvent with NO_WAIT never blocks.
+            let event = unsafe { self.events.GetEvent(MF_EVENT_FLAG_NO_WAIT) };
+            let event = match event {
+                Ok(event) => event,
+                Err(e) if e.code() == MF_E_NO_EVENTS_AVAILABLE => {
+                    if !until_drained {
+                        return Ok(());
+                    }
+                    if std::time::Instant::now() > deadline {
+                        return Err(Error::new(E_FAIL, "encoder drain timed out"));
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(1));
+                    continue;
+                }
+                Err(e) => return Err(e),
+            };
+            // SAFETY: the event is a valid media event.
+            let kind = unsafe { event.GetType()? } as i32;
+            if kind == METransformNeedInput.0 {
+                self.need_input += 1;
+            } else if kind == METransformHaveOutput.0 {
+                if let Some(frame) = self.take_output()? {
+                    out.push(frame);
+                }
+            } else if kind == METransformDrainComplete.0 {
+                return Ok(());
+            }
+        }
+    }
+
+    fn take_output(&mut self) -> Result<Option<EncodedFrame>> {
+        // SAFETY: standard ProcessOutput call. When the transform does not
+        // provide samples we supply one; the output structure's COM pointers
+        // are released through ManuallyDrop::take exactly once.
+        unsafe {
+            let mut buffer = MFT_OUTPUT_DATA_BUFFER {
+                dwStreamID: 0,
+                pSample: std::mem::ManuallyDrop::new(None),
+                dwStatus: 0,
+                pEvents: std::mem::ManuallyDrop::new(None),
+            };
+            if !self.provides_samples {
+                let sample = MFCreateSample()?;
+                sample.AddBuffer(&MFCreateMemoryBuffer(self.output_buffer_len)?)?;
+                buffer.pSample = std::mem::ManuallyDrop::new(Some(sample));
+            }
+            let mut status = 0u32;
+            let result =
+                self.transform
+                    .ProcessOutput(0, std::slice::from_mut(&mut buffer), &mut status);
+            let sample = std::mem::ManuallyDrop::take(&mut buffer.pSample);
+            drop(std::mem::ManuallyDrop::take(&mut buffer.pEvents));
+            match result {
+                Ok(()) => {}
+                Err(e) if e.code() == MF_E_TRANSFORM_NEED_MORE_INPUT => return Ok(None),
+                Err(e) => return Err(e),
+            }
+            let Some(sample) = sample else {
+                return Ok(None);
+            };
+            let media = sample.ConvertToContiguousBuffer()?;
+            let mut data: *mut u8 = std::ptr::null_mut();
+            let mut len = 0u32;
+            media.Lock(&mut data, None, Some(&mut len))?;
+            let bytes = std::slice::from_raw_parts(data, len as usize).to_vec();
+            media.Unlock()?;
+            Ok(Some(EncodedFrame {
+                data: bytes,
+                timestamp: sample.GetSampleTime()?,
+                duration: sample.GetSampleDuration().unwrap_or(self.frame_duration),
+                keyframe: sample.GetUINT32(&MFSampleExtension_CleanPoint).unwrap_or(0) != 0,
+            }))
+        }
+    }
+}
+
+impl Drop for H264Encoder {
+    fn drop(&mut self) {
+        // SAFETY: tells the encoder the stream is over; errors are irrelevant.
+        unsafe {
+            let _ = self
+                .transform
+                .ProcessMessage(MFT_MESSAGE_NOTIFY_END_STREAMING, 0);
+        }
+    }
+}
+
+// ===========================================================================
+// Writing already-compressed frames to an MP4 (no re-encoding).
+// ===========================================================================
+
+/// Writes [`EncodedFrame`]s into an MP4 without touching the pixels.
+pub struct Mp4Remuxer {
+    writer: IMFSinkWriter,
+    stream: u32,
+    /// Timestamp of the first frame, subtracted so the file starts at zero.
+    origin: Option<i64>,
+}
+
+impl Mp4Remuxer {
+    /// `sequence_header` is the encoder's SPS/PPS blob, if it exposes one.
+    pub fn create(
+        _session: &MfSession,
+        path: &Path,
+        settings: &EncodeSettings,
+        sequence_header: Option<&[u8]>,
+    ) -> Result<Self> {
+        let EncodeSettings {
+            width,
+            height,
+            fps,
+            bitrate_bps,
+        } = *settings;
+        // SAFETY: documented sink-writer setup with a matching input and
+        // output type, which makes it pass the samples through untouched.
+        unsafe {
+            let mut attrs: Option<IMFAttributes> = None;
+            MFCreateAttributes(&mut attrs, 1)?;
+            let attrs = attrs.ok_or_else(|| Error::new(E_FAIL, "no attribute store"))?;
+            attrs.SetUINT32(&MF_SINK_WRITER_DISABLE_THROTTLING, 1)?;
+            let url = HSTRING::from(path.as_os_str());
+            let writer = MFCreateSinkWriterFromURL(&url, None, &attrs)?;
+
+            let ty = MFCreateMediaType()?;
+            ty.SetGUID(&MF_MT_MAJOR_TYPE, &MFMediaType_Video)?;
+            ty.SetGUID(&MF_MT_SUBTYPE, &MFVideoFormat_H264)?;
+            ty.SetUINT32(&MF_MT_AVG_BITRATE, bitrate_bps)?;
+            ty.SetUINT32(&MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive.0 as u32)?;
+            ty.SetUINT64(&MF_MT_FRAME_SIZE, pack(width, height))?;
+            ty.SetUINT64(&MF_MT_FRAME_RATE, pack(fps, 1))?;
+            ty.SetUINT64(&MF_MT_PIXEL_ASPECT_RATIO, pack(1, 1))?;
+            ty.SetUINT32(&MF_MT_MPEG2_PROFILE, eAVEncH264VProfile_High.0 as u32)?;
+            if let Some(header) = sequence_header {
+                ty.SetBlob(&MF_MT_MPEG_SEQUENCE_HEADER, header)?;
+            }
+            let stream = writer.AddStream(&ty)?;
+            writer.SetInputMediaType(stream, &ty, None::<&IMFAttributes>)?;
+            writer.BeginWriting()?;
+            Ok(Self {
+                writer,
+                stream,
+                origin: None,
+            })
+        }
+    }
+
+    pub fn write(&mut self, frame: &EncodedFrame) -> Result<()> {
+        let origin = *self.origin.get_or_insert(frame.timestamp);
+        // SAFETY: the buffer is filled while locked and sized to the data.
+        unsafe {
+            let buffer = MFCreateMemoryBuffer(frame.data.len() as u32)?;
+            let mut data: *mut u8 = std::ptr::null_mut();
+            buffer.Lock(&mut data, None, None)?;
+            std::ptr::copy_nonoverlapping(frame.data.as_ptr(), data, frame.data.len());
+            buffer.Unlock()?;
+            buffer.SetCurrentLength(frame.data.len() as u32)?;
+            let sample = MFCreateSample()?;
+            sample.AddBuffer(&buffer)?;
+            sample.SetSampleTime(frame.timestamp - origin)?;
+            sample.SetSampleDuration(frame.duration)?;
+            if frame.keyframe {
+                sample.SetUINT32(&MFSampleExtension_CleanPoint, 1)?;
+            }
+            self.writer.WriteSample(self.stream, &sample)
+        }
+    }
+
+    pub fn finish(self) -> Result<()> {
+        // SAFETY: the writer was started with BeginWriting.
+        unsafe { self.writer.Finalize() }
+    }
+}
+
+/// A `VT_UI4` variant, as the codec API expects for numeric settings.
+fn variant_u32(value: u32) -> VARIANT {
+    VARIANT {
+        Anonymous: VARIANT_0 {
+            Anonymous: std::mem::ManuallyDrop::new(VARIANT_0_0 {
+                vt: VT_UI4,
+                wReserved1: 0,
+                wReserved2: 0,
+                wReserved3: 0,
+                Anonymous: VARIANT_0_0_0 { ulVal: value },
+            }),
+        },
+    }
+}
+
+/// A `VT_BOOL` variant (`VARIANT_TRUE` is -1).
+fn variant_bool(value: bool) -> VARIANT {
+    VARIANT {
+        Anonymous: VARIANT_0 {
+            Anonymous: std::mem::ManuallyDrop::new(VARIANT_0_0 {
+                vt: VT_BOOL,
+                wReserved1: 0,
+                wReserved2: 0,
+                wReserved3: 0,
+                Anonymous: VARIANT_0_0_0 {
+                    boolVal: VARIANT_BOOL(if value { -1 } else { 0 }),
+                },
+            }),
+        },
+    }
+}
+
+/// Reads the SPS/PPS blob out of an encoder output type, when present.
+pub fn sequence_header(media_type: &IMFMediaType) -> Option<Vec<u8>> {
+    // SAFETY: GetBlobSize/GetBlob follow the documented two-step protocol.
+    unsafe {
+        let size = media_type.GetBlobSize(&MF_MT_MPEG_SEQUENCE_HEADER).ok()?;
+        let mut blob = vec![0u8; size as usize];
+        media_type
+            .GetBlob(&MF_MT_MPEG_SEQUENCE_HEADER, &mut blob, None)
+            .ok()?;
+        Some(blob)
     }
 }
 

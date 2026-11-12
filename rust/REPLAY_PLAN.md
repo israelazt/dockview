@@ -45,9 +45,11 @@ Medida en el PC del autor (GTX 1660 Ti), con el patrón sintético 1080p60:
 Cada fase es útil por sí sola.
 
 ### R-1 · Búfer de repetición y «guardar los últimos N»
-- **R-1.1** Codificar con `IMFTransform` y extraer muestras comprimidas y cabeceras (prueba de concepto).
-- **R-1.2** Anillo de muestras en RAM acotado por duración y tamaño, con corte en fotogramas clave.
-- **R-1.3** Volcar una ventana del anillo a MP4 *sin recodificar*; comprobar que se reproduce.
+
+**Estado:** R-1.1 a R-1.3 hechas y verificadas con la capturadora real; falta audio, interfaz y ajustes (R-1.4 a R-1.8).
+- **R-1.1 ✅** Codificar con `IMFTransform` y extraer muestras comprimidas y cabeceras (prueba de concepto).
+- **R-1.2 ✅** Anillo de muestras en RAM acotado por duración y tamaño, con corte en fotogramas clave.
+- **R-1.3 ✅** Volcar una ventana del anillo a MP4 *sin recodificar*; comprobar que se reproduce.
 - **R-1.4** Audio AAC del juego (desde la tubería WASAPI actual) en su pista.
 - **R-1.5** Micrófono opcional en su pista, con selección de dispositivo e indicador visible.
 - **R-1.6** Interfaz: interruptor, duración personalizable, botón «Guardar» y atajo global; aviso al guardar.
@@ -69,3 +71,21 @@ Cada fase es útil por sí sola.
 ## Nota de posicionamiento
 
 OBS ya ofrece un búfer de repetición. Lo que diferencia a Dockview es la **sencillez** (se abre y funciona), **que sirva a equipos modestos** y, sobre todo, el **editor vertical con marco móvil**.
+
+## Resultados de R-1.1 a R-1.3 (2026-11-11)
+
+Medidos con la UGREEN 25173 en directo (1080p60, 40 Mbps), PC del autor:
+
+| Comprobación | Resultado |
+|---|---|
+| Control directo del codificador NVENC (asíncrono) | funciona; ~3-4 ms por frame; arranque de la sesión ≈ 570 ms |
+| Fotogramas clave | exactamente uno por segundo, cada uno con AUD + SPS + PPS + IDR |
+| Grabación en vivo | ~60 frames/s codificados, 40 Mbps constantes (~5 MB/s en RAM) |
+| Guardar 10,95 s | **0,14 s**, sin recodificar; relectura: 657/657 muestras, marcas 0 → 10,93 s |
+| Ventanas de 2, 4 y 6 s (patrón sintético) | MP4 válido, error de color ≤ 1/255 |
+| Coste de CPU | captura + grabación ≈ 16,8 % de un núcleo (la captura sola ≈ 8 %) |
+| GPU | el codificador usa una sesión de NVENC; `nvidia-smi` marca 15-40 % de actividad general mientras graba (parte probablemente de las copias del vendor: alimentar el codificador desde texturas de la GPU lo reduciría) |
+
+Notas:
+- Los primeros ~25 frames se pierden mientras arranca el codificador; no importa (el flujo empieza en el primer frame codificado).
+- `ReplayRing::clip(N)` devuelve **al menos** N segundos, empezando en el fotograma clave anterior (hasta 1 s extra); el recorte exacto llegará con la fase R-2.

@@ -1,7 +1,8 @@
 //! Video frames and the "latest frame wins" hand-off between capture and render.
 
+use std::collections::VecDeque;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Condvar, Mutex};
+use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
 /// Pixel layout of a [`Frame`]. Colour conversion happens on the GPU.
@@ -40,10 +41,103 @@ pub struct Frame {
     pub arrived: Instant,
 }
 
+/// A second consumer of the frame stream that must see *every* frame (the
+/// recorder), unlike the display, which only wants the newest.
+///
+/// Frames are copied into a small bounded queue. If the consumer falls behind
+/// the newest frames are dropped and counted, so a slow recorder can never
+/// slow the capture down.
+pub struct FrameTap {
+    queue: Mutex<VecDeque<Frame>>,
+    ready: Condvar,
+    /// Buffers returned by the consumer, reused for the next copies.
+    pool: Mutex<Vec<Vec<u8>>>,
+    capacity: usize,
+    dropped: AtomicU64,
+}
+
+impl FrameTap {
+    pub fn new(capacity: usize) -> Self {
+        Self {
+            queue: Mutex::new(VecDeque::new()),
+            ready: Condvar::new(),
+            pool: Mutex::new(Vec::new()),
+            capacity: capacity.max(1),
+            dropped: AtomicU64::new(0),
+        }
+    }
+
+    /// Copies `frame` into the queue (or counts a drop when it is full).
+    pub fn offer(&self, frame: &Frame) {
+        let mut queue = self.queue.lock().unwrap_or_else(|e| e.into_inner());
+        if queue.len() >= self.capacity {
+            self.dropped.fetch_add(1, Ordering::Relaxed);
+            return;
+        }
+        let mut data = self
+            .pool
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .pop()
+            .unwrap_or_default();
+        data.clear();
+        data.extend_from_slice(&frame.data);
+        queue.push_back(Frame {
+            data,
+            ..frame.clone_header()
+        });
+        drop(queue);
+        self.ready.notify_one();
+    }
+
+    /// Waits up to `timeout` for the oldest queued frame.
+    pub fn take(&self, timeout: Duration) -> Option<Frame> {
+        let queue = self.queue.lock().unwrap_or_else(|e| e.into_inner());
+        let (mut queue, _) = self
+            .ready
+            .wait_timeout_while(queue, timeout, |q| q.is_empty())
+            .unwrap_or_else(|e| e.into_inner());
+        queue.pop_front()
+    }
+
+    /// Returns a consumed frame's buffer for reuse.
+    pub fn recycle(&self, frame: Frame) {
+        let mut pool = self.pool.lock().unwrap_or_else(|e| e.into_inner());
+        if pool.len() < self.capacity * 2 {
+            pool.push(frame.data);
+        }
+    }
+
+    /// Frames dropped because the consumer was too slow.
+    pub fn dropped(&self) -> u64 {
+        self.dropped.load(Ordering::Relaxed)
+    }
+
+    /// Frames waiting to be consumed.
+    pub fn pending(&self) -> usize {
+        self.queue.lock().unwrap_or_else(|e| e.into_inner()).len()
+    }
+}
+
 #[derive(Default)]
 struct Slots {
     latest: Option<Frame>,
     spare: Option<Frame>,
+}
+
+impl Frame {
+    /// A copy of everything but the pixel data (which is left empty).
+    fn clone_header(&self) -> Frame {
+        Frame {
+            width: self.width,
+            height: self.height,
+            stride: self.stride,
+            format: self.format,
+            data: Vec::new(),
+            timestamp: self.timestamp,
+            arrived: self.arrived,
+        }
+    }
 }
 
 /// Single-slot mailbox between the capture thread and the renderer.
@@ -55,6 +149,7 @@ struct Slots {
 pub struct FrameSlot {
     slots: Mutex<Slots>,
     arrived: Condvar,
+    tap: Mutex<Option<Arc<FrameTap>>>,
     published: AtomicU64,
     dropped: AtomicU64,
 }
@@ -67,6 +162,10 @@ impl FrameSlot {
     /// Stores `frame` as the latest one, dropping any unconsumed predecessor.
     pub fn publish(&self, mut frame: Frame) {
         frame.arrived = Instant::now();
+        let tap = self.tap.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        if let Some(tap) = tap {
+            tap.offer(&frame);
+        }
         let mut slots = self.lock();
         if let Some(old) = slots.latest.replace(frame) {
             slots.spare = Some(old);
@@ -75,6 +174,11 @@ impl FrameSlot {
         self.published.fetch_add(1, Ordering::Relaxed);
         drop(slots);
         self.arrived.notify_one();
+    }
+
+    /// Starts (or with `None`, stops) feeding every published frame to `tap`.
+    pub fn set_tap(&self, tap: Option<Arc<FrameTap>>) {
+        *self.tap.lock().unwrap_or_else(|e| e.into_inner()) = tap;
     }
 
     /// Blocks until a frame is available or `timeout` elapses. Returns whether
@@ -134,6 +238,61 @@ mod tests {
             timestamp,
             arrived: Instant::now(),
         }
+    }
+
+    #[test]
+    fn a_tap_sees_every_frame_in_order() {
+        let slot = FrameSlot::new();
+        let tap = Arc::new(FrameTap::new(8));
+        slot.set_tap(Some(Arc::clone(&tap)));
+        for i in 0..5 {
+            slot.publish(frame(i));
+        }
+        // The display only keeps the newest, the tap keeps all of them.
+        assert_eq!(slot.take_latest().unwrap().timestamp, 4);
+        let seen: Vec<i64> = (0..5)
+            .map(|_| tap.take(Duration::from_millis(10)).unwrap().timestamp)
+            .collect();
+        assert_eq!(seen, vec![0, 1, 2, 3, 4]);
+        assert!(tap.take(Duration::from_millis(5)).is_none());
+    }
+
+    #[test]
+    fn a_full_tap_drops_new_frames_and_counts_them() {
+        let slot = FrameSlot::new();
+        let tap = Arc::new(FrameTap::new(2));
+        slot.set_tap(Some(Arc::clone(&tap)));
+        for i in 0..5 {
+            slot.publish(frame(i));
+        }
+        assert_eq!((tap.pending(), tap.dropped()), (2, 3));
+        assert_eq!(tap.take(Duration::from_millis(1)).unwrap().timestamp, 0);
+    }
+
+    #[test]
+    fn a_tap_copies_the_pixels_and_reuses_returned_buffers() {
+        let slot = FrameSlot::new();
+        let tap = Arc::new(FrameTap::new(4));
+        slot.set_tap(Some(Arc::clone(&tap)));
+        let mut f = frame(1);
+        f.data = vec![7; 12];
+        slot.publish(f);
+        let got = tap.take(Duration::from_millis(5)).unwrap();
+        assert_eq!(got.data, vec![7; 12]);
+        let capacity = got.data.capacity();
+        tap.recycle(got);
+        slot.publish(frame(2));
+        assert!(tap.take(Duration::from_millis(5)).unwrap().data.capacity() >= capacity);
+    }
+
+    #[test]
+    fn removing_the_tap_stops_the_copies() {
+        let slot = FrameSlot::new();
+        let tap = Arc::new(FrameTap::new(4));
+        slot.set_tap(Some(Arc::clone(&tap)));
+        slot.set_tap(None);
+        slot.publish(frame(1));
+        assert_eq!(tap.pending(), 0);
     }
 
     #[test]

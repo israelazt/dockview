@@ -13,6 +13,10 @@ pub mod encode;
 pub mod frame;
 #[cfg(windows)]
 pub mod mf;
+#[cfg(windows)]
+pub mod recorder;
+#[cfg(windows)]
+pub mod replay;
 pub mod settings;
 pub mod stream;
 pub mod testsrc;
