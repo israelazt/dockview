@@ -21,28 +21,31 @@ use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use dockview_core::audio::{enumerate_audio_devices, AudioEngine, AudioStatus};
+use dockview_core::audio::{enumerate_audio_devices, AudioEngine};
 use dockview_core::capture::{CaptureOptions, CaptureStatus, VideoCapture};
 use dockview_core::device::{match_audio_to_video, AudioDevice, VideoDevice};
 use dockview_core::frame::FrameSlot;
 use dockview_core::mf::{enumerate_video_devices, MfSession};
-use dockview_core::settings::{self, AppSettings, RenderPreset, MAX_AUDIO_OFFSET_MS};
+use dockview_core::settings::{
+    self, AppSettings, LangMode, RenderPreset, ThemeMode, MAX_AUDIO_OFFSET_MS,
+};
 use dockview_core::testsrc::TestSource;
 use windows::Win32::Foundation::HWND;
 use winit::application::ApplicationHandler;
 use winit::dpi::{LogicalSize, PhysicalSize};
-use winit::event::{ElementState, WindowEvent};
+use winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::{Key, NamedKey};
 use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
-use winit::window::{Fullscreen, Theme as WindowTheme, Window, WindowId};
+use winit::window::{CursorIcon, Fullscreen, Theme as WindowTheme, Window, WindowId};
 
 use cli::Cli;
-use i18n::Lang;
+use i18n::{Lang, LangModeExt};
 use render::{Filter, Renderer};
-use theme::{Appearance, Theme};
+use theme::{Appearance, Theme, ThemeModeExt};
+use ui::controls::{Action, Controls, Model, StatusKind};
 use ui::gpu::UiGpu;
-use ui::preview::{self, Sample};
+use ui::input::Pointer;
 use ui::Ui;
 
 /// Delay before trying to reopen a capture device that went away.
@@ -89,6 +92,13 @@ struct App {
     system_appearance: Appearance,
     system_lang: Lang,
     exit_requested: bool,
+    controls: Controls,
+    pointer: Pointer,
+    last_frame: Instant,
+    fps: f32,
+    needs_redraw: bool,
+    cursor_pointer: bool,
+    cursor_hidden: bool,
 }
 
 fn filter_for(preset: RenderPreset) -> Filter {
@@ -127,6 +137,7 @@ impl App {
         cli: Cli,
     ) -> Self {
         let test_pattern = cli.test_pattern;
+        let preview = cli.ui_preview;
         let mut app = Self {
             slot,
             source: Source::None,
@@ -150,10 +161,23 @@ impl App {
             system_appearance: Appearance::Dark,
             system_lang: Lang::detect_system(),
             exit_requested: false,
+            controls: Controls::new(preview),
+            pointer: Pointer::default(),
+            last_frame: Instant::now(),
+            fps: 0.0,
+            needs_redraw: true,
+            cursor_pointer: false,
+            cursor_hidden: false,
         };
 
         if test_pattern {
             app.source = Source::Test(TestSource::start(Arc::clone(&app.slot), 1920, 1080, 30));
+            if preview {
+                app.install_preview_devices();
+            }
+            if app.cli.open_settings {
+                app.controls.toggle_settings();
+            }
             return app;
         }
 
@@ -189,6 +213,9 @@ impl App {
     /// Starts capturing from the video device at `index` (or stops).
     fn select_video(&mut self, index: Option<usize>) {
         self.video_index = index;
+        if self.cli.test_pattern {
+            return; // the synthetic source stays; only the selection changes
+        }
         self.video_size = (0, 0);
         // Drop the old capture first so it releases the device.
         self.source = Source::None;
@@ -213,6 +240,9 @@ impl App {
     /// Starts the audio pipeline for the audio device at `index` (or stops).
     fn select_audio(&mut self, index: Option<usize>) {
         self.audio_index = index;
+        if self.cli.test_pattern {
+            return;
+        }
         self.audio = None;
         let Some(device) = index.and_then(|i| self.audio_devices.get(i)) else {
             return;
@@ -253,11 +283,186 @@ impl App {
     }
 
     fn save_settings(&mut self) {
+        if self.cli.ui_preview {
+            return;
+        }
         self.settings.was_fullscreen = self.fullscreen;
         settings::save(&self.settings);
     }
 
+    fn theme_mode(&self) -> ThemeMode {
+        self.cli.theme.unwrap_or(self.settings.theme)
+    }
+
+    fn lang_mode(&self) -> LangMode {
+        self.cli.lang.unwrap_or(self.settings.language)
+    }
+
+    /// Fake devices so the interface can be explored without hardware.
+    fn install_preview_devices(&mut self) {
+        let video = |name: &str, link: &str| VideoDevice {
+            friendly_name: name.into(),
+            symbolic_link: link.into(),
+        };
+        let audio = |name: &str, id: &str| AudioDevice {
+            friendly_name: name.into(),
+            device_id: id.into(),
+        };
+        self.video_devices = vec![
+            video("UGREEN 25173", "preview:video:0"),
+            video("Integrated Camera", "preview:video:1"),
+        ];
+        self.audio_devices = vec![
+            audio("HDMI (UGREEN 25173)", "preview:audio:0"),
+            audio("Microphone (Integrated Camera)", "preview:audio:1"),
+            audio("Desktop Microphone (RØDE NT-USB Mini)", "preview:audio:2"),
+        ];
+        self.video_index = Some(0);
+        self.audio_index = Some(0);
+    }
+
+    /// Snapshot of everything the controls display.
+    fn model(&self) -> Model {
+        let status = match &self.source {
+            Source::Test(_) => StatusKind::Live,
+            Source::None => StatusKind::Idle,
+            Source::Capture { capture, .. } => match capture.status() {
+                CaptureStatus::Running { .. } | CaptureStatus::Stopped => StatusKind::Live,
+                CaptureStatus::Starting => StatusKind::Connecting,
+                CaptureStatus::Disconnected { .. } | CaptureStatus::Failed(_) => {
+                    StatusKind::Problem
+                }
+            },
+        };
+        let resolution = if self.video_size.0 > 0 {
+            // The rate is unknown for the first second; show just the height.
+            if self.fps >= 1.0 {
+                format!("{}p · {:.0} fps", self.video_size.1, self.fps)
+            } else {
+                format!("{}p", self.video_size.1)
+            }
+        } else {
+            String::new()
+        };
+        let appearance = self.theme_mode().resolve(self.system_appearance);
+        let names = |devices: &[String]| devices.to_vec();
+        Model {
+            theme: Theme::for_appearance(appearance),
+            lang: self.lang_mode().resolve(self.system_lang),
+            status,
+            resolution,
+            volume: self.settings.volume,
+            sync_ms: self.settings.audio_offset_ms,
+            fullscreen: self.fullscreen,
+            video_devices: names(
+                &self
+                    .video_devices
+                    .iter()
+                    .map(|d| d.friendly_name.clone())
+                    .collect::<Vec<_>>(),
+            ),
+            video_selected: self.video_index,
+            audio_devices: names(
+                &self
+                    .audio_devices
+                    .iter()
+                    .map(|d| d.friendly_name.clone())
+                    .collect::<Vec<_>>(),
+            ),
+            audio_selected: self.audio_index,
+            preset: self.settings.render_preset,
+            theme_mode: self.theme_mode(),
+            lang_mode: self.lang_mode(),
+        }
+    }
+
+    /// Applies a change requested through the controls.
+    fn apply(&mut self, action: Action) {
+        match action {
+            Action::SetVolume(volume) => {
+                self.settings.volume = volume;
+                if let Some(audio) = &self.audio {
+                    audio.set_volume(volume);
+                }
+            }
+            Action::SetSync(ms) => {
+                self.settings.audio_offset_ms = ms;
+                if let Some(audio) = &self.audio {
+                    audio.set_offset_ms(ms);
+                }
+            }
+            Action::ToggleFullscreen => {
+                self.set_fullscreen(!self.fullscreen);
+                return;
+            }
+            Action::SelectVideo(index) => {
+                self.select_video(Some(index));
+                // Follow the new video device with its matching audio.
+                if let Some(audio) = self.match_audio(Some(index)) {
+                    self.select_audio(Some(audio));
+                }
+            }
+            Action::SelectAudio(index) => self.select_audio(Some(index)),
+            Action::SetPreset(preset) => {
+                self.settings.render_preset = preset;
+                if let Some(renderer) = self.renderer.as_mut() {
+                    renderer.set_filter(filter_for(preset));
+                }
+            }
+            Action::SetTheme(mode) => {
+                self.settings.theme = mode;
+                self.cli.theme = None; // an explicit choice wins over --theme
+            }
+            Action::SetLang(mode) => {
+                self.settings.language = mode;
+                self.cli.lang = None;
+            }
+        }
+        self.save_settings();
+    }
+
+    /// Frame rate of what is actually being drawn, refreshed once a second.
+    fn update_stats(&mut self) {
+        let elapsed = self.last_stats.elapsed();
+        if elapsed < Duration::from_secs(1) {
+            return;
+        }
+        self.fps = (self.rendered - self.last_rendered) as f32 / elapsed.as_secs_f32();
+        self.last_rendered = self.rendered;
+        self.last_stats = Instant::now();
+    }
+
+    /// Pointer shape and visibility follow what the controls are doing.
+    fn update_cursor(&mut self) {
+        let Some(window) = &self.window else {
+            return;
+        };
+        let pointer = self.controls.wants_pointer();
+        if pointer != self.cursor_pointer {
+            self.cursor_pointer = pointer;
+            window.set_cursor(if pointer {
+                CursorIcon::Pointer
+            } else {
+                CursorIcon::Default
+            });
+        }
+        // While watching full screen, an idle cursor gets out of the way.
+        let hidden = self.fullscreen && !self.controls.is_visible();
+        if hidden != self.cursor_hidden {
+            self.cursor_hidden = hidden;
+            window.set_cursor_visible(!hidden);
+        }
+    }
+
     fn render(&mut self) {
+        let model = self.model();
+        let now = Instant::now();
+        let dt = now.duration_since(self.last_frame).as_secs_f32().min(0.1);
+        self.last_frame = now;
+        let pointer = self.pointer;
+        let scale = self.ui_scale;
+        let capture = self.cli.screenshot.is_some() && self.rendered >= SCREENSHOT_AFTER_FRAMES;
+
         let Some(renderer) = self.renderer.as_mut() else {
             return;
         };
@@ -273,24 +478,16 @@ impl App {
             self.rendered += 1;
         }
 
-        let preview_mode = self.cli.ui_preview;
-        let theme = Theme::for_appearance(self.cli.theme.resolve(self.system_appearance));
-        let lang = self.cli.lang.resolve(self.system_lang);
-        let scale = self.ui_scale;
-        let capture = self.cli.screenshot.is_some() && self.rendered >= SCREENSHOT_AFTER_FRAMES;
-        let (ui, ui_gpu) = (&mut self.ui, &mut self.ui_gpu);
-
+        let (ui, ui_gpu, controls) = (&mut self.ui, &mut self.ui_gpu, &mut self.controls);
         let result = renderer.draw(
             &mut |_device, context, size| {
                 let Some(gpu) = ui_gpu.as_mut() else {
                     return;
                 };
-                if preview_mode {
-                    ui.begin(size, scale);
-                    preview::draw(ui, &theme, lang, &Sample::default());
-                    if let Err(e) = gpu.render(context, ui, size) {
-                        eprintln!("ui draw failed: {e}");
-                    }
+                ui.begin(size, scale);
+                controls.frame(ui, &model, &pointer, dt);
+                if let Err(e) = gpu.render(context, ui, size) {
+                    eprintln!("ui draw failed: {e}");
                 }
             },
             capture,
@@ -300,6 +497,12 @@ impl App {
             Ok(None) => {}
             Err(e) => eprintln!("present failed: {e}"),
         }
+
+        self.pointer.end_frame();
+        for action in self.controls.take_actions() {
+            self.apply(action);
+        }
+        self.update_cursor();
     }
 
     fn save_screenshot(&mut self, shot: &render::Screenshot) {
@@ -366,65 +569,14 @@ impl App {
         }
     }
 
-    fn video_status(&self) -> String {
-        let name = self
-            .video_index
-            .and_then(|i| self.video_devices.get(i))
-            .map_or("no video device", |d| d.friendly_name.as_str());
-        match &self.source {
-            Source::Test(_) => "test pattern".to_string(),
-            Source::None => name.to_string(),
-            Source::Capture { capture, .. } => match capture.status() {
-                CaptureStatus::Running { .. } | CaptureStatus::Stopped => name.to_string(),
-                CaptureStatus::Starting => format!("{name} (connecting…)"),
-                CaptureStatus::Disconnected { .. } => format!("{name} (disconnected, retrying…)"),
-                CaptureStatus::Failed(e) => format!("{name} (error: {e})"),
-            },
-        }
-    }
-
-    fn audio_status(&self) -> String {
-        let name = self
-            .audio_index
-            .and_then(|i| self.audio_devices.get(i))
-            .map_or("none", |d| d.friendly_name.as_str());
-        match self.audio.as_ref().map(AudioEngine::status) {
-            Some(AudioStatus::Disconnected(_)) => format!("{name} (lost)"),
-            Some(AudioStatus::Failed(e)) => format!("{name} (error: {e})"),
-            _ => name.to_string(),
-        }
-    }
-
-    fn update_title(&mut self) {
-        if self.cli.ui_preview || self.last_stats.elapsed() < Duration::from_secs(1) {
-            return;
-        }
-        let secs = self.last_stats.elapsed().as_secs_f64();
-        let fps = (self.rendered - self.last_rendered) as f64 / secs;
-        self.last_rendered = self.rendered;
-        self.last_stats = Instant::now();
-
-        let (w, h) = self.video_size;
-        let video = if w > 0 {
-            format!("{} · {w}×{h} · {fps:.0} fps", self.video_status())
-        } else {
-            self.video_status()
-        };
-        let title = format!(
-            "Dockview · {video} · 🔊 {} {:.0}% · sync {:+} ms",
-            self.audio_status(),
-            self.settings.volume * 100.0,
-            self.settings.audio_offset_ms,
-        );
-        if let Some(window) = &self.window {
-            window.set_title(&title);
-        }
-    }
-
     fn on_key(&mut self, key: &Key) {
         match key {
             Key::Named(NamedKey::F11) => self.set_fullscreen(!self.fullscreen),
-            Key::Named(NamedKey::Escape) if self.fullscreen => self.set_fullscreen(false),
+            Key::Named(NamedKey::Escape) => {
+                if !self.controls.close_settings() && self.fullscreen {
+                    self.set_fullscreen(false);
+                }
+            }
             Key::Named(NamedKey::ArrowUp) => self.change_volume(VOLUME_STEP),
             Key::Named(NamedKey::ArrowDown) => self.change_volume(-VOLUME_STEP),
             Key::Named(NamedKey::ArrowLeft) => self.change_offset(-OFFSET_STEP_MS),
@@ -519,6 +671,7 @@ impl ApplicationHandler for App {
                 event_loop.exit();
             }
             WindowEvent::Resized(size) => {
+                self.needs_redraw = true;
                 if let Some(renderer) = self.renderer.as_mut() {
                     if let Err(e) = renderer.resize(size.width, size.height) {
                         eprintln!("resize failed: {e}");
@@ -526,12 +679,40 @@ impl ApplicationHandler for App {
                 }
             }
             WindowEvent::RedrawRequested => self.render(),
+            WindowEvent::CursorMoved { position, .. } => {
+                let scale = f64::from(self.ui_scale);
+                self.pointer.pos = Some(((position.x / scale) as f32, (position.y / scale) as f32));
+                self.needs_redraw = true;
+            }
+            WindowEvent::CursorLeft { .. } => {
+                self.pointer.pos = None;
+                self.needs_redraw = true;
+            }
+            WindowEvent::MouseInput {
+                state,
+                button: MouseButton::Left,
+                ..
+            } => {
+                match state {
+                    ElementState::Pressed => self.pointer.press(),
+                    ElementState::Released => self.pointer.release(),
+                }
+                self.needs_redraw = true;
+            }
+            WindowEvent::MouseWheel { delta, .. } => {
+                self.pointer.wheel += match delta {
+                    MouseScrollDelta::LineDelta(_, y) => y,
+                    MouseScrollDelta::PixelDelta(p) => (p.y / 40.0) as f32,
+                };
+                self.needs_redraw = true;
+            }
             WindowEvent::ThemeChanged(theme) => self.system_appearance = appearance_of(Some(theme)),
             WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
                 self.ui_scale = self.cli.scale.unwrap_or(scale_factor as f32);
             }
             WindowEvent::KeyboardInput { event, .. } if event.state == ElementState::Pressed => {
                 self.on_key(&event.logical_key);
+                self.needs_redraw = true;
             }
             _ => {}
         }
@@ -543,8 +724,12 @@ impl ApplicationHandler for App {
             return;
         }
         self.maintain_source();
-        self.update_title();
-        if self.slot.wait_for_frame(FRAME_WAIT) {
+        self.update_stats();
+        // Redraw for new video, for input, and while the controls are on
+        // screen (hover, drag and fade animations need steady frames).
+        let new_frame = self.slot.wait_for_frame(FRAME_WAIT);
+        let animating = self.controls.is_visible();
+        if new_frame || animating || std::mem::take(&mut self.needs_redraw) {
             if let Some(window) = &self.window {
                 window.request_redraw();
             }
@@ -596,7 +781,13 @@ fn main() {
     };
     event_loop.set_control_flow(ControlFlow::Poll);
 
-    let mut app = App::new(slot, settings::load(), video_devices, audio_devices, cli);
+    // The preview must look the same on every machine: ignore saved settings.
+    let saved = if cli.ui_preview {
+        AppSettings::default()
+    } else {
+        settings::load()
+    };
+    let mut app = App::new(slot, saved, video_devices, audio_devices, cli);
     if let Err(e) = event_loop.run_app(&mut app) {
         eprintln!("event loop error: {e}");
     }

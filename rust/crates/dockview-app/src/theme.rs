@@ -48,15 +48,7 @@ pub fn contrast_ratio(a: Color, b: Color) -> f32 {
     (hi + 0.05) / (lo + 0.05)
 }
 
-/// User preference for the theme.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum ThemeMode {
-    /// Follow the Windows app theme.
-    #[default]
-    Auto,
-    Dark,
-    Light,
-}
+pub use dockview_core::settings::ThemeMode;
 
 /// A resolved theme (never "auto").
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -65,9 +57,14 @@ pub enum Appearance {
     Light,
 }
 
-impl ThemeMode {
+/// Resolving the stored preference against the system appearance.
+pub trait ThemeModeExt {
+    fn resolve(self, system: Appearance) -> Appearance;
+}
+
+impl ThemeModeExt for ThemeMode {
     /// Resolves the preference given the system appearance.
-    pub fn resolve(self, system: Appearance) -> Appearance {
+    fn resolve(self, system: Appearance) -> Appearance {
         match self {
             Self::Auto => system,
             Self::Dark => Appearance::Dark,
@@ -90,10 +87,16 @@ pub struct Theme {
     pub accent: Color,
     pub live: Color,
     pub error: Color,
+    /// Connecting / degraded states.
+    pub warn: Color,
     /// Empty part of a slider.
     pub track: Color,
     /// Background of a hovered or pressed control.
     pub hover: Color,
+    /// Background of a segmented control.
+    pub segment_track: Color,
+    /// The selected segment of a segmented control.
+    pub segment_active: Color,
     pub shadow: Color,
 }
 
@@ -116,8 +119,11 @@ impl Theme {
             accent: Color::hex(0x00AAFF, 1.0),
             live: Color::hex(0x22C55E, 1.0),
             error: Color::hex(0xEF4444, 1.0),
+            warn: Color::hex(0xF59E0B, 1.0),
             track: Color::hex(0xFFFFFF, 0.18),
             hover: Color::hex(0xFFFFFF, 0.10),
+            segment_track: Color::hex(0xFFFFFF, 0.07),
+            segment_active: Color::hex(0xFFFFFF, 0.16),
             shadow: Color::hex(0x000000, 0.32),
         }
     }
@@ -133,8 +139,11 @@ impl Theme {
             accent: Color::hex(0x0A84D0, 1.0),
             live: Color::hex(0x16A34A, 1.0),
             error: Color::hex(0xDC2626, 1.0),
+            warn: Color::hex(0xB45309, 1.0),
             track: Color::hex(0x000000, 0.14),
             hover: Color::hex(0x000000, 0.07),
+            segment_track: Color::hex(0x000000, 0.06),
+            segment_active: Color::hex(0xFFFFFF, 1.0),
             shadow: Color::hex(0x000000, 0.14),
         }
     }
@@ -186,6 +195,11 @@ mod tests {
             assert!(
                 contrast_ratio(theme.error, bg) >= 3.0,
                 "{:?} error",
+                theme.appearance
+            );
+            assert!(
+                contrast_ratio(theme.warn, bg) >= 3.0,
+                "{:?} warn",
                 theme.appearance
             );
         }

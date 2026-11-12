@@ -45,26 +45,26 @@ Una interfaz elegante y mínima que casi no se ve: el video ocupa toda la ventan
 - **U-1.2** Rectángulos redondeados con borde y sombra suave (SDF en el shader), con transparencia.
 - **U-1.3** Escalado por factor DPI y clip de regiones.
 
-### U-2 · Tema (U-2.1 hecho: tokens y tests de contraste)
+### U-2 · Tema — HECHO
 - **U-2.1** `Theme` con tokens oscuro/claro (módulo puro, con tests de contraste).
 - **U-2.2** Resolver Auto con `window.theme()` y reaccionar a `ThemeChanged`.
 
-### U-3 · Idiomas (U-3.1 y U-3.2 hechos: tablas, detección del idioma de Windows)
+### U-3 · Idiomas — HECHO (incluye ajustes `theme` y `language` guardados)
 - **U-3.1** Tablas de cadenas `en-US` y `es-419` con una función `tr(Key)`; un test comprueba que ambas tienen las mismas claves.
 - **U-3.2** Detección del idioma de Windows; Auto → español si empieza por `es`, si no inglés.
 - **U-3.3** Campos `theme` y `language` en `AppSettings` (compatibles con el JSON de la app C#).
 
-### U-4 · Widgets
+### U-4 · Widgets — HECHO (hover, pulsado, arrastre, rueda; control segmentado y listas)
 - **U-4.1** Estado de interacción (ratón, foco, arrastre) y botón de icono.
 - **U-4.2** Deslizador (volumen) y control de paso (sincronía).
 - **U-4.3** Control segmentado y lista desplegable.
 
-### U-5 · Píldora y popover
+### U-5 · Píldora y popover — HECHO (píldora viva, popover, auto-ocultado con fundido, cursor)
 - **U-5.1** Píldora inferior con estado, volumen, sincronía, ajustes y pantalla completa.
 - **U-5.2** Popover de ajustes: dispositivos, calidad, tema, idioma.
 - **U-5.3** Auto-ocultado a 3 s con fundido y cursor oculto en pantalla completa.
 
-### U-6 · Cierre
+### U-6 · Cierre (pendiente)
 - **U-6.1** Quitar el título dinámico (la información pasa a la píldora) y los avisos de error visibles en pantalla.
 - **U-6.2** Prueba visual en oscuro/claro, español/inglés, 100 %/150 % de escala.
 - **U-6.3** Actualizar README con capturas.
@@ -73,6 +73,7 @@ Una interfaz elegante y mínima que casi no se ve: el video ocupa toda la ventan
 
 ```powershell
 dockview.exe --ui-preview --theme dark|light|auto --lang en|es|auto --scale 1.5
+dockview.exe --ui-preview --open-settings           # con el popover abierto
 dockview.exe --ui-preview --screenshot salida.png   # guarda la ventana y sale
 ```
 

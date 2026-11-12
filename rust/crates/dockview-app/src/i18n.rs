@@ -8,19 +8,16 @@ pub enum Lang {
     Es,
 }
 
-/// User preference for the language.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum LangMode {
-    /// Follow the Windows display language.
-    #[default]
-    Auto,
-    En,
-    Es,
+pub use dockview_core::settings::LangMode;
+
+/// Resolving the stored preference against the detected system language.
+pub trait LangModeExt {
+    fn resolve(self, system: Lang) -> Lang;
 }
 
-impl LangMode {
+impl LangModeExt for LangMode {
     /// Resolves the preference given the detected system language.
-    pub fn resolve(self, system: Lang) -> Lang {
+    fn resolve(self, system: Lang) -> Lang {
         match self {
             Self::Auto => system,
             Self::En => Lang::En,

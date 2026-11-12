@@ -1,8 +1,9 @@
 //! Immediate-mode drawing layer: shapes and text are queued as vertices in
 //! logical pixels and drawn by [`gpu::UiGpu`] on top of the video.
 
+pub mod controls;
 pub mod gpu;
-pub mod preview;
+pub mod input;
 pub mod text;
 
 use crate::theme::Color;
@@ -78,6 +79,7 @@ pub struct Ui {
     vertices: Vec<Vertex>,
     scale: f32,
     viewport: (u32, u32),
+    opacity: f32,
 }
 
 impl Ui {
@@ -87,6 +89,7 @@ impl Ui {
             vertices: Vec::new(),
             scale: 1.0,
             viewport: (1, 1),
+            opacity: 1.0,
         }
     }
 
@@ -96,6 +99,16 @@ impl Ui {
         self.vertices.clear();
         self.viewport = viewport;
         self.scale = scale.max(0.5);
+        self.opacity = 1.0;
+    }
+
+    /// Multiplies the alpha of everything drawn from now on (for fades).
+    pub fn set_opacity(&mut self, opacity: f32) {
+        self.opacity = opacity.clamp(0.0, 1.0);
+    }
+
+    fn tint(&self, color: Color) -> [f32; 4] {
+        color.with_alpha(color.a * self.opacity).to_array()
     }
 
     /// Viewport size in logical pixels.
@@ -154,7 +167,7 @@ impl Ui {
             (radius * s).min(half_w.min(half_h)),
             blur * s,
         ];
-        let rgba = color.to_array();
+        let rgba = self.tint(color);
         let (cx, cy) = (x + half_w, y + half_h);
         let corners = [
             [x - pad, y - pad],
@@ -228,7 +241,7 @@ impl Ui {
         // Snap the origin to whole pixels so glyph edges stay crisp.
         let (ox, oy) = ((x * scale).round(), (y * scale).round());
         let atlas = text::ATLAS_SIZE as f32;
-        let rgba = color.to_array();
+        let rgba = self.tint(color);
 
         for glyph in &shaped.glyphs {
             let Some(slot) = self.text.slot(glyph.key) else {

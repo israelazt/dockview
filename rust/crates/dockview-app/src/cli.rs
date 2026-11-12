@@ -2,7 +2,8 @@
 //!
 //! ```text
 //! dockview.exe [--test-pattern] [--ui-preview] [--theme auto|dark|light]
-//!              [--lang auto|en|es] [--scale N] [--screenshot FILE.png]
+//!              [--lang auto|en|es] [--scale N] [--open-settings]
+//!              [--screenshot FILE.png]
 //! ```
 
 use std::path::PathBuf;
@@ -16,10 +17,14 @@ pub struct Cli {
     pub test_pattern: bool,
     /// Show the interface mock-up over the test pattern; no devices are used.
     pub ui_preview: bool,
-    pub theme: ThemeMode,
-    pub lang: LangMode,
+    /// Forces a theme for this run without changing the saved preference.
+    pub theme: Option<ThemeMode>,
+    /// Forces a language for this run without changing the saved preference.
+    pub lang: Option<LangMode>,
     /// Overrides the Windows display scale for the interface and window size.
     pub scale: Option<f32>,
+    /// Start with the settings popover open.
+    pub open_settings: bool,
     /// Render a few frames, save the window as a PNG and exit.
     pub screenshot: Option<PathBuf>,
 }
@@ -50,9 +55,9 @@ impl Cli {
                 }
                 "--theme" => {
                     cli.theme = match value("--theme")?.to_lowercase().as_str() {
-                        "auto" => ThemeMode::Auto,
-                        "dark" => ThemeMode::Dark,
-                        "light" => ThemeMode::Light,
+                        "auto" => Some(ThemeMode::Auto),
+                        "dark" => Some(ThemeMode::Dark),
+                        "light" => Some(ThemeMode::Light),
                         other => {
                             return Err(format!("unknown theme '{other}' (auto, dark, light)"))
                         }
@@ -60,9 +65,9 @@ impl Cli {
                 }
                 "--lang" => {
                     cli.lang = match value("--lang")?.to_lowercase().as_str() {
-                        "auto" => LangMode::Auto,
-                        "en" => LangMode::En,
-                        "es" => LangMode::Es,
+                        "auto" => Some(LangMode::Auto),
+                        "en" => Some(LangMode::En),
+                        "es" => Some(LangMode::Es),
                         other => return Err(format!("unknown language '{other}' (auto, en, es)")),
                     }
                 }
@@ -76,6 +81,7 @@ impl Cli {
                     }
                     cli.scale = Some(scale);
                 }
+                "--open-settings" => cli.open_settings = true,
                 "--screenshot" => cli.screenshot = Some(PathBuf::from(value("--screenshot")?)),
                 other => return Err(format!("unknown option '{other}'")),
             }
@@ -108,9 +114,15 @@ mod tests {
         let a = parse(&["--theme", "light", "--lang", "es", "--scale", "1.5"]).unwrap();
         let b = parse(&["--theme=light", "--lang=es", "--scale=1.5"]).unwrap();
         assert_eq!(a, b);
-        assert_eq!(a.theme, ThemeMode::Light);
-        assert_eq!(a.lang, LangMode::Es);
+        assert_eq!(a.theme, Some(ThemeMode::Light));
+        assert_eq!(a.lang, Some(LangMode::Es));
         assert_eq!(a.scale, Some(1.5));
+    }
+
+    #[test]
+    fn open_settings_is_a_flag() {
+        assert!(parse(&["--open-settings"]).unwrap().open_settings);
+        assert!(!parse(&[]).unwrap().open_settings);
     }
 
     #[test]

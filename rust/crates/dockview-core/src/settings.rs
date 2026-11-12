@@ -62,6 +62,28 @@ impl<'de> Deserialize<'de> for RenderPreset {
     }
 }
 
+/// Interface theme preference.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ThemeMode {
+    /// Follow the Windows app theme.
+    #[default]
+    Auto,
+    Dark,
+    Light,
+}
+
+/// Interface language preference.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum LangMode {
+    /// Follow the Windows display language.
+    #[default]
+    Auto,
+    En,
+    Es,
+}
+
 /// Persisted application settings. Every field falls back to its default when
 /// missing from the file.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -81,6 +103,10 @@ pub struct AppSettings {
     pub was_fullscreen: bool,
     /// Render quality preset.
     pub render_preset: RenderPreset,
+    /// Interface theme preference.
+    pub theme: ThemeMode,
+    /// Interface language preference.
+    pub language: LangMode,
 }
 
 impl Default for AppSettings {
@@ -92,6 +118,8 @@ impl Default for AppSettings {
             volume: 1.0,
             was_fullscreen: false,
             render_preset: RenderPreset::default(),
+            theme: ThemeMode::default(),
+            language: LangMode::default(),
         }
     }
 }
@@ -179,6 +207,8 @@ mod tests {
             volume: 0.75,
             was_fullscreen: true,
             render_preset: RenderPreset::Quality,
+            theme: ThemeMode::Light,
+            language: LangMode::Es,
         };
         let json = serde_json::to_string_pretty(&original).unwrap();
         let restored: AppSettings = serde_json::from_str(&json).unwrap();
@@ -211,6 +241,24 @@ mod tests {
     fn reads_preset_by_name_case_insensitive() {
         let s: AppSettings = serde_json::from_str(r#"{"renderPreset": "Performance"}"#).unwrap();
         assert_eq!(s.render_preset, RenderPreset::Performance);
+    }
+
+    #[test]
+    fn theme_and_language_are_stored_as_lowercase_words() {
+        let s = AppSettings {
+            theme: ThemeMode::Dark,
+            language: LangMode::En,
+            ..AppSettings::default()
+        };
+        let json = serde_json::to_string(&s).unwrap();
+        assert!(json.contains(r#""theme":"dark""#));
+        assert!(json.contains(r#""language":"en""#));
+    }
+
+    #[test]
+    fn files_from_the_csharp_app_load_with_auto_theme_and_language() {
+        let s: AppSettings = serde_json::from_str(r#"{"volume": 0.5}"#).unwrap();
+        assert_eq!((s.theme, s.language), (ThemeMode::Auto, LangMode::Auto));
     }
 
     #[test]
