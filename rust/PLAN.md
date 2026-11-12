@@ -6,6 +6,13 @@ Abrir un único `Dockview.exe` (sin instalador, sin registro, sin cuenta) que mu
 
 Medida de "hecho": doble clic → imagen y sonido de la consola en pantalla; latencia vídeo ≤ ~2 frames de display (≈33 ms a 60 Hz) más la propia de la capturadora; sin saltos de audio en sesiones largas.
 
+## Estado (2026-11-11)
+
+MVP funcional compilado en `migration/rust`. Verificado en esta máquina: render D3D11 con patrón de prueba, captura y audio con una webcam y su micrófono. **Pendiente de verificar con la capturadora UGREEN real** (no estaba conectada con cables): modo 1080p, latencia, sincronía de audio, MJPEG.
+
+Hecho: Fase 1 completa; Fase 2 (T-2.1 a T-2.4, T-2.6); Fase 3 salvo T-3.6 medido; Fase 4 (T-4.1 a T-4.7); Fase 5 con controles por teclado (sin controles en pantalla); T-6.1/T-6.2 (exe de 0,6 MB, CRT estático).
+Pendiente: T-2.5 (MJPEG→NV12 con decodificador por hardware, hoy lo hace el reader de MF), T-6.3 (icono/manifiesto/subsistema sin consola), T-6.4, T-6.5, y toda la Fase final.
+
 ## Decisiones de partida
 
 - Referencia: el C# de la raíz (no se modifica hasta terminar).
