@@ -137,6 +137,8 @@ struct App {
     saving: Option<SaveHandle>,
     hotkey: Option<hotkey::Hotkey>,
     toasts: ToastHost,
+    /// Installed RAM, which caps the replay length.
+    total_ram: u64,
 }
 
 /// Whether Windows allows UI animations ("Show animations in Windows").
@@ -251,6 +253,7 @@ impl App {
             saving: None,
             hotkey: None,
             toasts: ToastHost::new(),
+            total_ram: perf::total_ram_bytes(),
         };
 
         app.controls.set_animations(animations);
@@ -262,6 +265,9 @@ impl App {
             }
             if app.cli.open_settings {
                 app.controls.toggle_settings();
+            }
+            if app.cli.open_replay {
+                app.controls.toggle_replay();
             }
             return app;
         }
@@ -304,6 +310,7 @@ impl App {
         if self.cli.ui_preview {
             return;
         }
+        self.clamp_replay_length();
         let hotkey = hotkey::Hotkey::register();
         if !hotkey.is_registered() {
             eprintln!("replay hotkey {} is taken by another program", hotkey::LABEL);
@@ -323,7 +330,7 @@ impl App {
                 ReplaySettings {
                     // A little extra so a clip of the chosen length always fits
                     // (it starts at the keyframe before the cut).
-                    keep_seconds: f64::from(self.settings.replay_seconds) + 2.0,
+                    keep_seconds: f64::from(self.settings.replay_seconds + settings::REPLAY_MARGIN_SECONDS),
                     bitrate_mbps: self.settings.replay_bitrate_mbps,
                     fps: 60,
                 },
@@ -340,6 +347,16 @@ impl App {
         }
     }
 
+    /// The longest replay this PC's memory allows, in seconds.
+    fn replay_limit(&self) -> u32 {
+        settings::max_replay_seconds(self.settings.replay_bitrate_mbps, self.total_ram)
+    }
+
+    /// Brings a saved length that is too long for this PC down to the limit.
+    fn clamp_replay_length(&mut self) {
+        self.settings.replay_seconds = self.settings.replay_seconds.min(self.replay_limit());
+    }
+
     /// Folder clips are saved to.
     fn clips_folder(&self) -> std::path::PathBuf {
         self.settings
@@ -352,6 +369,11 @@ impl App {
         use ui::controls::{ReplayState, ReplayView};
         let mut view = ReplayView::off(hotkey::LABEL);
         view.keep_seconds = self.settings.replay_seconds;
+        view.memory_bytes = settings::replay_memory_bytes(
+            self.settings.replay_seconds,
+            self.settings.replay_bitrate_mbps,
+        );
+        view.at_limit = self.settings.replay_seconds >= self.replay_limit();
         view.folder = self.clips_folder().display().to_string();
         view.saving = self.saving.is_some();
         if let Some(recorder) = &self.recorder {
@@ -634,8 +656,9 @@ impl App {
             Action::ReplayLength(delta) => {
                 self.settings.replay_seconds =
                     settings::step_replay_seconds(self.settings.replay_seconds, delta);
+                self.clamp_replay_length();
                 if let Some(recorder) = &self.recorder {
-                    recorder.set_keep_seconds(f64::from(self.settings.replay_seconds) + 2.0);
+                    recorder.set_keep_seconds(f64::from(self.settings.replay_seconds + settings::REPLAY_MARGIN_SECONDS));
                 }
             }
             Action::SaveReplay => {

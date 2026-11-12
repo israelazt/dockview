@@ -3,6 +3,7 @@
 use std::time::Instant;
 
 use windows::Win32::Foundation::FILETIME;
+use windows::Win32::System::SystemInformation::{GlobalMemoryStatusEx, MEMORYSTATUSEX};
 use windows::Win32::System::ProcessStatus::{GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS};
 use windows::Win32::System::Threading::{GetCurrentProcess, GetProcessTimes};
 
@@ -97,6 +98,19 @@ fn working_set_bytes() -> Option<usize> {
         GetProcessMemoryInfo(GetCurrentProcess(), &mut counters, counters.cb).ok()?;
     }
     Some(counters.WorkingSetSize)
+}
+
+/// Installed physical memory in bytes, or `0` if Windows does not say.
+pub fn total_ram_bytes() -> u64 {
+    let mut status = MEMORYSTATUSEX {
+        dwLength: std::mem::size_of::<MEMORYSTATUSEX>() as u32,
+        ..Default::default()
+    };
+    // SAFETY: `status` is a valid MEMORYSTATUSEX with dwLength set.
+    match unsafe { GlobalMemoryStatusEx(&mut status) } {
+        Ok(()) => status.ullTotalPhys,
+        Err(_) => 0,
+    }
 }
 
 #[cfg(test)]

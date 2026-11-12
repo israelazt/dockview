@@ -113,6 +113,10 @@ pub struct ReplayView {
     pub buffered_mb: f32,
     /// Length of a clip, in seconds.
     pub keep_seconds: u32,
+    /// Memory the buffer needs at this length, in bytes.
+    pub memory_bytes: u64,
+    /// The chosen length is the longest this PC's memory allows.
+    pub at_limit: bool,
     pub folder: String,
     pub hotkey: String,
 }
@@ -126,6 +130,8 @@ impl ReplayView {
             buffered_seconds: 0.0,
             buffered_mb: 0.0,
             keep_seconds: 30,
+            memory_bytes: 0,
+            at_limit: false,
             folder: String::new(),
             hotkey: hotkey.to_owned(),
         }
@@ -825,7 +831,16 @@ impl Controls {
             ),
         };
         let status_lines = wrap_text(ui, &status, small, inner_w);
-        let hint = tr(lang, Key::ReplayHint).replace("{hotkey}", &r.hotkey);
+        let memory_key = if r.at_limit {
+            Key::ReplayMemoryLimit
+        } else {
+            Key::ReplayMemory
+        };
+        let hint = format!(
+            "{} {}",
+            tr(lang, memory_key).replace("{size}", &crate::i18n::size_label(r.memory_bytes)),
+            tr(lang, Key::ReplayHint).replace("{hotkey}", &r.hotkey)
+        );
         let hint_lines = wrap_text(ui, &hint, hint_style, inner_w);
 
         let title_h = 30.0;

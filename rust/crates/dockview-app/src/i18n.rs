@@ -107,6 +107,8 @@ pub enum Key {
     ReplayUnavailable,
     ReplayKeep,
     ReplayHint,
+    ReplayMemory,
+    ReplayMemoryLimit,
     SaveClip,
     OpenFolder,
     ToastClipSaved,
@@ -126,8 +128,18 @@ pub fn duration_label(seconds: u32) -> String {
     }
 }
 
+/// A memory size for people: `640 MB`, `1.5 GB`.
+pub fn size_label(bytes: u64) -> String {
+    let mb = bytes as f64 / 1e6;
+    if mb < 1000.0 {
+        format!("{:.0} MB", (mb / 10.0).round() * 10.0)
+    } else {
+        format!("{:.1} GB", mb / 1000.0)
+    }
+}
+
 /// All keys, for completeness tests.
-pub const ALL_KEYS: [Key; 65] = [
+pub const ALL_KEYS: [Key; 67] = [
     Key::Live,
     Key::Connecting,
     Key::Disconnected,
@@ -185,6 +197,8 @@ pub const ALL_KEYS: [Key; 65] = [
     Key::ReplayUnavailable,
     Key::ReplayKeep,
     Key::ReplayHint,
+    Key::ReplayMemory,
+    Key::ReplayMemoryLimit,
     Key::SaveClip,
     Key::OpenFolder,
     Key::ToastClipSaved,
@@ -263,6 +277,8 @@ fn en(key: Key) -> &'static str {
         Key::ReplayUnavailable => "Not available on this PC.",
         Key::ReplayKeep => "Keep the last",
         Key::ReplayHint => "A clip has at least this much. Hotkey: {hotkey}",
+        Key::ReplayMemory => "Uses about {size} of memory.",
+        Key::ReplayMemoryLimit => "Uses about {size} of memory. This is the longest this PC's memory allows.",
         Key::SaveClip => "Save clip",
         Key::OpenFolder => "Open folder",
         Key::ToastClipSaved => "Clip saved",
@@ -333,6 +349,8 @@ fn es(key: Key) -> &'static str {
         Key::ReplayUnavailable => "No disponible en este PC.",
         Key::ReplayKeep => "Guardar los últimos",
         Key::ReplayHint => "Un clip tiene al menos este tiempo. Atajo: {hotkey}",
+        Key::ReplayMemory => "Usa unos {size} de memoria.",
+        Key::ReplayMemoryLimit => "Usa unos {size} de memoria. Es lo más largo que permite la memoria de este PC.",
         Key::SaveClip => "Guardar clip",
         Key::OpenFolder => "Abrir carpeta",
         Key::ToastClipSaved => "Clip guardado",
@@ -384,6 +402,8 @@ mod tests {
     fn the_replay_hint_keeps_its_placeholder_in_both_languages() {
         for lang in [Lang::En, Lang::Es] {
             assert!(tr(lang, Key::ReplayHint).contains("{hotkey}"), "{lang:?}");
+            assert!(tr(lang, Key::ReplayMemory).contains("{size}"), "{lang:?}");
+            assert!(tr(lang, Key::ReplayMemoryLimit).contains("{size}"), "{lang:?}");
         }
     }
 

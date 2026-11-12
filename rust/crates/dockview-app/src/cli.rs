@@ -26,6 +26,8 @@ pub struct Cli {
     pub scale: Option<f32>,
     /// Start with the settings popover open.
     pub open_settings: bool,
+    /// Start with the instant-replay popover open.
+    pub open_replay: bool,
     /// Start with the statistics panel open.
     pub show_stats: bool,
     /// Preview only: show sample problems in the diagnosis.
@@ -91,6 +93,7 @@ impl Cli {
                     cli.scale = Some(scale);
                 }
                 "--open-settings" => cli.open_settings = true,
+                "--open-replay" => cli.open_replay = true,
                 "--stats" => cli.show_stats = true,
                 "--video" => cli.video = Some(value("--video")?),
                 "--log-stats" => cli.log_stats = Some(PathBuf::from(value("--log-stats")?)),

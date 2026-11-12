@@ -105,6 +105,32 @@ pub const DEFAULT_REPLAY_SECONDS: u32 = 30;
 /// Default video bitrate for the replay buffer, in megabits per second.
 pub const DEFAULT_REPLAY_MBPS: u32 = 40;
 
+/// Extra seconds the recorder keeps beyond the clip length, so a clip of the
+/// chosen length always fits (it starts at the keyframe before the cut).
+pub const REPLAY_MARGIN_SECONDS: u32 = 2;
+/// Share of the installed RAM the replay buffer may use.
+pub const REPLAY_RAM_SHARE_PERCENT: u64 = 20;
+
+/// Memory the buffer needs for `seconds` of footage at `bitrate_mbps`, in bytes.
+pub fn replay_memory_bytes(seconds: u32, bitrate_mbps: u32) -> u64 {
+    u64::from(seconds + REPLAY_MARGIN_SECONDS) * u64::from(bitrate_mbps) * 125_000
+}
+
+/// The longest listed length whose buffer fits in [`REPLAY_RAM_SHARE_PERCENT`]
+/// of `total_ram_bytes`. Never below the shortest length. An unknown amount of
+/// RAM (`0`) imposes no limit.
+pub fn max_replay_seconds(bitrate_mbps: u32, total_ram_bytes: u64) -> u32 {
+    if total_ram_bytes == 0 {
+        return REPLAY_STEPS[REPLAY_STEPS.len() - 1];
+    }
+    let budget = total_ram_bytes / 100 * REPLAY_RAM_SHARE_PERCENT;
+    REPLAY_STEPS
+        .iter()
+        .copied()
+        .rfind(|&s| replay_memory_bytes(s, bitrate_mbps) <= budget)
+        .unwrap_or(REPLAY_STEPS[0])
+}
+
 /// Moves `current` one step along [`REPLAY_STEPS`] (`delta` of +1 or -1),
 /// snapping first to the nearest listed length. Stops at either end.
 pub fn step_replay_seconds(current: u32, delta: i32) -> u32 {
@@ -364,6 +390,21 @@ mod tests {
         // An unlisted value snaps to its nearest step before moving.
         assert_eq!(step_replay_seconds(33, 1), 45);
         assert_eq!(step_replay_seconds(200, -1), 120);
+    }
+
+    #[test]
+    fn replay_memory_estimate_and_ram_limit() {
+        // 30 s + 2 s margin at 40 Mbps = 160 MB.
+        assert_eq!(replay_memory_bytes(30, 40), 160_000_000);
+        // 8 GB of RAM: budget 1.6 GB -> 300 s needs 1.51 GB, 420 s needs 2.1 GB.
+        let eight_gb = 8 * 1024 * 1024 * 1024;
+        assert_eq!(max_replay_seconds(40, eight_gb), 300);
+        // 16 GB: 600 s needs 3.0 GB, 900 s needs 4.5 GB (budget 3.4 GB).
+        assert_eq!(max_replay_seconds(40, 2 * eight_gb), 600);
+        // 1 GB of RAM allows 30 s; the shortest length is always allowed; unknown RAM is unlimited.
+        assert_eq!(max_replay_seconds(40, 1024 * 1024 * 1024), 30);
+        assert_eq!(max_replay_seconds(100, 1), REPLAY_STEPS[0]);
+        assert_eq!(max_replay_seconds(40, 0), 900);
     }
 
     #[test]
