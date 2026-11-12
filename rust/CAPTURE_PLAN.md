@@ -201,7 +201,7 @@ Lo que se quiere: componer **varias fuentes a la vez** (por ejemplo el juego a p
 | E-1 ✅ | Compositor sin interfaz: dos fuentes (pantalla/ventana a pantalla completa + capturadora en una esquina); herramienta de prueba que graba y mide | FPS, CPU y GPU; colores y posiciones correctas; coste con LoL abierto |
 | E-2 ✅ | La app mantiene varias fuentes a la vez; el compositor alimenta visor, replay y grabación | Grabar una escena con clics reales |
 | E-3a ✅ | Modelo de escenas, guardado en `settings.json`, redirección de frames y varias capas encima (sin interfaz nueva) | Escena guardada activada al arrancar, con clics: pendiente de E-3b |
-| E-3b | Botón y popover de escenas: activar, crear, borrar y añadir una fuente en una esquina (módulo `ui/scenes.rs`) | Clics reales y capturas |
+| E-3b ✅ | Botón y popover de escenas: activar, crear, borrar y añadir una fuente en una esquina (módulo `ui/scenes.rs`) | Clics reales y capturas |
 | E-3c | Editor libre sobre la vista previa: mover, redimensionar y panel de capas (módulo `ui/scene_editor.rs`) | Clics reales y capturas |
 | E-3d | Pulido y pruebas con clics reales | Grabar una escena editada |
 | E-4 | Cambio de escena con tecla global y transición suave opcional | Pruebas |
@@ -237,6 +237,15 @@ Regla del autor: **módulos pequeños**. Por eso el modelo vive en `dockview-cor
 - **Redirección de frames** (`FrameSlot::set_forward`): la fuente principal publica siempre en `input_slot`, que sin escena reenvía directo al slot que leen el visor, el replay y la grabación, y con escena guarda los frames para el compositor. Activar o quitar una escena **no reinicia el grabador ni el replay**.
 - **En la app:** `activate_scene` pone la base como fuente principal, arranca las capas de encima y el compositor; una escena de una sola capa a pantalla completa no usa compositor. Al arrancar se restaura la escena de la última vez, salvo que la línea de comandos elija otra fuente. `--pip` crea una escena temporal que no se guarda.
 - **Verificado con la app real:** `--test-pattern --pip monitor:0` y una escena guardada de dos monitores que se activa sola al arrancar. 10 tests nuevos en el núcleo (modelo, guardado, redirección).
+
+### Resultados de E-3b
+
+- **Botón de escenas** en la píldora (icono de capas, junto al de fuentes) y su **popover**: «Fuente simple» (sin escena), la lista de escenas con la activa marcada y un botón de borrar, «Nueva escena» (crea una escena con la fuente actual y la activa), y para la escena activa su lista de **capas** con ojo (mostrar u ocultar), quitar (salvo la base) y «Añadir una fuente», que abre la lista de capturadoras, pantallas y ventanas y coloca la fuente en la primera esquina libre. Textos en inglés y español, con tooltips.
+- **Módulos pequeños:** el dibujo y los clics viven en `ui/controls/scenes.rs`, y las acciones en `scene_actions.rs`. `controls.rs` solo ganó el enlace (una variante `Hit::Scenes`, `Action::Scene`, el campo del modelo y el botón) y de paso quedó más corto en sus cuatro funciones de abrir/cerrar popovers, que ahora comparten un único `close_popovers`.
+- Activar, ocultar, quitar o añadir una capa **no reinicia el grabador ni el replay**; ocultar es instantáneo y no reabre la fuente. Si la escena queda con una sola capa a pantalla completa, el compositor se apaga solo.
+- **Verificado con la app real y clics de ratón:** abrir el popover, crear la escena, añadir «Pantalla 1», ocultarla, mostrarla y quitarla, comprobando el `settings.json` tras cada paso. 11 tests nuevos (clics, un solo popover abierto, la lista de añadir, el ajuste a 720p con muchas fuentes, tooltips). `--open-scenes` abre el popover para capturas.
+- **Límites conocidos:** borrar una escena no pide confirmación; la lista de escenas muestra 6 y la de añadir 4 capturadoras, 4 pantallas y 6 ventanas, para que quepa en una ventana de 720p; aún no se puede cambiar el nombre de una escena desde la interfaz (se puede en `settings.json`); la posición y el tamaño de cada capa se editan en E-3c.
+- **Aviso para probar:** mientras alguna capa es una pantalla, la ventana de Dockview se excluye de las capturas de pantalla de Windows (por diseño), así que una captura externa muestra lo que hay detrás. Para comprobar el estado sin depender de capturas se vuelca `settings.json`.
 
 ### Resultados de E-2
 

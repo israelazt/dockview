@@ -67,6 +67,8 @@ pub struct Cli {
     pub open_replay: bool,
     /// Start with the source popover open.
     pub open_sources: bool,
+    /// Start with the scenes popover open.
+    pub open_scenes: bool,
     /// Start with the microphone on (for tests and screenshots; it is off by default).
     pub mic: bool,
     /// Start recording right away (for tests and screenshots).
@@ -146,6 +148,7 @@ impl Cli {
                 "--open-settings" => cli.open_settings = true,
                 "--open-replay" => cli.open_replay = true,
                 "--open-sources" => cli.open_sources = true,
+                "--open-scenes" => cli.open_scenes = true,
                 "--mic" => cli.mic = true,
                 "--record" => cli.record = true,
                 "--screen" => {

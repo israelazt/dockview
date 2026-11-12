@@ -47,6 +47,8 @@ pub struct Overlay {
     /// Where the source publishes; the compositor reads it.
     pub slot: Arc<FrameSlot>,
     pub layer: SceneLayer,
+    /// The position of this layer in the saved scene.
+    pub index: usize,
 }
 
 impl App {
@@ -159,7 +161,7 @@ impl App {
     }
 
     /// Starts the source of an overlay, publishing to `slot`.
-    fn start_overlay_source(
+    pub(crate) fn start_overlay_source(
         &mut self,
         source: &SourceRef,
         slot: &Arc<FrameSlot>,
@@ -231,13 +233,14 @@ impl App {
             return;
         };
         let mut missing = 0;
-        for layer in scene.layers.iter().skip(1) {
+        for (index, layer) in scene.layers.iter().enumerate().skip(1) {
             let slot = Arc::new(FrameSlot::new());
             match self.start_overlay_source(&layer.source, &slot) {
                 Some(running) => self.overlays.push(Overlay {
                     running,
                     slot,
                     layer: layer.clone(),
+                    index,
                 }),
                 None => missing += 1,
             }
@@ -246,19 +249,38 @@ impl App {
             eprintln!("{missing} source(s) of the scene could not be started");
             self.toast(i18n::Key::ToastSceneMissing, ToastKind::Error);
         }
-        // A base over the whole picture and no overlays needs no compositor.
-        let plain = self.overlays.is_empty() && base.rect == NormRect::FULL && base.visible;
-        if !plain {
-            self.input_slot.set_forward(None);
-            self.scene = Some(SceneCompositor::start(
-                self.scene_layers(&base),
-                Arc::clone(&self.slot),
-                SCENE_WIDTH,
-                SCENE_HEIGHT,
-            ));
-        }
         self.scene_base = Some(base);
+        self.sync_compositor();
         self.set_capture_exclusion(self.wants_exclusion());
+    }
+
+    /// Makes the compositor match the layers: none for a single full-picture
+    /// layer (the main source feeds the viewer directly), else running with
+    /// the current layers.
+    pub fn sync_compositor(&mut self) {
+        let Some(base) = self.scene_base.clone() else {
+            return;
+        };
+        let plain = self.overlays.is_empty() && base.rect == NormRect::FULL && base.visible;
+        if plain {
+            if self.scene.take().is_some() {
+                self.input_slot.set_forward(Some(Arc::clone(&self.slot)));
+            }
+            return;
+        }
+        let layers = self.scene_layers(&base);
+        match &self.scene {
+            Some(scene) => scene.set_layers(layers),
+            None => {
+                self.input_slot.set_forward(None);
+                self.scene = Some(SceneCompositor::start(
+                    layers,
+                    Arc::clone(&self.slot),
+                    SCENE_WIDTH,
+                    SCENE_HEIGHT,
+                ));
+            }
+        }
     }
 
     /// Switches to scene `index` (or, with `None`, to the plain main source).
@@ -384,20 +406,9 @@ impl App {
         for index in lost.into_iter().rev() {
             self.overlays.remove(index);
         }
-        self.refresh_scene_layers();
+        self.sync_compositor();
         self.set_capture_exclusion(self.wants_exclusion());
         self.toast(i18n::Key::ToastPipLost, ToastKind::Error);
-    }
-
-    /// Hands the compositor the current layers (after an edit or a loss).
-    pub fn refresh_scene_layers(&mut self) {
-        let Some(base) = self.scene_base.clone() else {
-            return;
-        };
-        let layers = self.scene_layers(&base);
-        if let Some(scene) = &self.scene {
-            scene.set_layers(layers);
-        }
     }
 
     /// Whether Dockview's own window must stay out of the captured picture:

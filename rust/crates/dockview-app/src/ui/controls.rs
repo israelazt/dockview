@@ -12,6 +12,11 @@ use dockview_core::settings::{
     MAX_AUDIO_OFFSET_MS,
 };
 
+mod scenes;
+
+use scenes::SceneHit;
+pub use scenes::{LayerView, SceneAction, ScenesView};
+
 use super::input::Pointer;
 use super::stats::wrap_text;
 use super::text::Weight;
@@ -275,6 +280,7 @@ pub struct Model {
     pub mic: MicView,
     pub rec: RecView,
     pub sources: SourcesView,
+    pub scenes: ScenesView,
 }
 
 /// A change the user asked for.
@@ -306,11 +312,13 @@ pub enum Action {
     /// Choose another folder for clips and recordings.
     ChooseFolder,
     SetQuality(RecordingQuality),
+    /// A change in the scenes popover.
+    Scene(SceneAction),
 }
 
 /// Identifies an interactive (or occluding) region.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-enum Hit {
+pub(super) enum Hit {
     Pill,
     Popover,
     Volume,
@@ -348,6 +356,8 @@ enum Hit {
     MicToggle,
     /// Only an animation key for the microphone switch knob; never registered.
     MicKnob,
+    /// Anything in the scenes popover, and the pill's button for it.
+    Scenes(SceneHit),
 }
 
 impl Hit {
@@ -379,7 +389,7 @@ impl Hit {
                 | Hit::ReplayFolder
                 | Hit::ReplayChangeFolder
                 | Hit::Quality(_)
-        )
+        ) || matches!(self, Hit::Scenes(h) if h.in_popover())
     }
 }
 
@@ -389,12 +399,16 @@ enum PopoverKind {
     Settings,
     Replay,
     Sources,
+    Scenes,
 }
 
 pub struct Controls {
     settings_open: bool,
     replay_open: bool,
     sources_open: bool,
+    scenes_open: bool,
+    /// The scenes popover is showing the list of sources to add.
+    scenes_adding: bool,
     popover_kind: PopoverKind,
     always_visible: bool,
     visibility: f32,
@@ -433,6 +447,8 @@ impl Controls {
             settings_open: false,
             replay_open: false,
             sources_open: false,
+            scenes_open: false,
+            scenes_adding: false,
             popover_kind: PopoverKind::Settings,
             always_visible,
             visibility: if always_visible { 1.0 } else { 0.0 },
@@ -476,38 +492,45 @@ impl Controls {
         self.is_visible() && self.hovered.is_some_and(Hit::is_widget)
     }
 
-    /// Closes the popover; returns whether it was open.
-    pub fn close_settings(&mut self) -> bool {
-        let was_open = self.popover_target();
+    /// Closes whichever popover is open.
+    fn close_popovers(&mut self) {
         self.settings_open = false;
         self.replay_open = false;
         self.sources_open = false;
+        self.scenes_open = false;
+        self.scenes_adding = false;
+    }
+
+    /// Closes the popover; returns whether it was open.
+    pub fn close_settings(&mut self) -> bool {
+        let was_open = self.popover_target();
+        self.close_popovers();
         was_open
     }
 
     pub fn toggle_settings(&mut self) {
-        self.settings_open = !self.settings_open;
+        let was_open = self.settings_open;
+        self.close_popovers();
+        self.settings_open = !was_open;
         if self.settings_open {
-            self.replay_open = false;
-            self.sources_open = false;
             self.popover_kind = PopoverKind::Settings;
         }
     }
 
     pub fn toggle_replay(&mut self) {
-        self.replay_open = !self.replay_open;
+        let was_open = self.replay_open;
+        self.close_popovers();
+        self.replay_open = !was_open;
         if self.replay_open {
-            self.settings_open = false;
-            self.sources_open = false;
             self.popover_kind = PopoverKind::Replay;
         }
     }
 
     pub fn toggle_sources(&mut self) {
-        self.sources_open = !self.sources_open;
+        let was_open = self.sources_open;
+        self.close_popovers();
+        self.sources_open = !was_open;
         if self.sources_open {
-            self.settings_open = false;
-            self.replay_open = false;
             self.popover_kind = PopoverKind::Sources;
         }
     }
@@ -523,7 +546,7 @@ impl Controls {
 
     /// Whether a popover is meant to be showing (as opposed to fading out).
     fn popover_target(&self) -> bool {
-        self.settings_open || self.replay_open || self.sources_open
+        self.settings_open || self.replay_open || self.sources_open || self.scenes_open
     }
 
     pub fn settings_open(&self) -> bool {
@@ -559,6 +582,7 @@ impl Controls {
                 PopoverKind::Settings => self.draw_popover(ui, model, pill),
                 PopoverKind::Replay => self.draw_replay_popover(ui, model, pill),
                 PopoverKind::Sources => self.draw_sources_popover(ui, model, pill),
+                PopoverKind::Scenes => self.draw_scenes_popover(ui, model, pill),
             }
             ui.set_offset(0.0, 0.0);
         }
@@ -596,6 +620,7 @@ impl Controls {
             Hit::Replay => self.replay_open,
             Hit::Settings => self.settings_open,
             Hit::Sources => self.sources_open,
+            Hit::Scenes(SceneHit::Button) => self.scenes_open,
             _ => false,
         };
         if opened_it {
@@ -693,11 +718,7 @@ impl Controls {
             self.pressed = self.hovered;
             match self.hovered {
                 Some(Hit::Volume) => self.drag_volume(model, pointer),
-                None if self.popover_target() => {
-                    self.settings_open = false;
-                    self.replay_open = false;
-                    self.sources_open = false;
-                }
+                None if self.popover_target() => self.close_popovers(),
                 _ => {}
             }
         } else if pointer.down && self.pressed == Some(Hit::Volume) {
@@ -744,6 +765,10 @@ impl Controls {
             }
             Hit::Sources => {
                 self.toggle_sources();
+                return;
+            }
+            Hit::Scenes(hit) => {
+                self.activate_scene_hit(hit);
                 return;
             }
             Hit::ReplaySave | Hit::ReplayPopSave => Action::SaveReplay,
@@ -890,7 +915,7 @@ impl Controls {
         let status_block = 8.0 + 8.0 + status_w + 12.0 + res_w;
         let volume_block = ICON_SIZE + 10.0 + SLIDER_WIDTH + 10.0 + percent_w;
         let sync_block = sync_label_w + 10.0 + BUTTON + sync_value_w + BUTTON;
-        let buttons_block = BUTTON * 3.0 + 8.0;
+        let buttons_block = BUTTON * 4.0 + 12.0;
         let divider = GAP * 2.0 + 1.0;
         let replay_block = BUTTON * 3.0 + 8.0 + divider;
         let width = PAD_X * 2.0
@@ -1025,6 +1050,8 @@ impl Controls {
             ICON_SIZE,
             sources_open,
         );
+        x += BUTTON + 4.0;
+        self.scenes_button(ui, m, x + BUTTON / 2.0, cy);
         x += BUTTON + 4.0;
         let open = self.settings_open;
         self.icon_button(
@@ -1918,7 +1945,7 @@ impl Controls {
     }
 
     #[cfg(test)]
-    fn rect_of(&self, hit: Hit) -> Rect {
+    pub(super) fn rect_of(&self, hit: Hit) -> Rect {
         self.hits
             .iter()
             .rev()
@@ -1990,6 +2017,7 @@ fn tooltip_for(hit: Hit, m: &Model) -> Option<String> {
     let r = &m.replay;
     let key = match hit {
         Hit::Sources => Key::TipSources,
+        Hit::Scenes(h) => scenes::tooltip_key(h, m)?,
         Hit::Replay => Key::TipReplay,
         Hit::ReplaySave | Hit::ReplayPopSave if r.is_on() => Key::TipSave,
         Hit::ReplaySave | Hit::ReplayPopSave => Key::TipSaveOff,
@@ -2104,18 +2132,19 @@ mod tests {
             mic: MicView::off(),
             rec: RecView::idle(),
             sources: SourcesView::default(),
+            scenes: ScenesView::default(),
         }
     }
 
-    struct Rig {
+    pub(super) struct Rig {
         ui: Ui,
-        controls: Controls,
-        model: Model,
+        pub(super) controls: Controls,
+        pub(super) model: Model,
         pointer: Pointer,
     }
 
     impl Rig {
-        fn new(always_visible: bool) -> Self {
+        pub(super) fn new(always_visible: bool) -> Self {
             let mut rig = Self {
                 ui: Ui::new(),
                 controls: Controls::new(always_visible),
@@ -2126,19 +2155,19 @@ mod tests {
             rig
         }
 
-        fn frame(&mut self, dt: f32) {
+        pub(super) fn frame(&mut self, dt: f32) {
             self.ui.begin((1280, 720), 1.0);
             self.controls
                 .frame(&mut self.ui, &self.model, &self.pointer, dt);
             self.pointer.end_frame();
         }
 
-        fn move_to(&mut self, x: f32, y: f32) {
+        pub(super) fn move_to(&mut self, x: f32, y: f32) {
             self.pointer.pos = Some((x, y));
             self.frame(0.016);
         }
 
-        fn click(&mut self, x: f32, y: f32) {
+        pub(super) fn click(&mut self, x: f32, y: f32) {
             self.move_to(x, y);
             self.pointer.press();
             self.frame(0.016);
@@ -2146,12 +2175,12 @@ mod tests {
             self.frame(0.016);
         }
 
-        fn click_on(&mut self, hit: Hit) {
+        pub(super) fn click_on(&mut self, hit: Hit) {
             let (x, y) = self.controls.rect_of(hit).center();
             self.click(x, y);
         }
 
-        fn actions(&mut self) -> Vec<Action> {
+        pub(super) fn actions(&mut self) -> Vec<Action> {
             self.controls.take_actions()
         }
     }

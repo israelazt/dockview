@@ -14,6 +14,7 @@ mod hotkey;
 mod i18n;
 mod perf;
 mod render;
+mod scene_actions;
 mod scene_runtime;
 mod stats_log;
 #[allow(dead_code)] // some tokens are used by the upcoming live controls
@@ -427,6 +428,10 @@ impl App {
         if self.cli.open_sources {
             self.refresh_sources();
             self.controls.toggle_sources();
+        }
+        if self.cli.open_scenes {
+            self.refresh_sources();
+            self.controls.toggle_scenes();
         }
     }
 
@@ -1162,6 +1167,7 @@ impl App {
             mic: self.mic_view(),
             rec: self.rec_view(),
             sources: self.sources_view(self.lang_mode().resolve(self.system_lang)),
+            scenes: self.scenes_view(self.lang_mode().resolve(self.system_lang)),
         }
     }
 
@@ -1179,6 +1185,10 @@ impl App {
                 if let Some(audio) = &self.audio {
                     audio.set_offset_ms(ms);
                 }
+            }
+            Action::Scene(action) => {
+                self.apply_scene_action(action);
+                return;
             }
             Action::ToggleFullscreen => {
                 self.set_fullscreen(!self.fullscreen);
