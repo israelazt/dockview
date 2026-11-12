@@ -7,7 +7,14 @@
 #[cfg(not(windows))]
 compile_error!("Dockview only supports Windows.");
 
+mod cli;
+#[allow(dead_code)] // some strings are used by the upcoming live controls
+mod i18n;
 mod render;
+#[allow(dead_code)] // some tokens are used by the upcoming live controls
+mod theme;
+#[allow(dead_code)] // some helpers are used by the upcoming live controls
+mod ui;
 
 use std::ffi::c_void;
 use std::sync::Arc;
@@ -23,19 +30,27 @@ use dockview_core::settings::{self, AppSettings, RenderPreset, MAX_AUDIO_OFFSET_
 use dockview_core::testsrc::TestSource;
 use windows::Win32::Foundation::HWND;
 use winit::application::ApplicationHandler;
-use winit::dpi::LogicalSize;
+use winit::dpi::{LogicalSize, PhysicalSize};
 use winit::event::{ElementState, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::{Key, NamedKey};
 use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
-use winit::window::{Fullscreen, Window, WindowId};
+use winit::window::{Fullscreen, Theme as WindowTheme, Window, WindowId};
 
+use cli::Cli;
+use i18n::Lang;
 use render::{Filter, Renderer};
+use theme::{Appearance, Theme};
+use ui::gpu::UiGpu;
+use ui::preview::{self, Sample};
+use ui::Ui;
 
 /// Delay before trying to reopen a capture device that went away.
 const RECONNECT_DELAY: Duration = Duration::from_secs(2);
 /// How long the event loop waits for a new frame before checking events.
 const FRAME_WAIT: Duration = Duration::from_millis(4);
+/// Frames to render before a `--screenshot` is taken.
+const SCREENSHOT_AFTER_FRAMES: u64 = 8;
 /// Volume change per key press.
 const VOLUME_STEP: f32 = 0.05;
 /// Audio offset change per key press, in milliseconds.
@@ -67,12 +82,26 @@ struct App {
     last_rendered: u64,
     video_size: (u32, u32),
     fullscreen: bool,
+    cli: Cli,
+    ui: Ui,
+    ui_gpu: Option<UiGpu>,
+    ui_scale: f32,
+    system_appearance: Appearance,
+    system_lang: Lang,
+    exit_requested: bool,
 }
 
 fn filter_for(preset: RenderPreset) -> Filter {
     match preset {
         RenderPreset::Performance => Filter::Nearest,
         RenderPreset::Balanced | RenderPreset::Quality => Filter::Linear,
+    }
+}
+
+fn appearance_of(theme: Option<WindowTheme>) -> Appearance {
+    match theme {
+        Some(WindowTheme::Light) => Appearance::Light,
+        _ => Appearance::Dark,
     }
 }
 
@@ -95,8 +124,9 @@ impl App {
         settings: AppSettings,
         video_devices: Vec<VideoDevice>,
         audio_devices: Vec<AudioDevice>,
-        test_pattern: bool,
+        cli: Cli,
     ) -> Self {
+        let test_pattern = cli.test_pattern;
         let mut app = Self {
             slot,
             source: Source::None,
@@ -113,6 +143,13 @@ impl App {
             last_rendered: 0,
             video_size: (0, 0),
             fullscreen: false,
+            cli,
+            ui: Ui::new(),
+            ui_gpu: None,
+            ui_scale: 1.0,
+            system_appearance: Appearance::Dark,
+            system_lang: Lang::detect_system(),
+            exit_requested: false,
         };
 
         if test_pattern {
@@ -235,8 +272,59 @@ impl App {
             self.slot.recycle(frame);
             self.rendered += 1;
         }
-        if let Err(e) = renderer.draw() {
-            eprintln!("present failed: {e}");
+
+        let preview_mode = self.cli.ui_preview;
+        let theme = Theme::for_appearance(self.cli.theme.resolve(self.system_appearance));
+        let lang = self.cli.lang.resolve(self.system_lang);
+        let scale = self.ui_scale;
+        let capture = self.cli.screenshot.is_some() && self.rendered >= SCREENSHOT_AFTER_FRAMES;
+        let (ui, ui_gpu) = (&mut self.ui, &mut self.ui_gpu);
+
+        let result = renderer.draw(
+            &mut |_device, context, size| {
+                let Some(gpu) = ui_gpu.as_mut() else {
+                    return;
+                };
+                if preview_mode {
+                    ui.begin(size, scale);
+                    preview::draw(ui, &theme, lang, &Sample::default());
+                    if let Err(e) = gpu.render(context, ui, size) {
+                        eprintln!("ui draw failed: {e}");
+                    }
+                }
+            },
+            capture,
+        );
+        match result {
+            Ok(Some(shot)) => self.save_screenshot(&shot),
+            Ok(None) => {}
+            Err(e) => eprintln!("present failed: {e}"),
+        }
+    }
+
+    fn save_screenshot(&mut self, shot: &render::Screenshot) {
+        self.exit_requested = true;
+        let Some(path) = &self.cli.screenshot else {
+            return;
+        };
+        if let Some(dir) = path.parent().filter(|d| !d.as_os_str().is_empty()) {
+            let _ = std::fs::create_dir_all(dir);
+        }
+        let result = std::fs::File::create(path)
+            .map_err(|e| e.to_string())
+            .and_then(|file| {
+                let mut encoder =
+                    png::Encoder::new(std::io::BufWriter::new(file), shot.width, shot.height);
+                encoder.set_color(png::ColorType::Rgba);
+                encoder.set_depth(png::BitDepth::Eight);
+                encoder
+                    .write_header()
+                    .and_then(|mut w| w.write_image_data(&shot.rgba))
+                    .map_err(|e| e.to_string())
+            });
+        match result {
+            Ok(()) => println!("saved {}", path.display()),
+            Err(e) => eprintln!("could not save {}: {e}", path.display()),
         }
     }
 
@@ -308,7 +396,7 @@ impl App {
     }
 
     fn update_title(&mut self) {
-        if self.last_stats.elapsed() < Duration::from_secs(1) {
+        if self.cli.ui_preview || self.last_stats.elapsed() < Duration::from_secs(1) {
             return;
         }
         let secs = self.last_stats.elapsed().as_secs_f64();
@@ -370,9 +458,19 @@ impl ApplicationHandler for App {
         if self.window.is_some() {
             return;
         }
-        let attributes = Window::default_attributes()
-            .with_title("Dockview")
-            .with_inner_size(LogicalSize::new(1280.0, 720.0));
+        let title = if self.cli.ui_preview {
+            "Dockview — UI preview"
+        } else {
+            "Dockview"
+        };
+        let mut attributes = Window::default_attributes().with_title(title);
+        attributes = match self.cli.scale {
+            Some(scale) => attributes.with_inner_size(PhysicalSize::new(
+                (1280.0 * scale).round(),
+                (720.0 * scale).round(),
+            )),
+            None => attributes.with_inner_size(LogicalSize::new(1280.0, 720.0)),
+        };
         let window = match event_loop.create_window(attributes) {
             Ok(w) => w,
             Err(e) => {
@@ -394,6 +492,10 @@ impl ApplicationHandler for App {
         match Renderer::new(hwnd, size.width, size.height) {
             Ok(mut renderer) => {
                 renderer.set_filter(filter_for(self.settings.render_preset));
+                match UiGpu::new(renderer.device()) {
+                    Ok(gpu) => self.ui_gpu = Some(gpu),
+                    Err(e) => eprintln!("could not initialise the interface renderer: {e}"),
+                }
                 self.renderer = Some(renderer);
             }
             Err(e) => {
@@ -402,6 +504,8 @@ impl ApplicationHandler for App {
                 return;
             }
         }
+        self.ui_scale = self.cli.scale.unwrap_or(window.scale_factor() as f32);
+        self.system_appearance = appearance_of(window.theme());
         self.window = Some(window);
         if self.settings.was_fullscreen {
             self.set_fullscreen(true);
@@ -422,6 +526,10 @@ impl ApplicationHandler for App {
                 }
             }
             WindowEvent::RedrawRequested => self.render(),
+            WindowEvent::ThemeChanged(theme) => self.system_appearance = appearance_of(Some(theme)),
+            WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
+                self.ui_scale = self.cli.scale.unwrap_or(scale_factor as f32);
+            }
             WindowEvent::KeyboardInput { event, .. } if event.state == ElementState::Pressed => {
                 self.on_key(&event.logical_key);
             }
@@ -429,7 +537,11 @@ impl ApplicationHandler for App {
         }
     }
 
-    fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
+    fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        if self.exit_requested {
+            event_loop.exit();
+            return;
+        }
         self.maintain_source();
         self.update_title();
         if self.slot.wait_for_frame(FRAME_WAIT) {
@@ -454,7 +566,14 @@ fn on_helper_thread<T: Default + Send + 'static>(
 
 fn main() {
     let slot = Arc::new(FrameSlot::new());
-    let test_pattern = std::env::args().any(|a| a == "--test-pattern");
+    let cli = match Cli::parse(std::env::args().skip(1)) {
+        Ok(cli) => cli,
+        Err(e) => {
+            eprintln!("dockview: {e}");
+            std::process::exit(2);
+        }
+    };
+    let test_pattern = cli.test_pattern;
 
     let (video_devices, audio_devices) = if test_pattern {
         (Vec::new(), Vec::new())
@@ -477,13 +596,7 @@ fn main() {
     };
     event_loop.set_control_flow(ControlFlow::Poll);
 
-    let mut app = App::new(
-        slot,
-        settings::load(),
-        video_devices,
-        audio_devices,
-        test_pattern,
-    );
+    let mut app = App::new(slot, settings::load(), video_devices, audio_devices, cli);
     if let Err(e) = event_loop.run_app(&mut app) {
         eprintln!("event loop error: {e}");
     }

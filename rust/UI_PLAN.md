@@ -40,16 +40,16 @@ Una interfaz elegante y mínima que casi no se ve: el video ocupa toda la ventan
 - **U-0.1** ✅ Inter 4.1 (Regular, Medium, SemiBold) y Lucide (iconos) con sus licencias en `rust/crates/dockview-app/assets/fonts/`. Pendiente más adelante: recortar (subset) las fuentes para reducir ~2,7 MB a unos cientos de KB.
 - **U-0.2** ✅ Comparación a 11/13/16 px. **Decisión: `cosmic-text`.** Aplica el kerning de Inter (`AVATAR`, `Toy`, `Ty` más ajustados), ligaduras (`fi`, `fl`), espaciado más uniforme y permite números tabulares con `font_features` (`tnum`), cosa que `fontdue` no hace. Coste: un binario de prueba de 3,5 MB con ambas librerías y las dos fuentes; asumible.
 
-### U-1 · Capa de dibujo
+### U-1 · Capa de dibujo — HECHO
 - **U-1.1** Atlas de glifos (textura R8) y dibujo de texto en un pase de UI sobre el video.
 - **U-1.2** Rectángulos redondeados con borde y sombra suave (SDF en el shader), con transparencia.
 - **U-1.3** Escalado por factor DPI y clip de regiones.
 
-### U-2 · Tema
+### U-2 · Tema (U-2.1 hecho: tokens y tests de contraste)
 - **U-2.1** `Theme` con tokens oscuro/claro (módulo puro, con tests de contraste).
 - **U-2.2** Resolver Auto con `window.theme()` y reaccionar a `ThemeChanged`.
 
-### U-3 · Idiomas
+### U-3 · Idiomas (U-3.1 y U-3.2 hechos: tablas, detección del idioma de Windows)
 - **U-3.1** Tablas de cadenas `en-US` y `es-419` con una función `tr(Key)`; un test comprueba que ambas tienen las mismas claves.
 - **U-3.2** Detección del idioma de Windows; Auto → español si empieza por `es`, si no inglés.
 - **U-3.3** Campos `theme` y `language` en `AppSettings` (compatibles con el JSON de la app C#).
@@ -68,3 +68,12 @@ Una interfaz elegante y mínima que casi no se ve: el video ocupa toda la ventan
 - **U-6.1** Quitar el título dinámico (la información pasa a la píldora) y los avisos de error visibles en pantalla.
 - **U-6.2** Prueba visual en oscuro/claro, español/inglés, 100 %/150 % de escala.
 - **U-6.3** Actualizar README con capturas.
+
+## Cómo ver la interfaz
+
+```powershell
+dockview.exe --ui-preview --theme dark|light|auto --lang en|es|auto --scale 1.5
+dockview.exe --ui-preview --screenshot salida.png   # guarda la ventana y sale
+```
+
+Las capturas de referencia están en `rust/ui-previews/`.

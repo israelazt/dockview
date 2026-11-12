@@ -14,9 +14,10 @@ use windows::Win32::Graphics::Direct3D11::{
     D3D11CreateDevice, ID3D11Buffer, ID3D11Device, ID3D11DeviceContext, ID3D11PixelShader,
     ID3D11RenderTargetView, ID3D11SamplerState, ID3D11ShaderResourceView, ID3D11Texture2D,
     ID3D11VertexShader, D3D11_BIND_CONSTANT_BUFFER, D3D11_BIND_SHADER_RESOURCE, D3D11_BUFFER_DESC,
-    D3D11_COMPARISON_NEVER, D3D11_CREATE_DEVICE_BGRA_SUPPORT, D3D11_FILTER_MIN_MAG_MIP_LINEAR,
-    D3D11_FILTER_MIN_MAG_MIP_POINT, D3D11_SAMPLER_DESC, D3D11_SDK_VERSION, D3D11_TEXTURE2D_DESC,
-    D3D11_TEXTURE_ADDRESS_CLAMP, D3D11_USAGE_DEFAULT, D3D11_VIEWPORT,
+    D3D11_COMPARISON_NEVER, D3D11_CPU_ACCESS_READ, D3D11_CREATE_DEVICE_BGRA_SUPPORT,
+    D3D11_FILTER_MIN_MAG_MIP_LINEAR, D3D11_FILTER_MIN_MAG_MIP_POINT, D3D11_MAPPED_SUBRESOURCE,
+    D3D11_MAP_READ, D3D11_SAMPLER_DESC, D3D11_SDK_VERSION, D3D11_TEXTURE2D_DESC,
+    D3D11_TEXTURE_ADDRESS_CLAMP, D3D11_USAGE_DEFAULT, D3D11_USAGE_STAGING, D3D11_VIEWPORT,
 };
 use windows::Win32::Graphics::Dxgi::Common::{
     DXGI_ALPHA_MODE_IGNORE, DXGI_FORMAT, DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_R8G8B8A8_UNORM,
@@ -53,6 +54,16 @@ struct VideoTextures {
     primary_tex: ID3D11Texture2D,
     /// Interleaved chroma (NV12 only).
     chroma: Option<(ID3D11Texture2D, ID3D11ShaderResourceView)>,
+}
+
+/// Callback that draws on top of the video: device, context, target size.
+pub type Overlay<'a> = dyn FnMut(&ID3D11Device, &ID3D11DeviceContext, (u32, u32)) + 'a;
+
+/// A captured frame in RGBA order.
+pub struct Screenshot {
+    pub width: u32,
+    pub height: u32,
+    pub rgba: Vec<u8>,
 }
 
 pub struct Renderer {
@@ -117,9 +128,9 @@ impl Renderer {
             swap_chain.SetMaximumFrameLatency(1)?;
             let waitable = swap_chain.GetFrameLatencyWaitableObject();
 
-            let vs_blob = compile("vs_main", s!("vs_5_0"))?;
-            let nv12_blob = compile("ps_nv12", s!("ps_5_0"))?;
-            let yuy2_blob = compile("ps_yuy2", s!("ps_5_0"))?;
+            let vs_blob = compile(SHADER_SOURCE, "vs_main", s!("vs_5_0"))?;
+            let nv12_blob = compile(SHADER_SOURCE, "ps_nv12", s!("ps_5_0"))?;
+            let yuy2_blob = compile(SHADER_SOURCE, "ps_yuy2", s!("ps_5_0"))?;
             let mut vertex_shader = None;
             device.CreateVertexShader(blob_bytes(&vs_blob), None, Some(&mut vertex_shader))?;
             let mut ps_nv12 = None;
@@ -220,10 +231,16 @@ impl Renderer {
         Ok(())
     }
 
-    /// Draws the current video (letterboxed) and presents it.
-    pub fn draw(&mut self) -> Result<()> {
+    pub fn device(&self) -> &ID3D11Device {
+        &self.device
+    }
+
+    /// Draws the current video (letterboxed), then lets `overlay` draw on top
+    /// (it receives the device, context and render-target size), and presents.
+    /// With `capture` set, also returns the finished image.
+    pub fn draw(&mut self, overlay: &mut Overlay, capture: bool) -> Result<Option<Screenshot>> {
         let Some(target) = self.target.clone() else {
-            return Ok(());
+            return Ok(None);
         };
         // SAFETY: all resources are owned by `self` and alive for the draw.
         unsafe {
@@ -278,7 +295,64 @@ impl Renderer {
                 self.context.Draw(3, 0);
             }
 
-            self.swap_chain.Present(1, DXGI_PRESENT(0)).ok()
+            // The overlay owns the full window, whatever the video viewport was.
+            self.context
+                .OMSetRenderTargets(Some(&[Some(target.clone())]), None);
+            overlay(&self.device, &self.context, self.size);
+
+            let shot = if capture {
+                Some(self.read_back()?)
+            } else {
+                None
+            };
+            self.swap_chain.Present(1, DXGI_PRESENT(0)).ok()?;
+            Ok(shot)
+        }
+    }
+
+    /// Copies the current back buffer to the CPU as RGBA.
+    fn read_back(&self) -> Result<Screenshot> {
+        // SAFETY: the staging texture is created with the back buffer's size
+        // and format; rows are copied within the mapped pitch.
+        unsafe {
+            let back: ID3D11Texture2D = self.swap_chain.GetBuffer(0)?;
+            let mut desc = D3D11_TEXTURE2D_DESC::default();
+            back.GetDesc(&mut desc);
+            desc.Usage = D3D11_USAGE_STAGING;
+            desc.BindFlags = 0;
+            desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ.0 as u32;
+            desc.MiscFlags = 0;
+
+            let mut staging = None;
+            self.device
+                .CreateTexture2D(&desc, None, Some(&mut staging))?;
+            let staging = staging.ok_or_else(missing)?;
+            self.context.CopyResource(&staging, &back);
+
+            let mut mapped = D3D11_MAPPED_SUBRESOURCE::default();
+            self.context
+                .Map(&staging, 0, D3D11_MAP_READ, 0, Some(&mut mapped))?;
+            let (width, height) = (desc.Width as usize, desc.Height as usize);
+            let mut rgba = Vec::with_capacity(width * height * 4);
+            for row in 0..height {
+                let line = std::slice::from_raw_parts(
+                    mapped
+                        .pData
+                        .cast::<u8>()
+                        .add(row * mapped.RowPitch as usize),
+                    width * 4,
+                );
+                let (pixels, _) = line.as_chunks::<4>();
+                for [b, g, r, _] in pixels {
+                    rgba.extend_from_slice(&[*r, *g, *b, 255]); // BGRA → RGBA
+                }
+            }
+            self.context.Unmap(&staging, 0);
+            Ok(Screenshot {
+                width: desc.Width,
+                height: desc.Height,
+                rgba,
+            })
         }
     }
 
@@ -368,13 +442,17 @@ fn missing() -> Error {
 
 /// # Safety
 /// Calls into the D3D compiler with a valid source buffer.
-unsafe fn compile(entry: &str, target: windows::core::PCSTR) -> Result<ID3DBlob> {
+pub(crate) unsafe fn compile(
+    source: &str,
+    entry: &str,
+    target: windows::core::PCSTR,
+) -> Result<ID3DBlob> {
     let entry = std::ffi::CString::new(entry).map_err(|_| missing())?;
     let mut code = None;
     let mut errors = None;
     let result = D3DCompile(
-        SHADER_SOURCE.as_ptr().cast(),
-        SHADER_SOURCE.len(),
+        source.as_ptr().cast(),
+        source.len(),
         s!("render.hlsl"),
         None,
         None,
@@ -396,7 +474,7 @@ unsafe fn compile(entry: &str, target: windows::core::PCSTR) -> Result<ID3DBlob>
 
 /// # Safety
 /// The returned slice borrows the blob's buffer.
-unsafe fn blob_bytes(blob: &ID3DBlob) -> &[u8] {
+pub(crate) unsafe fn blob_bytes(blob: &ID3DBlob) -> &[u8] {
     std::slice::from_raw_parts(blob.GetBufferPointer().cast::<u8>(), blob.GetBufferSize())
 }
 
