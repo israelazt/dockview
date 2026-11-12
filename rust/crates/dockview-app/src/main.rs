@@ -16,6 +16,7 @@ mod perf;
 mod render;
 mod scene_actions;
 mod scene_runtime;
+mod scene_transition;
 mod stats_log;
 #[allow(dead_code)] // some tokens are used by the upcoming live controls
 mod theme;
@@ -69,6 +70,7 @@ use i18n::{Lang, LangModeExt};
 use perf::ProcessSampler;
 use render::{Filter, Renderer};
 use scene_runtime::Overlay;
+use scene_transition::ActiveTransition;
 use theme::{Appearance, Theme, ThemeModeExt};
 use ui::controls::{
     Action, Controls, CurrentSource, MicState, MicView, Model, RecState, RecView, SourcesView,
@@ -131,6 +133,8 @@ struct App {
     overlays: Vec<Overlay>,
     /// The base layer of the active scene (its source is `source`).
     scene_base: Option<SceneLayer>,
+    /// A change from one scene to another in progress (see `scene_transition`).
+    transition: Option<ActiveTransition>,
     source: Source,
     video_devices: Vec<VideoDevice>,
     audio_devices: Vec<AudioDevice>,
@@ -279,6 +283,7 @@ impl App {
             scene: None,
             overlays: Vec::new(),
             scene_base: None,
+            transition: None,
             source: Source::None,
             video_devices,
             audio_devices,
@@ -1871,6 +1876,7 @@ impl ApplicationHandler for App {
         }
         self.maintain_source();
         self.maintain_overlays();
+        self.tick_transition();
         if self.controls.sources_open() && self.sources_refreshed.elapsed() > SOURCES_REFRESH {
             self.refresh_sources();
         }

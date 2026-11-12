@@ -53,6 +53,9 @@ pub struct Layer {
     pub rect: NormRect,
     pub fit: Fit,
     pub visible: bool,
+    /// 1 is fully drawn, 0 invisible; in between it lets what is below show
+    /// through (scene transitions).
+    pub opacity: f32,
 }
 
 impl Layer {
@@ -63,6 +66,7 @@ impl Layer {
             rect: NormRect::FULL,
             fit: Fit::Contain,
             visible: true,
+            opacity: 1.0,
         }
     }
 }
@@ -503,6 +507,12 @@ impl Compositor {
                     n,
                     D3D11_VIDEO_FRAME_FORMAT_PROGRESSIVE,
                 );
+                self.video_context.VideoProcessorSetStreamAlpha(
+                    &self.processor,
+                    n,
+                    layer.opacity < 1.0,
+                    layer.opacity.clamp(0.0, 1.0),
+                );
                 self.video_context.VideoProcessorSetStreamSourceRect(
                     &self.processor,
                     n,
@@ -843,6 +853,7 @@ mod tests {
                 rect: NormRect::new(0.5, 0.5, 0.5, 0.5),
                 fit: Fit::Stretch,
                 visible: true,
+                opacity: 1.0,
             },
         ];
         let out = FrameSlot::new();
@@ -865,6 +876,25 @@ mod tests {
         compositor.compose(&layers, &out, 1).expect("compose again");
         let frame = out.take_latest().expect("a picture");
         assert!((i32::from(frame.data[300 * 640 + 500]) - 100).abs() <= 6);
+    }
+
+    #[test]
+    fn a_half_transparent_layer_lets_the_one_below_show_through() {
+        let Ok(mut compositor) = Compositor::new(640, 360) else {
+            eprintln!("no video processor on this machine; skipping");
+            return;
+        };
+        let (back, front) = (Arc::new(FrameSlot::new()), Arc::new(FrameSlot::new()));
+        back.publish(solid(640, 360, 60));
+        front.publish(solid(640, 360, 200));
+        let mut layers = vec![Layer::full(back), Layer::full(front)];
+        layers[1].opacity = 0.5;
+        let out = FrameSlot::new();
+        compositor.compose(&layers, &out, 0).expect("compose");
+        let frame = out.take_latest().expect("a picture");
+        let luma = i32::from(frame.data[100 * 640 + 100]);
+        // Halfway between 60 and 200 (with some room for the colour maths).
+        assert!((luma - 130).abs() <= 12, "mixed luma {luma}");
     }
 
     #[test]

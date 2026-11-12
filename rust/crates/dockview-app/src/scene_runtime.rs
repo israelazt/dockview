@@ -59,12 +59,14 @@ impl App {
             rect: base.rect,
             fit: base.fit,
             visible: base.visible,
+            opacity: 1.0,
         }];
         layers.extend(self.overlays.iter().map(|o| Layer {
             slot: Arc::clone(&o.slot),
             rect: o.layer.rect,
             fit: o.layer.fit,
             visible: o.layer.visible,
+            opacity: 1.0,
         }));
         layers
     }
@@ -219,6 +221,7 @@ impl App {
     /// Stops the scene: drops the compositor and the overlays, and lets the
     /// main source feed the viewer directly again.
     fn stop_scene(&mut self) {
+        self.transition = None;
         self.scene = None;
         self.overlays.clear();
         self.scene_base = None;
@@ -258,6 +261,10 @@ impl App {
     /// layer (the main source feeds the viewer directly), else running with
     /// the current layers.
     pub fn sync_compositor(&mut self) {
+        // A scene change in progress feeds the compositor by itself.
+        if self.transition.is_some() {
+            return;
+        }
         let Some(base) = self.scene_base.clone() else {
             return;
         };
@@ -285,6 +292,9 @@ impl App {
 
     /// Switches to scene `index` (or, with `None`, to the plain main source).
     pub fn activate_scene(&mut self, index: Option<usize>) {
+        self.finish_transition();
+        // What is on screen now, before the main source is switched.
+        let old = self.running_scene();
         let scene = index.and_then(|i| self.settings.scenes.get(i).cloned());
         self.settings.active_scene = index.filter(|_| scene.is_some());
         let Some(scene) = scene else {
@@ -297,7 +307,7 @@ impl App {
                 self.toast(i18n::Key::ToastSceneMissing, ToastKind::Error);
             }
         }
-        self.run_scene(&scene);
+        self.morph_to(&scene, old);
     }
 
     /// Starts the scene asked for on the command line: the main source with a
@@ -415,6 +425,7 @@ impl App {
     /// whenever any layer is a screen.
     pub fn wants_exclusion(&self) -> bool {
         self.source_kind != SourceKind::Capture
+            || self.leaving_has_screen()
             || self
                 .overlays
                 .iter()

@@ -30,6 +30,7 @@ pub mod stream;
 #[cfg(windows)]
 pub mod tap_capture;
 pub mod testsrc;
+pub mod transition;
 
 pub fn version() -> &'static str {
     env!("CARGO_PKG_VERSION")

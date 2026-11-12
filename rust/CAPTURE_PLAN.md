@@ -247,6 +247,16 @@ Regla del autor: **módulos pequeños**. Por eso el modelo vive en `dockview-cor
 - **Límites conocidos:** borrar una escena no pide confirmación; la lista de escenas muestra 6 y la de añadir 4 capturadoras, 4 pantallas y 6 ventanas, para que quepa en una ventana de 720p; aún no se puede cambiar el nombre de una escena desde la interfaz (se puede en `settings.json`); la posición y el tamaño de cada capa se editan en E-3c.
 - **Aviso para probar:** mientras alguna capa es una pantalla, la ventana de Dockview se excluye de las capturas de pantalla de Windows (por diseño), así que una captura externa muestra lo que hay detrás. Para comprobar el estado sin depender de capturas se vuelca `settings.json`.
 
+### Transición «morph» entre escenas (hecha antes de E-3c)
+
+Al cambiar de escena, las capas que ambas tienen **viajan** de su rectángulo al nuevo (400 ms, curva ease in-out) y las que solo tiene una **se funden**. Los fuentes compartidos no se reabren.
+
+- **Núcleo** (`dockview-core/src/transition.rs`, datos puros): empareja capas por fuente, interpola el rectángulo y la opacidad, tres curvas (lineal, ease in-out, rebote). 10 tests.
+- **Compositor**: `Layer` gana `opacity`, aplicada con `VideoProcessorSetStreamAlpha`. Test en la GPU real: una capa al 50 % se mezcla con la de abajo.
+- **App** (`scene_transition.rs`): conserva los overlays compartidos, mantiene vivos los que salen hasta acabar y, en cada vuelta del bucle, pasa las capas al compositor. Cualquier edición o cambio de escena termina antes la transición en curso. `--show-stats` imprime cuántas imágenes se pidieron.
+- **Límite:** solo hay una fuente principal, así que si las bases de las dos escenas difieren, la base nueva aparece de golpe (las demás capas sí se animan). Con `Fuente simple` → escena (o al revés) hoy no hay morph al quitar la escena.
+- **Pendiente:** verificarlo con la app real y clics (dos escenas con la misma base y la esquina en sitios distintos; mirar `--show-stats` y el coste de CPU/GPU). Duración y curva configurables: E-3d.
+
 ### Resultados de E-2
 
 La app ya puede tener **dos fuentes vivas** y dibujarlas con el compositor. Todavía no hay interfaz (E-3): se pide por la línea de comandos, por ejemplo `dockview.exe --video UGREEN --pip monitor:1` (también `--pip video:NOMBRE`, `--pip window:TEXTO` y `--pip-size 0.3`).

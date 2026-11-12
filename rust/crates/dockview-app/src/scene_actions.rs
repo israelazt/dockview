@@ -73,6 +73,8 @@ impl App {
     }
 
     pub fn apply_scene_action(&mut self, action: SceneAction) {
+        // Edits start from the finished picture, not from the middle of a change.
+        self.finish_transition();
         match action {
             SceneAction::Activate(index) => self.activate_scene(index),
             SceneAction::New => self.new_scene(),

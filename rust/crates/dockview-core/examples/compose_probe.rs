@@ -176,6 +176,7 @@ fn main() {
             rect,
             fit: Fit::Contain,
             visible: true,
+            opacity: 1.0,
         });
         pip_running = Some(running);
         pip_slot = Some(slot);
