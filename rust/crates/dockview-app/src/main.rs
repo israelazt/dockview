@@ -12,6 +12,7 @@ mod cli;
 mod i18n;
 mod perf;
 mod render;
+mod stats_log;
 #[allow(dead_code)] // some tokens are used by the upcoming live controls
 mod theme;
 #[allow(dead_code)] // some helpers are used by the upcoming live controls
@@ -114,6 +115,7 @@ struct App {
     latency_sum_ms: f64,
     latency_count: u32,
     stats_updates: u32,
+    stats_log: Option<stats_log::StatsLog>,
 }
 
 /// Whether Windows allows UI animations ("Show animations in Windows").
@@ -173,6 +175,10 @@ impl App {
         let test_pattern = cli.test_pattern;
         let preview = cli.ui_preview;
         let show_stats = cli.show_stats;
+        let stats_log = cli
+            .log_stats
+            .as_deref()
+            .and_then(|path| stats_log::StatsLog::create(path).ok());
         // Screenshots must show the settled state, not a mid-transition frame.
         let animations = cli.screenshot.is_none() && system_animations_enabled();
         let mut app = Self {
@@ -215,6 +221,7 @@ impl App {
             latency_sum_ms: 0.0,
             latency_count: 0,
             stats_updates: 0,
+            stats_log,
         };
 
         app.controls.set_animations(animations);
@@ -569,6 +576,9 @@ impl App {
             findings,
             measured: true,
         };
+        if let Some(log) = self.stats_log.as_mut() {
+            log.record(&self.stats);
+        }
     }
 
     /// The device mode in use (a stand-in for the synthetic source).

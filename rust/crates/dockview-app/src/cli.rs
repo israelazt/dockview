@@ -3,6 +3,7 @@
 //! ```text
 //! dockview.exe [--test-pattern] [--ui-preview] [--theme auto|dark|light]
 //!              [--lang auto|en|es] [--scale N] [--open-settings] [--stats]
+//!              [--log-stats FILE.csv]
 //!              [--screenshot FILE.png]
 //! ```
 
@@ -29,6 +30,8 @@ pub struct Cli {
     pub show_stats: bool,
     /// Preview only: show sample problems in the diagnosis.
     pub demo_findings: bool,
+    /// Append one line of measurements per second to this CSV file.
+    pub log_stats: Option<PathBuf>,
     /// Render a few frames, save the window as a PNG and exit.
     pub screenshot: Option<PathBuf>,
 }
@@ -87,6 +90,7 @@ impl Cli {
                 }
                 "--open-settings" => cli.open_settings = true,
                 "--stats" => cli.show_stats = true,
+                "--log-stats" => cli.log_stats = Some(PathBuf::from(value("--log-stats")?)),
                 "--demo-findings" => cli.demo_findings = true,
                 "--screenshot" => cli.screenshot = Some(PathBuf::from(value("--screenshot")?)),
                 other => return Err(format!("unknown option '{other}'")),
@@ -135,6 +139,13 @@ mod tests {
     fn stats_is_a_flag() {
         assert!(parse(&["--stats"]).unwrap().show_stats);
         assert!(!parse(&[]).unwrap().show_stats);
+    }
+
+    #[test]
+    fn log_stats_takes_a_path() {
+        let cli = parse(&["--log-stats", "run.csv"]).unwrap();
+        assert_eq!(cli.log_stats, Some(PathBuf::from("run.csv")));
+        assert!(parse(&["--log-stats"]).is_err());
     }
 
     #[test]
