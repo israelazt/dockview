@@ -8,7 +8,7 @@ use std::marker::PhantomData;
 use windows::core::{Error, Result, GUID, PWSTR};
 use windows::Win32::Foundation::E_FAIL;
 use windows::Win32::Media::MediaFoundation::{
-    IMFActivate, IMFAttributes, IMFMediaSource, MFCreateAttributes,
+    IMFActivate, IMFAttributes, IMFMediaSource, IMFSourceReader, MFCreateAttributes,
     MFCreateSourceReaderFromMediaSource, MFEnumDeviceSources, MFShutdown, MFStartup,
     MFVideoFormat_MJPG, MFVideoFormat_NV12, MFVideoFormat_YUY2, MFSTARTUP_NOSOCKET,
     MF_DEVSOURCE_ATTRIBUTE_FRIENDLY_NAME, MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE,
@@ -97,57 +97,79 @@ pub fn enumerate_stream_types(
     _session: &MfSession,
     symbolic_link: &str,
 ) -> Result<Vec<StreamInfo>> {
-    let activates = video_capture_activates()?;
-    let activate = activates
-        .iter()
+    let (activate, source) = open_source(symbolic_link)?;
+    // SAFETY: `source` is a valid media source for a video capture device.
+    let result = unsafe {
+        let reader = MFCreateSourceReaderFromMediaSource(&source, None::<&IMFAttributes>)?;
+        read_native_types(&reader)
+    };
+    // SAFETY: releases the capture source opened above.
+    unsafe {
+        let _ = activate.ShutdownObject();
+    }
+    result
+}
+
+/// Finds the video capture device with `symbolic_link` and activates its
+/// media source. Keep the returned activate alive while using the source and
+/// call `ShutdownObject` on it when finished.
+pub(crate) fn open_source(symbolic_link: &str) -> Result<(IMFActivate, IMFMediaSource)> {
+    let activate = video_capture_activates()?
+        .into_iter()
         .find(|a| {
             get_string(a, &MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_SYMBOLIC_LINK).as_deref()
                 == Some(symbolic_link)
         })
         .ok_or_else(|| Error::new(E_FAIL, "video device not found"))?;
-
     // SAFETY: `activate` is a valid IMFActivate for a video capture source.
-    let result = unsafe {
-        let source: IMFMediaSource = activate.ActivateObject()?;
-        let reader = MFCreateSourceReaderFromMediaSource(&source, None::<&IMFAttributes>)?;
-        let stream = MF_SOURCE_READER_FIRST_VIDEO_STREAM.0 as u32;
+    let source: IMFMediaSource = unsafe { activate.ActivateObject()? };
+    Ok((activate, source))
+}
 
-        let mut types = Vec::new();
-        for index in 0u32.. {
-            let media_type = match reader.GetNativeMediaType(stream, index) {
-                Ok(t) => t,
-                Err(e) if e.code() == MF_E_NO_MORE_TYPES => break,
-                Err(e) => return Err(e),
-            };
+/// Index of the first video stream, as the u32 the reader APIs expect.
+pub(crate) fn first_video_stream() -> u32 {
+    MF_SOURCE_READER_FIRST_VIDEO_STREAM.0 as u32
+}
 
-            let Ok(subtype) = media_type.GetGUID(&MF_MT_SUBTYPE) else {
-                continue;
-            };
-            let Ok(size) = media_type.GetUINT64(&MF_MT_FRAME_SIZE) else {
-                continue;
-            };
-            let (width, height) = unpack_pair(size);
-            let fps = media_type
-                .GetUINT64(&MF_MT_FRAME_RATE)
-                .map(|rate| {
-                    let (num, den) = unpack_pair(rate);
-                    fps_from_rate(num, den)
-                })
-                .unwrap_or(DEFAULT_FPS);
+/// Reads every native media type of the first video stream.
+///
+/// # Safety
+/// `reader` must be a valid source reader for a video capture source.
+pub(crate) unsafe fn read_native_types(reader: &IMFSourceReader) -> Result<Vec<StreamInfo>> {
+    let stream = first_video_stream();
+    let mut types = Vec::new();
+    for index in 0u32.. {
+        let media_type = match reader.GetNativeMediaType(stream, index) {
+            Ok(t) => t,
+            Err(e) if e.code() == MF_E_NO_MORE_TYPES => break,
+            Err(e) => return Err(e),
+        };
 
-            types.push(StreamInfo {
-                type_index: index,
-                format_name: format_name(&subtype),
-                width,
-                height,
-                fps,
-                is_compressed: is_compressed(&subtype),
-            });
-        }
-        let _ = activate.ShutdownObject();
-        types
-    };
-    Ok(result)
+        let Ok(subtype) = media_type.GetGUID(&MF_MT_SUBTYPE) else {
+            continue;
+        };
+        let Ok(size) = media_type.GetUINT64(&MF_MT_FRAME_SIZE) else {
+            continue;
+        };
+        let (width, height) = unpack_pair(size);
+        let fps = media_type
+            .GetUINT64(&MF_MT_FRAME_RATE)
+            .map(|rate| {
+                let (num, den) = unpack_pair(rate);
+                fps_from_rate(num, den)
+            })
+            .unwrap_or(DEFAULT_FPS);
+
+        types.push(StreamInfo {
+            type_index: index,
+            format_name: format_name(&subtype),
+            width,
+            height,
+            fps,
+            is_compressed: is_compressed(&subtype),
+        });
+    }
+    Ok(types)
 }
 
 /// Enumerates video capture sources. The returned activates own their COM
@@ -197,7 +219,7 @@ fn get_string(attrs: &IMFAttributes, key: &GUID) -> Option<String> {
 }
 
 /// Splits a packed `UINT64` attribute (`high << 32 | low`) into its halves.
-fn unpack_pair(packed: u64) -> (u32, u32) {
+pub(crate) fn unpack_pair(packed: u64) -> (u32, u32) {
     ((packed >> 32) as u32, packed as u32)
 }
 
@@ -210,7 +232,7 @@ fn fps_from_rate(numerator: u32, denominator: u32) -> u32 {
     (f64::from(numerator) / f64::from(denominator)).round() as u32
 }
 
-fn is_compressed(subtype: &GUID) -> bool {
+pub(crate) fn is_compressed(subtype: &GUID) -> bool {
     *subtype == MFVideoFormat_MJPG
 }
 
