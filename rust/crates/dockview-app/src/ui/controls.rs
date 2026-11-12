@@ -7,7 +7,10 @@
 use std::collections::HashMap;
 use std::f32::consts::TAU;
 
-use dockview_core::settings::{LangMode, RenderPreset, VideoModePref, MAX_AUDIO_OFFSET_MS};
+use dockview_core::settings::{
+    recording_bytes_per_hour, LangMode, RecordingQuality, RenderPreset, VideoModePref,
+    MAX_AUDIO_OFFSET_MS,
+};
 
 use super::input::Pointer;
 use super::stats::wrap_text;
@@ -184,6 +187,8 @@ pub struct ReplayView {
     pub memory_bytes: u64,
     /// The chosen length is the longest this PC's memory allows.
     pub at_limit: bool,
+    /// Video bitrate of the buffer and the recordings, in Mbps.
+    pub bitrate_mbps: u32,
     pub folder: String,
     pub hotkey: String,
 }
@@ -199,6 +204,7 @@ impl ReplayView {
             keep_seconds: 30,
             memory_bytes: 0,
             at_limit: false,
+            bitrate_mbps: 40,
             folder: String::new(),
             hotkey: hotkey.to_owned(),
         }
@@ -260,6 +266,9 @@ pub enum Action {
     ReplayLength(i32),
     SaveReplay,
     OpenReplayFolder,
+    /// Choose another folder for clips and recordings.
+    ChooseFolder,
+    SetQuality(RecordingQuality),
 }
 
 /// Identifies an interactive (or occluding) region.
@@ -293,6 +302,8 @@ enum Hit {
     ReplayLonger,
     ReplayPopSave,
     ReplayFolder,
+    ReplayChangeFolder,
+    Quality(usize),
     MicToggle,
     /// Only an animation key for the microphone switch knob; never registered.
     MicKnob,
@@ -323,6 +334,8 @@ impl Hit {
                 | Hit::ReplayLonger
                 | Hit::ReplayPopSave
                 | Hit::ReplayFolder
+                | Hit::ReplayChangeFolder
+                | Hit::Quality(_)
         )
     }
 }
@@ -360,6 +373,8 @@ pub struct Controls {
     popover_t: f32,
     /// Animated position of each segmented control's indicator.
     segments: Option<[f32; 4]>,
+    /// Animated position of the quality selector in the replay popover.
+    quality_slide: Option<f32>,
 }
 
 impl Controls {
@@ -386,6 +401,7 @@ impl Controls {
             amounts: HashMap::new(),
             popover_t: 0.0,
             segments: None,
+            quality_slide: None,
         }
     }
 
@@ -572,6 +588,8 @@ impl Controls {
             Hit::ReplayShorter => Action::ReplayLength(-1),
             Hit::ReplayLonger => Action::ReplayLength(1),
             Hit::ReplayFolder => Action::OpenReplayFolder,
+            Hit::ReplayChangeFolder => Action::ChooseFolder,
+            Hit::Quality(i) => Action::SetQuality(RecordingQuality::ALL[i]),
             Hit::ReplayKnob | Hit::MicKnob => return,
             Hit::MicToggle => Action::ToggleMic,
             Hit::MicDevice(i) => Action::SelectMic(i),
@@ -988,12 +1006,19 @@ impl Controls {
             + 8.0
             + hint_h
             + 14.0
+            + LABEL_HEIGHT
+            + ROW_HEIGHT
+            + 4.0
+            + 16.0
+            + 14.0
             + MIC_ROW
             + 4.0
             + MIC_METER
             + 14.0
             + button_h
             + 8.0
+            + 16.0
+            + 6.0
             + folder_h;
 
         let (screen_w, _) = ui.logical_size();
@@ -1095,6 +1120,39 @@ impl Controls {
             y += 16.0;
         }
         y += 14.0;
+
+        // Recording quality: one encoder serves the buffer and the recordings.
+        let qualities = [tr(lang, Key::QualityNormal), tr(lang, Key::QualityHigh)];
+        let quality_selected = RecordingQuality::ALL
+            .iter()
+            .position(|q| *q == RecordingQuality::from_mbps(r.bitrate_mbps))
+            .unwrap_or(1);
+        let quality_target = quality_selected as f32;
+        let quality_pos = self.approach(
+            self.quality_slide.unwrap_or(quality_target),
+            quality_target,
+            SLIDE_RATE,
+        );
+        self.quality_slide = Some(quality_pos);
+        y = self.segmented_section(
+            ui,
+            m,
+            Key::RecordingQuality,
+            &qualities,
+            quality_selected,
+            quality_pos,
+            Hit::Quality,
+            inner_x,
+            y,
+            inner_w,
+        );
+        y += 4.0;
+        let per_hour = tr(lang, Key::QualityHint).replace(
+            "{size}",
+            &crate::i18n::size_label(recording_bytes_per_hour(r.bitrate_mbps)),
+        );
+        ui.text(&per_hour, inner_x, y, hint_style, t.text_dim);
+        y += 16.0 + 14.0;
 
         // Microphone: switch, and a level meter while it is open.
         let mic_row = Rect::new(inner_x, y, inner_w, MIC_ROW);
@@ -1204,30 +1262,38 @@ impl Controls {
         );
         y += button_h + 8.0;
 
-        // Folder.
-        let row = Rect::new(inner_x, y, inner_w, folder_h);
-        self.register(Hit::ReplayFolder, row);
-        let (hover, press) = self.amounts(Hit::ReplayFolder);
-        let alpha = t.hover.a * (hover + 0.9 * press);
-        if alpha > 0.002 {
-            ui.rect(row, 9.0, t.hover.with_alpha(alpha.min(1.0)));
-        }
+        // Folder: where files go, with buttons to open it or choose another.
+        let path = fit_text(ui, &r.folder, hint_style, inner_w);
+        ui.text(&path, inner_x, y, hint_style, t.text_dim);
+        y += 16.0 + 6.0;
+        let half = (inner_w - 8.0) / 2.0;
         let cy = y + folder_h / 2.0;
-        ui.icon(ICON_FOLDER, inner_x + 18.0, cy, 15.0, t.text_dim);
-        let open_label = tr(lang, Key::OpenFolder);
-        ui.text(open_label, inner_x + 36.0, cy - line_h / 2.0, BODY, t.text);
-        let used = 36.0 + ui.measure(open_label, BODY).0 + 12.0;
-        if inner_w - used > 40.0 {
-            let path = fit_text(ui, &r.folder, hint_style, inner_w - used - 8.0);
-            let path_w = ui.measure(&path, hint_style).0;
-            let path_h = ui.measure("Ag", hint_style).1;
-            ui.text(
-                &path,
-                inner_x + inner_w - path_w - 8.0,
-                cy - path_h / 2.0,
-                hint_style,
-                t.text_dim,
-            );
+        let buttons = [
+            (Hit::ReplayFolder, Key::OpenFolder, inner_x, true),
+            (
+                Hit::ReplayChangeFolder,
+                Key::ChangeFolder,
+                inner_x + half + 8.0,
+                false,
+            ),
+        ];
+        for (hit, key, bx, with_icon) in buttons {
+            let rect = Rect::new(bx, y, half, folder_h);
+            self.register(hit, rect);
+            let (hover, press) = self.amounts(hit);
+            ui.rect(rect, 10.0, t.segment_track);
+            let alpha = t.hover.a * (hover + 0.9 * press);
+            if alpha > 0.002 {
+                ui.rect(rect, 10.0, t.hover.with_alpha(alpha.min(1.0)));
+            }
+            let label = tr(lang, key);
+            let label_w = ui.measure(label, BODY).0;
+            let icon_w = if with_icon { 22.0 } else { 0.0 };
+            let start = rect.x + (rect.w - label_w - icon_w) / 2.0;
+            if with_icon {
+                ui.icon(ICON_FOLDER, start + 8.0, cy, 15.0, t.text_dim);
+            }
+            ui.text(label, start + icon_w, cy - line_h / 2.0, BODY, t.text);
         }
     }
 
@@ -1978,6 +2044,40 @@ mod tests {
         assert!(rig.controls.close_settings());
         rig.click_on(Hit::Settings);
         assert!(rig.controls.close_settings());
+    }
+
+    #[test]
+    fn the_quality_and_folder_controls_emit_their_actions() {
+        let mut rig = Rig::new(true);
+        recording_model(&mut rig);
+        rig.click_on(Hit::Replay);
+        rig.click_on(Hit::Quality(0));
+        rig.click_on(Hit::Quality(1));
+        rig.click_on(Hit::ReplayChangeFolder);
+        rig.click_on(Hit::ReplayFolder);
+        assert_eq!(
+            rig.actions(),
+            vec![
+                Action::SetQuality(RecordingQuality::Normal),
+                Action::SetQuality(RecordingQuality::High),
+                Action::ChooseFolder,
+                Action::OpenReplayFolder,
+            ]
+        );
+    }
+
+    #[test]
+    fn the_replay_popover_with_quality_and_folder_fits_a_720p_window() {
+        for lang in [Lang::En, Lang::Es] {
+            let mut rig = Rig::new(true);
+            rig.model.lang = lang;
+            recording_model(&mut rig);
+            rig.click_on(Hit::Replay);
+            rig.frame(0.016);
+            let popover = rig.controls.rect_of(Hit::Popover);
+            assert!(popover.y >= 0.0, "{lang:?}: top at {}", popover.y);
+            assert!(popover.y + popover.h <= 720.0, "{lang:?}");
+        }
     }
 
     #[test]

@@ -145,6 +145,8 @@ struct App {
     mic: Option<MicCapture>,
     /// Recording was asked for while the buffer was still starting.
     record_when_ready: bool,
+    /// The newest clip or recording saved this session, to show in Explorer.
+    last_saved: Option<std::path::PathBuf>,
     /// The low-disk warning was already shown for this recording.
     low_disk_warned: bool,
     /// Smoothed loudness for the meter.
@@ -267,6 +269,7 @@ impl App {
             total_ram: perf::total_ram_bytes(),
             mic: None,
             record_when_ready: false,
+            last_saved: None,
             low_disk_warned: false,
             mic_level: 0.0,
             mic_level_at: Instant::now(),
@@ -523,6 +526,49 @@ impl App {
         self.settings.replay_seconds = self.settings.replay_seconds.min(self.replay_limit());
     }
 
+    /// Starts the buffer over, for a change that needs a new encoder. The
+    /// microphone, which feeds the old recorder, is reopened on the new one.
+    fn restart_recorder(&mut self) {
+        let mic_on = self.mic.is_some();
+        self.mic = None;
+        self.recorder = None;
+        self.sync_replay();
+        if mic_on {
+            self.set_mic(true);
+        }
+    }
+
+    fn window_hwnd(&self) -> Option<HWND> {
+        match self.window.as_ref()?.window_handle().map(|h| h.as_raw()) {
+            Ok(RawWindowHandle::Win32(h)) => Some(HWND(h.hwnd.get() as *mut c_void)),
+            _ => None,
+        }
+    }
+
+    /// Lets the user pick the folder for clips and recordings.
+    fn choose_folder(&mut self) {
+        let start = self.clips_folder();
+        let owner = self.window_hwnd();
+        let Some(folder) = clips::pick_folder(owner, &start) else {
+            return; // cancelled
+        };
+        if !clips::is_writable_folder(&folder) {
+            self.toast(i18n::Key::ToastFolderNotWritable, ToastKind::Error);
+            return;
+        }
+        self.settings.replay_folder = Some(folder.display().to_string());
+        self.needs_redraw = true;
+    }
+
+    /// Opens Explorer on the newest file saved this session, or on the folder
+    /// when there is none (or it was moved).
+    fn show_saved(&self) {
+        match &self.last_saved {
+            Some(file) if file.exists() => clips::reveal_file(file),
+            _ => clips::open_folder(&self.clips_folder()),
+        }
+    }
+
     /// Folder clips are saved to.
     fn clips_folder(&self) -> std::path::PathBuf {
         self.settings
@@ -535,6 +581,7 @@ impl App {
         use ui::controls::{ReplayState, ReplayView};
         let mut view = ReplayView::off(hotkey::LABEL);
         view.keep_seconds = self.settings.replay_seconds;
+        view.bitrate_mbps = self.settings.replay_bitrate_mbps;
         view.memory_bytes = settings::replay_memory_bytes(
             self.settings.replay_seconds,
             self.settings.replay_bitrate_mbps,
@@ -612,6 +659,9 @@ impl App {
             if let Err(e) = &outcome.result {
                 eprintln!("recording ended with an error: {e}");
             }
+            if let Ok(clip) = &outcome.result {
+                self.last_saved = Some(clip.path.clone());
+            }
             if let Some((key, kind)) = outcome_toast(outcome.reason, outcome.result.is_ok()) {
                 self.toast(key, kind);
             }
@@ -629,7 +679,10 @@ impl App {
         if let Some(result) = self.saving.as_ref().and_then(SaveHandle::poll) {
             self.saving = None;
             match result {
-                Ok(_) => self.toast(i18n::Key::ToastClipSaved, ToastKind::Success),
+                Ok(clip) => {
+                    self.last_saved = Some(clip.path);
+                    self.toast(i18n::Key::ToastClipSaved, ToastKind::Success);
+                }
                 Err(e) => {
                     eprintln!("clip not saved: {e}");
                     self.toast(i18n::Key::ToastClipFailed, ToastKind::Error);
@@ -916,8 +969,28 @@ impl App {
                 return;
             }
             Action::OpenReplayFolder => {
-                clips::open_folder(&self.clips_folder());
+                self.show_saved();
                 return;
+            }
+            Action::ChooseFolder => self.choose_folder(),
+            Action::SetQuality(quality) => {
+                if self
+                    .recorder
+                    .as_ref()
+                    .is_some_and(|r| r.recording().state != RecordingState::Idle)
+                {
+                    // A new encoder would cut the recording short.
+                    self.toast(i18n::Key::ToastStopRecordingFirst, ToastKind::Info);
+                    return;
+                }
+                if self.settings.replay_bitrate_mbps != quality.mbps() {
+                    self.settings.replay_bitrate_mbps = quality.mbps();
+                    self.clamp_replay_length();
+                    if self.recorder.is_some() {
+                        self.restart_recorder();
+                        self.toast(i18n::Key::ToastQualityChanged, ToastKind::Info);
+                    }
+                }
             }
             Action::ToggleStats => {
                 self.stats_open = !self.stats_open;

@@ -124,6 +124,13 @@ pub enum Key {
     ToastRecNoSignal,
     ToastLowDisk,
     ToastRecNoSpace,
+    RecordingQuality,
+    QualityNormal,
+    QualityHigh,
+    QualityHint,
+    ChangeFolder,
+    ToastFolderNotWritable,
+    ToastQualityChanged,
     SaveClip,
     OpenFolder,
     ToastClipSaved,
@@ -154,7 +161,7 @@ pub fn size_label(bytes: u64) -> String {
 }
 
 /// All keys, for completeness tests.
-pub const ALL_KEYS: [Key; 82] = [
+pub const ALL_KEYS: [Key; 89] = [
     Key::Live,
     Key::Connecting,
     Key::Disconnected,
@@ -229,6 +236,13 @@ pub const ALL_KEYS: [Key; 82] = [
     Key::ToastRecNoSignal,
     Key::ToastLowDisk,
     Key::ToastRecNoSpace,
+    Key::RecordingQuality,
+    Key::QualityNormal,
+    Key::QualityHigh,
+    Key::QualityHint,
+    Key::ChangeFolder,
+    Key::ToastFolderNotWritable,
+    Key::ToastQualityChanged,
     Key::SaveClip,
     Key::OpenFolder,
     Key::ToastClipSaved,
@@ -324,6 +338,13 @@ fn en(key: Key) -> &'static str {
         Key::ToastRecNoSignal => "There is no video signal to record",
         Key::ToastLowDisk => "Low disk space: the recording will stop if it fills up",
         Key::ToastRecNoSpace => "Not enough free disk space to record",
+        Key::RecordingQuality => "Recording quality",
+        Key::QualityNormal => "Normal",
+        Key::QualityHigh => "High",
+        Key::QualityHint => "A recording takes about {size} per hour.",
+        Key::ChangeFolder => "Change…",
+        Key::ToastFolderNotWritable => "Cannot save to that folder",
+        Key::ToastQualityChanged => "Quality changed: the replay buffer starts over",
         Key::SaveClip => "Save clip",
         Key::OpenFolder => "Open folder",
         Key::ToastClipSaved => "Clip saved",
@@ -411,6 +432,13 @@ fn es(key: Key) -> &'static str {
         Key::ToastRecNoSignal => "No hay señal de video para grabar",
         Key::ToastLowDisk => "Poco espacio en disco: la grabación se detendrá si se llena",
         Key::ToastRecNoSpace => "No hay espacio suficiente en el disco para grabar",
+        Key::RecordingQuality => "Calidad de grabación",
+        Key::QualityNormal => "Normal",
+        Key::QualityHigh => "Alta",
+        Key::QualityHint => "Una grabación ocupa unos {size} por hora.",
+        Key::ChangeFolder => "Cambiar…",
+        Key::ToastFolderNotWritable => "No se puede guardar en esa carpeta",
+        Key::ToastQualityChanged => "Calidad cambiada: el búfer del replay empieza de nuevo",
         Key::SaveClip => "Guardar clip",
         Key::OpenFolder => "Abrir carpeta",
         Key::ToastClipSaved => "Clip guardado",
@@ -463,6 +491,7 @@ mod tests {
         for lang in [Lang::En, Lang::Es] {
             assert!(tr(lang, Key::ReplayHint).contains("{hotkey}"), "{lang:?}");
             assert!(tr(lang, Key::ReplayMemory).contains("{size}"), "{lang:?}");
+            assert!(tr(lang, Key::QualityHint).contains("{size}"), "{lang:?}");
             assert!(
                 tr(lang, Key::ReplayMemoryLimit).contains("{size}"),
                 "{lang:?}"

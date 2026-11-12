@@ -77,7 +77,7 @@ Decisiones: se codifica **una sola vez** (la grabación reutiliza los frames com
 | G-1 | Escritor de archivo en el núcleo: empieza en un fotograma clave, video y tres pistas en directo | ✅ |
 | G-2 | Botón, atajo Ctrl+Alt+R, cronómetro, punto rojo y avisos | ✅ |
 | G-3 | Casos incómodos: poco espacio en disco, señal que se corta, cambio de resolución, sin señal al iniciar, cerrar la app grabando | ✅ (falta la prueba con el cable de la capturadora) |
-| G-4 | Ajuste de calidad, carpeta y acceso a la última grabación | pendiente |
+| G-4 | Ajuste de calidad, carpeta y acceso a la última grabación | ✅ |
 | G-5 | Prueba de 1 hora con la capturadora: CPU, GPU, RAM, deriva de audio y tamaño | pendiente |
 
 ### Resultados de G-1 (UGREEN 25173, 1080p60)
@@ -114,3 +114,12 @@ Decisiones: se codifica **una sola vez** (la grabación reutiliza los frames com
 **Error real encontrado y corregido:** el escritor de MP4 de Windows **ignora los huecos entre frames** y los comprime, mientras que el audio conserva su propia línea de tiempo. Tras un corte de señal de 3 s, el video terminaba 3 s antes que el audio (video 6,27 s frente a 9,30 s de grabación). Ahora `Mp4Remuxer` retiene cada frame hasta ver el siguiente y, si hay un hueco, lo alarga hasta cubrirlo. Esto también protege a los clips del replay.
 
 Pendiente de probar a mano: desenchufar y volver a enchufar el cable USB de la capturadora durante una grabación. Se desconoce aún si el audio de la capturadora vuelve solo tras reconectar (la reconexión del video ya existía; la del audio no está verificada).
+
+### Resultados de G-4
+
+- **Calidad de grabación** (en el popover del replay): **Normal** (16 Mbps, ~7 GB por hora) y **Alta** (40 Mbps, ~18 GB por hora). Es la misma opción para el búfer del replay y las grabaciones, porque comparten el codificador. Alta sigue siendo el valor por defecto, como antes. El popover muestra «Una grabación ocupa unos X por hora».
+- Cambiar la calidad **reinicia el búfer del replay** (un codificador nuevo no puede continuar el anterior); avisa con «Calidad cambiada: el búfer del replay empieza de nuevo», conserva el micrófono encendido, y se rechaza mientras se graba.
+- **Carpeta**: muestra la ruta y tiene dos botones, «Abrir carpeta» y **«Cambiar…»**, que abre el selector de carpetas de Windows. Comprueba que se pueda escribir en la carpeta elegida; si no, avisa y no la cambia. Vale para clips y grabaciones.
+- **Acceso a lo último guardado**: «Abrir carpeta» abre el Explorador con **el último clip o grabación de la sesión seleccionado**; si no hay ninguno (o se movió), abre la carpeta.
+- Verificado con clics reales en la app: Normal → `replayBitrateMbps = 16` y la app sigue viva; «Cambiar…» abre el selector nativo y la carpeta elegida queda guardada.
+- No verificado: el aspecto visual de la calidad Normal frente a Alta con juego real, ni cuánto pesa de verdad una hora a 16 Mbps con movimiento (G-5).

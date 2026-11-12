@@ -96,6 +96,45 @@ pub enum VideoModePref {
     Compressed,
 }
 
+/// Quality of the video the replay buffer and recordings are encoded at. One
+/// encoder serves both, so it is one choice.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RecordingQuality {
+    /// Smaller files, still good for sharing (about 7 GB per hour).
+    Normal,
+    /// Best picture, big files (about 18 GB per hour).
+    High,
+}
+
+/// Video bitrate of [`RecordingQuality::Normal`], in megabits per second.
+pub const NORMAL_REPLAY_MBPS: u32 = 16;
+
+impl RecordingQuality {
+    pub const ALL: [Self; 2] = [Self::Normal, Self::High];
+
+    pub fn mbps(self) -> u32 {
+        match self {
+            Self::Normal => NORMAL_REPLAY_MBPS,
+            Self::High => DEFAULT_REPLAY_MBPS,
+        }
+    }
+
+    /// The quality closest to a stored bitrate (a hand-edited value snaps to
+    /// the nearer one).
+    pub fn from_mbps(mbps: u32) -> Self {
+        if mbps.abs_diff(NORMAL_REPLAY_MBPS) < mbps.abs_diff(DEFAULT_REPLAY_MBPS) {
+            Self::Normal
+        } else {
+            Self::High
+        }
+    }
+}
+
+/// Bytes a recording takes per hour at `mbps`.
+pub fn recording_bytes_per_hour(mbps: u32) -> u64 {
+    u64::from(mbps) * 125_000 * 3600
+}
+
 /// Lengths offered for the instant-replay buffer, in seconds.
 pub const REPLAY_STEPS: [u32; 15] = [
     5, 10, 15, 20, 30, 45, 60, 90, 120, 180, 240, 300, 420, 600, 900,
@@ -400,6 +439,31 @@ mod tests {
         // An unlisted value snaps to its nearest step before moving.
         assert_eq!(step_replay_seconds(33, 1), 45);
         assert_eq!(step_replay_seconds(200, -1), 120);
+    }
+
+    #[test]
+    fn quality_maps_to_bitrates_and_back() {
+        assert_eq!(RecordingQuality::Normal.mbps(), 16);
+        assert_eq!(RecordingQuality::High.mbps(), 40);
+        for quality in RecordingQuality::ALL {
+            assert_eq!(RecordingQuality::from_mbps(quality.mbps()), quality);
+        }
+        // Hand-edited values snap to the nearer quality.
+        assert_eq!(RecordingQuality::from_mbps(5), RecordingQuality::Normal);
+        assert_eq!(RecordingQuality::from_mbps(25), RecordingQuality::Normal);
+        assert_eq!(RecordingQuality::from_mbps(29), RecordingQuality::High);
+        assert_eq!(RecordingQuality::from_mbps(100), RecordingQuality::High);
+        // The default stays what it was: high.
+        assert_eq!(
+            RecordingQuality::from_mbps(AppSettings::default().replay_bitrate_mbps),
+            RecordingQuality::High
+        );
+    }
+
+    #[test]
+    fn an_hour_of_recording_is_sized_from_the_bitrate() {
+        assert_eq!(recording_bytes_per_hour(16), 7_200_000_000);
+        assert_eq!(recording_bytes_per_hour(40), 18_000_000_000);
     }
 
     #[test]

@@ -2,11 +2,14 @@
 
 use std::path::{Path, PathBuf};
 
-use windows::core::{w, HSTRING};
-use windows::Win32::System::Com::CoTaskMemFree;
+use windows::core::{w, HSTRING, PCWSTR};
+use windows::Win32::Foundation::HWND;
+use windows::Win32::System::Com::{CoCreateInstance, CoTaskMemFree, CLSCTX_INPROC_SERVER};
 use windows::Win32::System::SystemInformation::GetLocalTime;
 use windows::Win32::UI::Shell::{
-    FOLDERID_Videos, SHGetKnownFolderPath, ShellExecuteW, KF_FLAG_DEFAULT,
+    FOLDERID_Videos, FileOpenDialog, IFileOpenDialog, IShellItem, SHCreateItemFromParsingName,
+    SHGetKnownFolderPath, ShellExecuteW, FOS_FORCEFILESYSTEM, FOS_PICKFOLDERS, KF_FLAG_DEFAULT,
+    SIGDN_FILESYSPATH,
 };
 use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
 
@@ -97,6 +100,66 @@ pub fn open_folder(folder: &Path) {
     }
 }
 
+/// The command-line argument that makes Explorer open a folder with `file`
+/// highlighted.
+pub fn reveal_args(file: &Path) -> String {
+    format!("/select,\"{}\"", file.display())
+}
+
+/// Opens Explorer with `file` selected.
+pub fn reveal_file(file: &Path) {
+    let args = HSTRING::from(reveal_args(file));
+    // SAFETY: plain shell call with valid, NUL-terminated strings.
+    unsafe {
+        ShellExecuteW(
+            None,
+            w!("open"),
+            w!("explorer.exe"),
+            PCWSTR(args.as_ptr()),
+            None,
+            SW_SHOWNORMAL,
+        );
+    }
+}
+
+/// Whether files can be created in `folder` (it is created if missing).
+pub fn is_writable_folder(folder: &Path) -> bool {
+    if std::fs::create_dir_all(folder).is_err() {
+        return false;
+    }
+    let probe = folder.join(format!(".dockview-write-test-{}", std::process::id()));
+    let ok = std::fs::write(&probe, b"x").is_ok();
+    let _ = std::fs::remove_file(&probe);
+    ok
+}
+
+/// Asks the user for a folder with the standard Windows dialog, starting at
+/// `start`. `None` if they cancel. Runs on the calling (UI) thread, which must
+/// be a COM single-threaded apartment, as winit's is.
+pub fn pick_folder(owner: Option<HWND>, start: &Path) -> Option<PathBuf> {
+    // SAFETY: standard COM use; the returned string is CoTaskMem memory that is
+    // copied and then freed exactly once.
+    unsafe {
+        let dialog: IFileOpenDialog =
+            CoCreateInstance(&FileOpenDialog, None, CLSCTX_INPROC_SERVER).ok()?;
+        let options = dialog.GetOptions().ok()?;
+        dialog
+            .SetOptions(options | FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM)
+            .ok()?;
+        if let Ok(item) =
+            SHCreateItemFromParsingName::<_, _, IShellItem>(&HSTRING::from(start.as_os_str()), None)
+        {
+            let _ = dialog.SetFolder(&item);
+        }
+        dialog.Show(owner).ok()?;
+        let item = dialog.GetResult().ok()?;
+        let name = item.GetDisplayName(SIGDN_FILESYSPATH).ok()?;
+        let path = name.to_string().ok().map(PathBuf::from);
+        CoTaskMemFree(Some(name.0 as *const _));
+        path
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -122,6 +185,29 @@ mod tests {
             ..time()
         });
         assert!(later > name);
+    }
+
+    #[test]
+    fn explorer_is_asked_to_select_the_file() {
+        let args = reveal_args(Path::new(r"C:\Videos\My Clip (2).mp4"));
+        assert_eq!(args, "/select,\"C:\\Videos\\My Clip (2).mp4\"");
+    }
+
+    #[test]
+    fn a_writable_folder_is_accepted_and_a_bad_one_is_not() {
+        let dir = std::env::temp_dir().join(format!("dockview-writable-{}", std::process::id()));
+        assert!(is_writable_folder(&dir), "created on demand");
+        assert!(is_writable_folder(&dir), "and fine when it exists");
+        assert!(
+            std::fs::read_dir(&dir).unwrap().next().is_none(),
+            "the probe file is removed"
+        );
+        let _ = std::fs::remove_dir(&dir);
+        // A path whose parent is a file can never be a folder.
+        let file = std::env::temp_dir().join(format!("dockview-notadir-{}", std::process::id()));
+        std::fs::write(&file, b"x").unwrap();
+        assert!(!is_writable_folder(&file.join("inside")));
+        let _ = std::fs::remove_file(&file);
     }
 
     #[test]
