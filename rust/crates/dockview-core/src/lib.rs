@@ -9,6 +9,7 @@ pub mod frame;
 pub mod mf;
 pub mod settings;
 pub mod stream;
+pub mod testsrc;
 
 pub fn version() -> &'static str {
     env!("CARGO_PKG_VERSION")

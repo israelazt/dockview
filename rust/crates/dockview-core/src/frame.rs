@@ -1,7 +1,8 @@
 //! Video frames and the "latest frame wins" hand-off between capture and render.
 
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Mutex;
+use std::sync::{Condvar, Mutex};
+use std::time::Duration;
 
 /// Pixel layout of a [`Frame`]. Colour conversion happens on the GPU.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -50,6 +51,7 @@ struct Slots {
 #[derive(Default)]
 pub struct FrameSlot {
     slots: Mutex<Slots>,
+    arrived: Condvar,
     published: AtomicU64,
     dropped: AtomicU64,
 }
@@ -67,6 +69,19 @@ impl FrameSlot {
             self.dropped.fetch_add(1, Ordering::Relaxed);
         }
         self.published.fetch_add(1, Ordering::Relaxed);
+        drop(slots);
+        self.arrived.notify_one();
+    }
+
+    /// Blocks until a frame is available or `timeout` elapses. Returns whether
+    /// a frame is waiting; it is not consumed.
+    pub fn wait_for_frame(&self, timeout: Duration) -> bool {
+        let guard = self.lock();
+        let (guard, _) = self
+            .arrived
+            .wait_timeout_while(guard, timeout, |s| s.latest.is_none())
+            .unwrap_or_else(|e| e.into_inner());
+        guard.latest.is_some()
     }
 
     /// Takes the latest frame, if one arrived since the last call.
@@ -154,6 +169,32 @@ mod tests {
         let slot = FrameSlot::new();
         slot.recycle(frame(7));
         assert_eq!(slot.take_spare().unwrap().timestamp, 7);
+    }
+
+    #[test]
+    fn wait_returns_immediately_when_a_frame_is_waiting() {
+        let slot = FrameSlot::new();
+        slot.publish(frame(1));
+        assert!(slot.wait_for_frame(Duration::from_secs(5)));
+    }
+
+    #[test]
+    fn wait_times_out_when_no_frame_arrives() {
+        assert!(!FrameSlot::new().wait_for_frame(Duration::from_millis(5)));
+    }
+
+    #[test]
+    fn wait_wakes_when_a_frame_is_published() {
+        let slot = std::sync::Arc::new(FrameSlot::new());
+        let producer = {
+            let slot = std::sync::Arc::clone(&slot);
+            std::thread::spawn(move || {
+                std::thread::sleep(Duration::from_millis(20));
+                slot.publish(frame(9));
+            })
+        };
+        assert!(slot.wait_for_frame(Duration::from_secs(5)));
+        producer.join().unwrap();
     }
 
     #[test]
