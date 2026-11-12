@@ -13,18 +13,22 @@ use windows::Win32::Media::MediaFoundation::{
     CODECAPI_AVEncMPVDefaultBPictureCount, CODECAPI_AVEncMPVGOPSize, CODECAPI_AVLowLatencyMode,
     ICodecAPI, IMFActivate, IMFAttributes, IMFMediaEventGenerator, IMFMediaType, IMFSinkWriter,
     IMFTransform, METransformDrainComplete, METransformHaveOutput, METransformNeedInput,
-    MFCreateAttributes, MFCreateMediaType, MFCreateMemoryBuffer, MFCreateSample,
-    MFCreateSinkWriterFromURL, MFMediaType_Video, MFSampleExtension_CleanPoint, MFTEnumEx,
-    MFT_FRIENDLY_NAME_Attribute, MFVideoFormat_H264, MFVideoFormat_NV12,
-    MFVideoInterlace_Progressive, MFT_CATEGORY_VIDEO_ENCODER, MFT_ENUM_FLAG_HARDWARE,
-    MFT_ENUM_FLAG_SORTANDFILTER, MFT_MESSAGE_COMMAND_DRAIN, MFT_MESSAGE_NOTIFY_BEGIN_STREAMING,
+    MFAudioFormat_AAC, MFAudioFormat_PCM, MFCreateAttributes, MFCreateMediaType,
+    MFCreateMemoryBuffer, MFCreateSample, MFCreateSinkWriterFromURL, MFMediaType_Audio,
+    MFMediaType_Video, MFSampleExtension_CleanPoint, MFTEnumEx, MFT_FRIENDLY_NAME_Attribute,
+    MFVideoFormat_H264, MFVideoFormat_NV12, MFVideoInterlace_Progressive,
+    MFT_CATEGORY_VIDEO_ENCODER, MFT_ENUM_FLAG_HARDWARE, MFT_ENUM_FLAG_SORTANDFILTER,
+    MFT_MESSAGE_COMMAND_DRAIN, MFT_MESSAGE_NOTIFY_BEGIN_STREAMING,
     MFT_MESSAGE_NOTIFY_END_STREAMING, MFT_MESSAGE_NOTIFY_START_OF_STREAM, MFT_OUTPUT_DATA_BUFFER,
     MFT_OUTPUT_STREAM_PROVIDES_SAMPLES, MFT_REGISTER_TYPE_INFO, MF_EVENT_FLAG_NO_WAIT,
-    MF_E_NO_EVENTS_AVAILABLE, MF_E_TRANSFORM_NEED_MORE_INPUT, MF_LOW_LATENCY, MF_MT_AVG_BITRATE,
-    MF_MT_DEFAULT_STRIDE, MF_MT_FRAME_RATE, MF_MT_FRAME_SIZE, MF_MT_INTERLACE_MODE,
-    MF_MT_MAJOR_TYPE, MF_MT_MPEG2_PROFILE, MF_MT_MPEG_SEQUENCE_HEADER, MF_MT_PIXEL_ASPECT_RATIO,
-    MF_MT_SUBTYPE, MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS, MF_SINK_WRITER_DISABLE_THROTTLING,
-    MF_TRANSFORM_ASYNC_UNLOCK,
+    MF_E_NO_EVENTS_AVAILABLE, MF_E_TRANSFORM_NEED_MORE_INPUT, MF_LOW_LATENCY,
+    MF_MT_AAC_AUDIO_PROFILE_LEVEL_INDICATION, MF_MT_AAC_PAYLOAD_TYPE,
+    MF_MT_ALL_SAMPLES_INDEPENDENT, MF_MT_AUDIO_AVG_BYTES_PER_SECOND, MF_MT_AUDIO_BITS_PER_SAMPLE,
+    MF_MT_AUDIO_BLOCK_ALIGNMENT, MF_MT_AUDIO_NUM_CHANNELS, MF_MT_AUDIO_SAMPLES_PER_SECOND,
+    MF_MT_AVG_BITRATE, MF_MT_DEFAULT_STRIDE, MF_MT_FRAME_RATE, MF_MT_FRAME_SIZE,
+    MF_MT_INTERLACE_MODE, MF_MT_MAJOR_TYPE, MF_MT_MPEG2_PROFILE, MF_MT_MPEG_SEQUENCE_HEADER,
+    MF_MT_PIXEL_ASPECT_RATIO, MF_MT_SUBTYPE, MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS,
+    MF_SINK_WRITER_DISABLE_THROTTLING, MF_TRANSFORM_ASYNC_UNLOCK,
 };
 use windows::Win32::System::Com::CoTaskMemFree;
 use windows::Win32::System::Variant::{
@@ -481,6 +485,8 @@ impl Drop for H264Encoder {
 pub struct Mp4Remuxer {
     writer: IMFSinkWriter,
     stream: u32,
+    /// Stream index of the AAC audio track, when the clip has audio.
+    audio_stream: Option<u32>,
     /// Timestamp of the first frame, subtracted so the file starts at zero.
     origin: Option<i64>,
 }
@@ -492,6 +498,7 @@ impl Mp4Remuxer {
         path: &Path,
         settings: &EncodeSettings,
         sequence_header: Option<&[u8]>,
+        with_audio: bool,
     ) -> Result<Self> {
         let EncodeSettings {
             width,
@@ -523,10 +530,43 @@ impl Mp4Remuxer {
             }
             let stream = writer.AddStream(&ty)?;
             writer.SetInputMediaType(stream, &ty, None::<&IMFAttributes>)?;
+
+            // Audio: 16-bit stereo PCM in, AAC (192 kbps) out; the sink writer
+            // inserts the encoder.
+            let audio_stream = if with_audio {
+                let rate = crate::audio_sync::SAMPLE_RATE;
+                let channels = crate::audio_sync::CHANNELS as u32;
+                let aac = MFCreateMediaType()?;
+                aac.SetGUID(&MF_MT_MAJOR_TYPE, &MFMediaType_Audio)?;
+                aac.SetGUID(&MF_MT_SUBTYPE, &MFAudioFormat_AAC)?;
+                aac.SetUINT32(&MF_MT_AUDIO_BITS_PER_SAMPLE, 16)?;
+                aac.SetUINT32(&MF_MT_AUDIO_SAMPLES_PER_SECOND, rate)?;
+                aac.SetUINT32(&MF_MT_AUDIO_NUM_CHANNELS, channels)?;
+                aac.SetUINT32(&MF_MT_AUDIO_AVG_BYTES_PER_SECOND, 24_000)?;
+                aac.SetUINT32(&MF_MT_AAC_PAYLOAD_TYPE, 0)?;
+                aac.SetUINT32(&MF_MT_AAC_AUDIO_PROFILE_LEVEL_INDICATION, 0x29)?;
+                let index = writer.AddStream(&aac)?;
+
+                let pcm = MFCreateMediaType()?;
+                pcm.SetGUID(&MF_MT_MAJOR_TYPE, &MFMediaType_Audio)?;
+                pcm.SetGUID(&MF_MT_SUBTYPE, &MFAudioFormat_PCM)?;
+                pcm.SetUINT32(&MF_MT_AUDIO_BITS_PER_SAMPLE, 16)?;
+                pcm.SetUINT32(&MF_MT_AUDIO_SAMPLES_PER_SECOND, rate)?;
+                pcm.SetUINT32(&MF_MT_AUDIO_NUM_CHANNELS, channels)?;
+                pcm.SetUINT32(&MF_MT_AUDIO_BLOCK_ALIGNMENT, channels * 2)?;
+                pcm.SetUINT32(&MF_MT_AUDIO_AVG_BYTES_PER_SECOND, rate * channels * 2)?;
+                pcm.SetUINT32(&MF_MT_ALL_SAMPLES_INDEPENDENT, 1)?;
+                writer.SetInputMediaType(index, &pcm, None::<&IMFAttributes>)?;
+                Some(index)
+            } else {
+                None
+            };
+
             writer.BeginWriting()?;
             Ok(Self {
                 writer,
                 stream,
+                audio_stream,
                 origin: None,
             })
         }
@@ -550,6 +590,34 @@ impl Mp4Remuxer {
                 sample.SetUINT32(&MFSampleExtension_CleanPoint, 1)?;
             }
             self.writer.WriteSample(self.stream, &sample)
+        }
+    }
+
+    /// Writes interleaved 16-bit stereo PCM that starts `start_100ns` after
+    /// the beginning of the clip (the same zero as the video). A no-op when
+    /// the file has no audio track.
+    pub fn write_audio(&mut self, start_100ns: i64, pcm: &[i16]) -> Result<()> {
+        let Some(stream) = self.audio_stream else {
+            return Ok(());
+        };
+        if pcm.is_empty() {
+            return Ok(());
+        }
+        let bytes = pcm.len() * 2;
+        let frames = (pcm.len() / crate::audio_sync::CHANNELS) as i64;
+        // SAFETY: the buffer is filled while locked and sized to the data.
+        unsafe {
+            let buffer = MFCreateMemoryBuffer(bytes as u32)?;
+            let mut data: *mut u8 = std::ptr::null_mut();
+            buffer.Lock(&mut data, None, None)?;
+            std::ptr::copy_nonoverlapping(pcm.as_ptr().cast::<u8>(), data, bytes);
+            buffer.Unlock()?;
+            buffer.SetCurrentLength(bytes as u32)?;
+            let sample = MFCreateSample()?;
+            sample.AddBuffer(&buffer)?;
+            sample.SetSampleTime(start_100ns)?;
+            sample.SetSampleDuration(crate::pcm::frames_to_ticks(frames))?;
+            self.writer.WriteSample(stream, &sample)
         }
     }
 

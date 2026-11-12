@@ -19,6 +19,7 @@ use crate::audio_sync::{
     plan_correction, target_frames, AudioRing, BYTES_PER_FRAME, CHANNELS, SAMPLE_RATE,
 };
 use crate::device::AudioDevice;
+use crate::pcm::AudioTap;
 
 /// How often the render thread re-evaluates drift.
 const DRIFT_CHECK_INTERVAL: Duration = Duration::from_millis(500);
@@ -43,6 +44,8 @@ struct Shared {
     volume: AtomicU32,
     offset_ms: AtomicI32,
     status: Mutex<AudioStatus>,
+    /// Receives a copy of every captured block, for the replay recorder.
+    tap: Mutex<Option<Arc<AudioTap>>>,
 }
 
 impl Shared {
@@ -77,6 +80,7 @@ impl AudioEngine {
             volume: AtomicU32::new(volume.clamp(0.0, 1.0).to_bits()),
             offset_ms: AtomicI32::new(offset_ms),
             status: Mutex::new(AudioStatus::Starting),
+            tap: Mutex::new(None),
         });
 
         let spawn = |name: &str, body: fn(&Shared, &AtomicBool, &str), id: String| {
@@ -104,6 +108,13 @@ impl AudioEngine {
             shared,
             threads,
         }
+    }
+
+    /// Starts (or with `None`, stops) feeding every captured block to `tap`.
+    /// The tap receives the audio before the volume control, so recordings do
+    /// not depend on how loud it is being played.
+    pub fn set_tap(&self, tap: Option<Arc<AudioTap>>) {
+        *self.shared.tap.lock().unwrap_or_else(|e| e.into_inner()) = tap;
     }
 
     pub fn set_volume(&self, volume: f32) {
@@ -225,6 +236,14 @@ fn capture_loop(shared: &Shared, stop: &AtomicBool, device_id: &str) -> Result<(
             let (words, _) = bytes[..read as usize * BYTES_PER_FRAME].as_chunks::<4>();
             samples.extend(words.iter().map(|b| f32::from_le_bytes(*b)));
             shared.ring().push(&samples);
+            if let Some(tap) = shared
+                .tap
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .as_ref()
+            {
+                tap.offer(Instant::now(), &samples);
+            }
         }
     }
     let _ = client.stop_stream();

@@ -7,7 +7,9 @@ use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
+use dockview_core::audio::{enumerate_audio_devices, AudioEngine};
 use dockview_core::capture::{CaptureOptions, VideoCapture};
+use dockview_core::device::match_audio_to_video;
 use dockview_core::frame::FrameSlot;
 use dockview_core::mf::{enumerate_video_devices, MfSession};
 use dockview_core::recorder::{RecorderStatus, ReplayRecorder, ReplaySettings};
@@ -49,6 +51,15 @@ fn main() -> windows::core::Result<()> {
         CaptureOptions::default(),
         Arc::clone(&slot),
     );
+    // Game audio from the capture card's own audio endpoint (muted: we only
+    // want to record it, not play it).
+    let audio_devices = enumerate_audio_devices().unwrap_or_default();
+    let audio_device = match_audio_to_video(Some(device), &audio_devices);
+    println!(
+        "Audio: {}",
+        audio_device.map_or("none found".to_string(), |d| d.friendly_name.clone())
+    );
+    let audio = audio_device.map(|d| AudioEngine::start(d.device_id.clone(), 0.0, 0));
     let recorder = ReplayRecorder::start(
         Arc::clone(&slot),
         ReplaySettings {
@@ -58,15 +69,20 @@ fn main() -> windows::core::Result<()> {
         },
     );
 
+    if let Some(audio) = &audio {
+        audio.set_tap(Some(recorder.audio_tap()));
+    }
+
     let start = Instant::now();
     while start.elapsed() < Duration::from_secs(record_seconds) {
         thread::sleep(Duration::from_secs(1));
         println!(
-            "t={:>2}s capture={:?}  recorder={:?}  buffered={:>5.1}s {:>6.1} MB  encoded={}  dropped={}",
+            "t={:>2}s capture={:?}  recorder={:?}  video={:>5.1}s audio={:>5.1}s {:>6.1} MB  encoded={}  dropped={}",
             start.elapsed().as_secs(),
             matches!(capture.status(), dockview_core::capture::CaptureStatus::Running { .. }),
             recorder.status(),
             recorder.buffered_seconds(),
+            recorder.buffered_audio_seconds(),
             recorder.buffered_bytes() as f64 / 1e6,
             recorder.encoded_frames(),
             recorder.dropped_frames(),
@@ -103,6 +119,7 @@ fn main() -> windows::core::Result<()> {
 /// Counts the samples and measures the average brightness of a middle frame
 /// (so "all black" would be noticed) without looking at the picture.
 fn verify(path: &std::path::Path, expected: usize) -> windows::core::Result<()> {
+    verify_audio(path)?;
     // SAFETY: plain source-reader calls on a file we just wrote.
     unsafe {
         let reader =
@@ -177,6 +194,68 @@ fn verify(path: &std::path::Path, expected: usize) -> windows::core::Result<()> 
                 );
             }
         }
+    }
+    Ok(())
+}
+
+/// Decodes the audio track: its length and RMS level.
+fn verify_audio(path: &std::path::Path) -> windows::core::Result<()> {
+    use windows::Win32::Media::MediaFoundation::{
+        MFAudioFormat_PCM, MFMediaType_Audio, MF_MT_AUDIO_AVG_BYTES_PER_SECOND,
+        MF_MT_AUDIO_BITS_PER_SAMPLE, MF_MT_AUDIO_BLOCK_ALIGNMENT, MF_MT_AUDIO_NUM_CHANNELS,
+        MF_MT_AUDIO_SAMPLES_PER_SECOND, MF_SOURCE_READER_FIRST_AUDIO_STREAM,
+    };
+    // SAFETY: plain source-reader calls on a file we just wrote.
+    unsafe {
+        let reader =
+            MFCreateSourceReaderFromURL(&HSTRING::from(path.as_os_str()), None::<&IMFAttributes>)?;
+        let stream = MF_SOURCE_READER_FIRST_AUDIO_STREAM.0 as u32;
+        let pcm = MFCreateMediaType()?;
+        pcm.SetGUID(&MF_MT_MAJOR_TYPE, &MFMediaType_Audio)?;
+        pcm.SetGUID(&MF_MT_SUBTYPE, &MFAudioFormat_PCM)?;
+        pcm.SetUINT32(&MF_MT_AUDIO_NUM_CHANNELS, 2)?;
+        pcm.SetUINT32(&MF_MT_AUDIO_SAMPLES_PER_SECOND, 48_000)?;
+        pcm.SetUINT32(&MF_MT_AUDIO_BITS_PER_SAMPLE, 16)?;
+        pcm.SetUINT32(&MF_MT_AUDIO_BLOCK_ALIGNMENT, 4)?;
+        pcm.SetUINT32(&MF_MT_AUDIO_AVG_BYTES_PER_SECOND, 192_000)?;
+        if reader.SetCurrentMediaType(stream, None, &pcm).is_err() {
+            println!("Audio track: none");
+            return Ok(());
+        }
+        let (mut frames, mut sum_squares, mut peak) = (0u64, 0f64, 0f64);
+        loop {
+            let (mut flags, mut ts) = (0u32, 0i64);
+            let mut sample: Option<IMFSample> = None;
+            reader.ReadSample(
+                stream,
+                0,
+                None,
+                Some(&mut flags),
+                Some(&mut ts),
+                Some(&mut sample),
+            )?;
+            if flags & MF_SOURCE_READERF_ENDOFSTREAM.0 as u32 != 0 {
+                break;
+            }
+            let Some(sample) = sample else { continue };
+            let buffer = sample.ConvertToContiguousBuffer()?;
+            let mut data: *mut u8 = std::ptr::null_mut();
+            let mut len = 0u32;
+            buffer.Lock(&mut data, None, Some(&mut len))?;
+            for pair in std::slice::from_raw_parts(data, len as usize).chunks_exact(2) {
+                let v = f64::from(i16::from_le_bytes([pair[0], pair[1]])) / 32768.0;
+                sum_squares += v * v;
+                peak = peak.max(v.abs());
+            }
+            frames += u64::from(len / 4);
+            buffer.Unlock()?;
+        }
+        let seconds = frames as f64 / 48_000.0;
+        let rms = (sum_squares / (frames.max(1) as f64 * 2.0)).sqrt();
+        println!(
+            "Audio track: {seconds:.2}s, RMS {rms:.4} ({:.1} dBFS), peak {peak:.3}",
+            20.0 * rms.max(1e-9).log10()
+        );
     }
     Ok(())
 }

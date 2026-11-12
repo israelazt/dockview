@@ -13,6 +13,7 @@ pub mod encode;
 pub mod frame;
 #[cfg(windows)]
 pub mod mf;
+pub mod pcm;
 #[cfg(windows)]
 pub mod recorder;
 #[cfg(windows)]

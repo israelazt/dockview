@@ -131,7 +131,7 @@ fn main() -> windows::core::Result<()> {
         clip[0].timestamp as f64 / 1e7
     );
 
-    let mut remux = Mp4Remuxer::create(&session, &path, &settings, header.as_deref())?;
+    let mut remux = Mp4Remuxer::create(&session, &path, &settings, header.as_deref(), false)?;
     for f in clip {
         remux.write(f)?;
     }
