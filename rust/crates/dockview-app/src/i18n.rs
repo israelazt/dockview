@@ -115,6 +115,10 @@ pub enum Key {
     MicUnavailable,
     ToastMicOn,
     ToastMicOff,
+    ToastRecStarted,
+    ToastRecSaved,
+    ToastRecFailed,
+    ToastStopRecordingFirst,
     SaveClip,
     OpenFolder,
     ToastClipSaved,
@@ -145,7 +149,7 @@ pub fn size_label(bytes: u64) -> String {
 }
 
 /// All keys, for completeness tests.
-pub const ALL_KEYS: [Key; 73] = [
+pub const ALL_KEYS: [Key; 77] = [
     Key::Live,
     Key::Connecting,
     Key::Disconnected,
@@ -211,6 +215,10 @@ pub const ALL_KEYS: [Key; 73] = [
     Key::MicUnavailable,
     Key::ToastMicOn,
     Key::ToastMicOff,
+    Key::ToastRecStarted,
+    Key::ToastRecSaved,
+    Key::ToastRecFailed,
+    Key::ToastStopRecordingFirst,
     Key::SaveClip,
     Key::OpenFolder,
     Key::ToastClipSaved,
@@ -297,6 +305,10 @@ fn en(key: Key) -> &'static str {
         Key::MicUnavailable => "Microphone not available",
         Key::ToastMicOn => "Microphone is on",
         Key::ToastMicOff => "Microphone is off",
+        Key::ToastRecStarted => "Recording started",
+        Key::ToastRecSaved => "Recording saved",
+        Key::ToastRecFailed => "Could not record",
+        Key::ToastStopRecordingFirst => "Stop the recording first",
         Key::SaveClip => "Save clip",
         Key::OpenFolder => "Open folder",
         Key::ToastClipSaved => "Clip saved",
@@ -375,6 +387,10 @@ fn es(key: Key) -> &'static str {
         Key::MicUnavailable => "Micrófono no disponible",
         Key::ToastMicOn => "Micrófono activado",
         Key::ToastMicOff => "Micrófono apagado",
+        Key::ToastRecStarted => "Grabación iniciada",
+        Key::ToastRecSaved => "Grabación guardada",
+        Key::ToastRecFailed => "No se pudo grabar",
+        Key::ToastStopRecordingFirst => "Detén primero la grabación",
         Key::SaveClip => "Guardar clip",
         Key::OpenFolder => "Abrir carpeta",
         Key::ToastClipSaved => "Clip guardado",

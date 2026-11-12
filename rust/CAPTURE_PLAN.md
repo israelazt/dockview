@@ -75,7 +75,7 @@ Decisiones: se codifica **una sola vez** (la grabación reutiliza los frames com
 | Fase | Qué | Estado |
 |---|---|---|
 | G-1 | Escritor de archivo en el núcleo: empieza en un fotograma clave, video y tres pistas en directo | ✅ |
-| G-2 | Botón, atajo Ctrl+Alt+R, cronómetro, punto rojo y avisos | pendiente |
+| G-2 | Botón, atajo Ctrl+Alt+R, cronómetro, punto rojo y avisos | ✅ |
 | G-3 | Casos incómodos: poco espacio en disco, capturadora desconectada, cambio de resolución (hoy cierra el archivo; después abrirá una parte 2), cerrar la app grabando | pendiente |
 | G-4 | Ajuste de calidad, carpeta y acceso a la última grabación | pendiente |
 | G-5 | Prueba de 1 hora con la capturadora: CPU, GPU, RAM, deriva de audio y tamaño | pendiente |
@@ -87,3 +87,14 @@ Decisiones: se codifica **una sola vez** (la grabación reutiliza los frames com
 - **Corte forzado** (proceso matado a los ~14 s): el archivo conserva **12,07 s de video y las tres pistas de audio completas** hasta el último fragmento. Windows lo abre como video 1920×1080 pero no sabe su duración (la cabecera de duración se escribe al cerrar); los reproductores lo reproducen igualmente.
 - El bitrate real depende de la imagen: con una pantalla casi estática salió ~1 Mbps aunque el objetivo era 20 Mbps. Con movimiento real subirá; hay que medirlo en G-5 con juego.
 - Herramientas: `record_live` (graba N segundos de la capturadora) y `file_check` (cuenta muestras por pista, sin decodificar).
+
+### Resultados de G-2
+
+- **Botón** en la píldora, junto a «guardar clip»: círculo rojo en reposo, cuadrado rojo (que parpadea mientras arranca) al grabar. **Atajo global Ctrl+Alt+R**, que funciona con otra ventana en primer plano.
+- **Indicador siempre visible** arriba a la derecha (punto rojo que late una vez por segundo y cronómetro `MM:SS`, o `H:MM:SS` desde la primera hora). Solo se dibuja en la ventana de Dockview, nunca en el video grabado. Sigue en pantalla aunque la píldora se oculte.
+- **Avisos**: «Grabación iniciada», «Grabación guardada», «No se pudo grabar».
+- Los archivos se llaman `Dockview Recording AAAA-MM-DD HH-MM-SS.mp4` (los clips sueltos siguen siendo `Dockview AAAA-…`) y van a la misma carpeta que los clips.
+- Si el replay estaba apagado, pulsar grabar lo enciende y empieza en cuanto el codificador está listo. Mientras se graba, apagar el replay se rechaza con un aviso (cortaría la grabación).
+- Cerrar la app grabando finaliza el archivo (con su índice final), no lo deja a medias.
+- Verificado con la UGREEN: el atajo inició y detuvo una grabación de 8,28 s, 497 frames (60 fps) y tres pistas de audio.
+- Flags de prueba: `--record` (empieza a grabar al abrir) y `--mic`.

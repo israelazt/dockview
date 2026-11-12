@@ -4,6 +4,7 @@
 pub mod controls;
 pub mod gpu;
 pub mod input;
+pub mod rec;
 pub mod stats;
 pub mod text;
 pub mod toast;

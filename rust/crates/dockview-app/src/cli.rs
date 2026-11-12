@@ -30,6 +30,8 @@ pub struct Cli {
     pub open_replay: bool,
     /// Start with the microphone on (for tests and screenshots; it is off by default).
     pub mic: bool,
+    /// Start recording right away (for tests and screenshots).
+    pub record: bool,
     /// Start with the statistics panel open.
     pub show_stats: bool,
     /// Preview only: show sample problems in the diagnosis.
@@ -97,6 +99,7 @@ impl Cli {
                 "--open-settings" => cli.open_settings = true,
                 "--open-replay" => cli.open_replay = true,
                 "--mic" => cli.mic = true,
+                "--record" => cli.record = true,
                 "--stats" => cli.show_stats = true,
                 "--video" => cli.video = Some(value("--video")?),
                 "--log-stats" => cli.log_stats = Some(PathBuf::from(value("--log-stats")?)),

@@ -44,6 +44,14 @@ pub fn clip_file_name(t: LocalTime) -> String {
     )
 }
 
+/// File name of a whole-session recording, e.g. `Dockview Recording 2026-11-05 09-04-03.mp4`.
+pub fn recording_file_name(t: LocalTime) -> String {
+    format!(
+        "Dockview Recording {:04}-{:02}-{:02} {:02}-{:02}-{:02}.mp4",
+        t.year, t.month, t.day, t.hour, t.minute, t.second
+    )
+}
+
 /// `dir/name`, or `dir/name (2)`, `(3)`… when that file already exists.
 pub fn unique_path(dir: &Path, name: &str) -> PathBuf {
     let first = dir.join(name);
@@ -114,6 +122,14 @@ mod tests {
             ..time()
         });
         assert!(later > name);
+    }
+
+    #[test]
+    fn recordings_are_named_apart_from_clips() {
+        let name = recording_file_name(time());
+        assert_eq!(name, "Dockview Recording 2026-11-05 09-04-03.mp4");
+        assert_ne!(name, clip_file_name(time()));
+        assert!(!name.contains([':', '/', '\\', '*', '?', '"', '<', '>', '|']));
     }
 
     #[test]

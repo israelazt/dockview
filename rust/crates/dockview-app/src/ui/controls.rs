@@ -108,6 +108,36 @@ pub enum ReplayState {
     Unavailable,
 }
 
+/// State of a whole-session recording.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RecState {
+    Idle,
+    /// Asked to start; the file begins at the next keyframe.
+    Starting,
+    Recording,
+}
+
+/// What the recording controls display.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RecView {
+    pub state: RecState,
+    /// Footage written so far, in seconds.
+    pub seconds: f32,
+}
+
+impl RecView {
+    pub const fn idle() -> Self {
+        Self {
+            state: RecState::Idle,
+            seconds: 0.0,
+        }
+    }
+
+    pub fn is_on(&self) -> bool {
+        self.state != RecState::Idle
+    }
+}
+
 /// State of the microphone.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MicState {
@@ -205,6 +235,7 @@ pub struct Model {
     pub stats_open: bool,
     pub replay: ReplayView,
     pub mic: MicView,
+    pub rec: RecView,
 }
 
 /// A change the user asked for.
@@ -217,6 +248,8 @@ pub enum Action {
     SelectAudio(usize),
     SelectMic(usize),
     ToggleMic,
+    /// Start or stop recording the session.
+    ToggleRecord,
     SetPreset(RenderPreset),
     SetTheme(ThemeMode),
     SetLang(LangMode),
@@ -251,6 +284,8 @@ enum Hit {
     Replay,
     /// Pill button that saves the replay.
     ReplaySave,
+    /// Pill button that starts or stops a recording.
+    Record,
     ReplayToggle,
     /// Only an animation key for the switch knob; never registered.
     ReplayKnob,
@@ -532,6 +567,7 @@ impl Controls {
                 return;
             }
             Hit::ReplaySave | Hit::ReplayPopSave => Action::SaveReplay,
+            Hit::Record => Action::ToggleRecord,
             Hit::ReplayToggle => Action::ToggleReplay,
             Hit::ReplayShorter => Action::ReplayLength(-1),
             Hit::ReplayLonger => Action::ReplayLength(1),
@@ -672,7 +708,7 @@ impl Controls {
         let sync_block = sync_label_w + 10.0 + BUTTON + sync_value_w + BUTTON;
         let buttons_block = BUTTON * 2.0 + 4.0;
         let divider = GAP * 2.0 + 1.0;
-        let replay_block = BUTTON * 2.0 + 4.0 + divider;
+        let replay_block = BUTTON * 3.0 + 8.0 + divider;
         let width = PAD_X * 2.0
             + status_block
             + volume_block
@@ -788,6 +824,8 @@ impl Controls {
         }
         x += BUTTON + 4.0;
         self.save_button(ui, m, x + BUTTON / 2.0, cy);
+        x += BUTTON + 4.0;
+        self.record_button(ui, m, x + BUTTON / 2.0, cy);
         x += BUTTON;
         x = divider_at(ui, t, x, cy);
 
@@ -847,6 +885,42 @@ impl Controls {
             ICON_SIZE * (1.0 - 0.1 * press),
             color.with_alpha(color.a * pulse),
         );
+    }
+
+    /// The pill's record button: a red circle when idle, a red square while recording.
+    fn record_button(&mut self, ui: &mut Ui, m: &Model, cx: f32, cy: f32) {
+        let t = &m.theme;
+        let rect = Rect::new(cx - BUTTON / 2.0, cy - BUTTON / 2.0, BUTTON, BUTTON);
+        self.register(Hit::Record, rect);
+        let (hover, press) = self.amounts(Hit::Record);
+        let alpha = t.hover.a * (hover + 0.9 * press);
+        if alpha > 0.002 {
+            ui.rect(rect, BUTTON / 2.0, t.hover.with_alpha(alpha.min(1.0)));
+        }
+        let scale = 1.0 - 0.1 * press;
+        match m.rec.state {
+            RecState::Idle => {
+                let size = 14.0 * scale;
+                ui.rect(
+                    Rect::new(cx - size / 2.0, cy - size / 2.0, size, size),
+                    size / 2.0,
+                    t.error,
+                );
+            }
+            RecState::Starting | RecState::Recording => {
+                let pulse = if m.rec.state == RecState::Starting && self.animations {
+                    0.5 + 0.5 * (self.time * TAU / PULSE_SECS).sin().abs()
+                } else {
+                    1.0
+                };
+                let size = 13.0 * scale;
+                ui.rect(
+                    Rect::new(cx - size / 2.0, cy - size / 2.0, size, size),
+                    3.0,
+                    t.error.with_alpha(pulse),
+                );
+            }
+        }
     }
 
     /// An on/off switch. The knob glides when `on` changes.
@@ -1628,6 +1702,7 @@ mod tests {
             stats_open: false,
             replay: ReplayView::off("Ctrl+Alt+S"),
             mic: MicView::off(),
+            rec: RecView::idle(),
         }
     }
 
@@ -1903,6 +1978,21 @@ mod tests {
         assert!(rig.controls.close_settings());
         rig.click_on(Hit::Settings);
         assert!(rig.controls.close_settings());
+    }
+
+    #[test]
+    fn the_record_button_emits_its_action_in_every_state() {
+        for state in [RecState::Idle, RecState::Starting, RecState::Recording] {
+            let mut rig = Rig::new(true);
+            rig.model.rec = RecView {
+                state,
+                seconds: 42.0,
+            };
+            rig.frame(0.016);
+            rig.click_on(Hit::Record);
+            assert_eq!(rig.actions(), vec![Action::ToggleRecord], "{state:?}");
+            assert_eq!(rig.model.rec.is_on(), state != RecState::Idle);
+        }
     }
 
     #[test]

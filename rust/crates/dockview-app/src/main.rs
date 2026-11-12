@@ -35,6 +35,7 @@ use dockview_core::frame::FrameSlot;
 use dockview_core::mf::{enumerate_video_devices, MfSession};
 use dockview_core::mic::MicCapture;
 use dockview_core::recorder::{RecorderStatus, ReplayRecorder, ReplaySettings, SaveHandle};
+use dockview_core::recording::RecordingState;
 use dockview_core::settings::{
     self, AppSettings, LangMode, RenderPreset, ThemeMode, VideoModePref, MAX_AUDIO_OFFSET_MS,
 };
@@ -54,7 +55,7 @@ use i18n::{Lang, LangModeExt};
 use perf::ProcessSampler;
 use render::{Filter, Renderer};
 use theme::{Appearance, Theme, ThemeModeExt};
-use ui::controls::{Action, Controls, MicState, MicView, Model, StatusKind};
+use ui::controls::{Action, Controls, MicState, MicView, Model, RecState, RecView, StatusKind};
 use ui::gpu::UiGpu;
 use ui::input::Pointer;
 use ui::stats::{Stats, StatsPanel};
@@ -142,6 +143,8 @@ struct App {
     total_ram: u64,
     /// The microphone; `Some` only while the user has it on.
     mic: Option<MicCapture>,
+    /// Recording was asked for while the buffer was still starting.
+    record_when_ready: bool,
     /// Smoothed loudness for the meter.
     mic_level: f32,
     mic_level_at: Instant,
@@ -261,6 +264,7 @@ impl App {
             toasts: ToastHost::new(),
             total_ram: perf::total_ram_bytes(),
             mic: None,
+            record_when_ready: false,
             mic_level: 0.0,
             mic_level_at: Instant::now(),
         };
@@ -281,6 +285,9 @@ impl App {
             app.start_replay_services();
             if app.cli.mic {
                 app.set_mic(true);
+            }
+            if app.cli.record {
+                app.toggle_record();
             }
             return app;
         }
@@ -318,6 +325,9 @@ impl App {
         if app.cli.mic {
             app.set_mic(true);
         }
+        if app.cli.record {
+            app.toggle_record();
+        }
         app
     }
 
@@ -332,6 +342,12 @@ impl App {
             eprintln!(
                 "replay hotkey {} is taken by another program",
                 hotkey::LABEL
+            );
+        }
+        if !hotkey.record_registered() {
+            eprintln!(
+                "record hotkey {} is taken by another program",
+                hotkey::RECORD_LABEL
             );
         }
         self.hotkey = Some(hotkey);
@@ -384,6 +400,77 @@ impl App {
             .as_deref()
             .and_then(|id| self.audio_devices.iter().position(|d| d.device_id == id))
             .map_or(0, |i| i + 1)
+    }
+
+    fn rec_view(&self) -> RecView {
+        if self.record_when_ready {
+            return RecView {
+                state: RecState::Starting,
+                seconds: 0.0,
+            };
+        }
+        let Some(recorder) = &self.recorder else {
+            return RecView::idle();
+        };
+        let info = recorder.recording();
+        RecView {
+            state: match info.state {
+                RecordingState::Idle => RecState::Idle,
+                RecordingState::Starting => RecState::Starting,
+                RecordingState::Recording => RecState::Recording,
+            },
+            seconds: info.seconds as f32,
+        }
+    }
+
+    /// Starts or stops recording the session.
+    fn toggle_record(&mut self) {
+        if let Some(recorder) = &self.recorder {
+            if recorder.recording().state != RecordingState::Idle {
+                recorder.stop_recording();
+                return;
+            }
+        }
+        if self.record_when_ready {
+            self.record_when_ready = false; // a second press cancels the wait
+            return;
+        }
+        // Recording rides on the replay buffer's encoder: switch it on if the
+        // user had turned it off, and start once it is running.
+        if self.recorder.is_none() {
+            self.settings.replay_enabled = true;
+            self.sync_replay();
+            self.save_settings();
+        }
+        self.record_when_ready = true;
+    }
+
+    /// Opens the file once the recorder is running.
+    fn begin_recording(&mut self) {
+        let Some(recorder) = &self.recorder else {
+            self.record_when_ready = false;
+            return;
+        };
+        match recorder.status() {
+            RecorderStatus::Recording => {}
+            RecorderStatus::Starting => return, // keep waiting
+            RecorderStatus::Unsupported(_) | RecorderStatus::Failed(_) => {
+                self.record_when_ready = false;
+                self.toast(i18n::Key::ToastRecFailed, ToastKind::Error);
+                return;
+            }
+        }
+        self.record_when_ready = false;
+        let folder = self.clips_folder();
+        let name = clips::recording_file_name(clips::local_time_now());
+        let path = clips::unique_path(&folder, &name);
+        match recorder.start_recording(path) {
+            Ok(()) => self.toast(i18n::Key::ToastRecStarted, ToastKind::Info),
+            Err(e) => {
+                eprintln!("recording not started: {e}");
+                self.toast(i18n::Key::ToastRecFailed, ToastKind::Error);
+            }
+        }
     }
 
     fn mic_view(&self) -> MicView {
@@ -497,6 +584,29 @@ impl App {
         self.mic_level = raw.max(self.mic_level - dt * 1.5).clamp(0.0, 1.0);
         if self.hotkey.as_ref().is_some_and(|h| h.take_pressed()) {
             self.save_replay();
+        }
+        if self
+            .hotkey
+            .as_ref()
+            .is_some_and(|h| h.take_record_pressed())
+        {
+            self.toggle_record();
+        }
+        if self.record_when_ready {
+            self.begin_recording();
+        }
+        if let Some(result) = self
+            .recorder
+            .as_ref()
+            .and_then(ReplayRecorder::take_recording_result)
+        {
+            match result {
+                Ok(_) => self.toast(i18n::Key::ToastRecSaved, ToastKind::Success),
+                Err(e) => {
+                    eprintln!("recording failed: {e}");
+                    self.toast(i18n::Key::ToastRecFailed, ToastKind::Error);
+                }
+            }
         }
         if let Some(result) = self.saving.as_ref().and_then(SaveHandle::poll) {
             self.saving = None;
@@ -694,6 +804,7 @@ impl App {
             mic_devices: self.mic_device_names(self.lang_mode().resolve(self.system_lang)),
             mic_selected: Some(self.mic_selected()),
             mic: self.mic_view(),
+            rec: self.rec_view(),
         }
     }
 
@@ -724,6 +835,16 @@ impl App {
                 }
             }
             Action::SelectAudio(index) => self.select_audio(Some(index)),
+            Action::ToggleReplay
+                if self
+                    .recorder
+                    .as_ref()
+                    .is_some_and(|r| r.recording().state != RecordingState::Idle) =>
+            {
+                // Turning the buffer off would cut the recording short.
+                self.toast(i18n::Key::ToastStopRecordingFirst, ToastKind::Info);
+                return;
+            }
             Action::ToggleReplay => {
                 self.settings.replay_enabled = !self.settings.replay_enabled;
                 self.sync_replay();
@@ -733,6 +854,10 @@ impl App {
                     i18n::Key::ToastReplayOff
                 };
                 self.toast(key, ToastKind::Info);
+            }
+            Action::ToggleRecord => {
+                self.toggle_record();
+                return;
             }
             Action::ToggleMic => {
                 let on = self.mic.is_none();
@@ -1014,6 +1139,7 @@ impl App {
 
     fn render(&mut self) {
         let model = self.model();
+        let rec = self.rec_view();
         let now = Instant::now();
         let dt = now.duration_since(self.last_frame).as_secs_f32().min(0.1);
         self.last_frame = now;
@@ -1061,6 +1187,15 @@ impl App {
                     dt,
                     animations,
                 );
+                if rec.is_on() {
+                    ui::rec::draw(
+                        ui,
+                        &model.theme,
+                        rec.seconds,
+                        rec.state == RecState::Starting,
+                        animations,
+                    );
+                }
                 toasts.frame(ui, &model.theme, dt, animations);
                 if let Err(e) = gpu.render(context, ui, size) {
                     eprintln!("ui draw failed: {e}");
@@ -1310,7 +1445,8 @@ impl ApplicationHandler for App {
         // Redraw for new video, for input, and while the controls are on
         // screen (hover, drag and fade animations need steady frames).
         let new_frame = self.slot.wait_for_frame(FRAME_WAIT);
-        let animating = self.controls.is_visible() || self.toasts.is_visible();
+        let animating =
+            self.controls.is_visible() || self.toasts.is_visible() || self.rec_view().is_on();
         if new_frame || animating || std::mem::take(&mut self.needs_redraw) {
             if let Some(window) = &self.window {
                 window.request_redraw();

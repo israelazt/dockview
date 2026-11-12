@@ -1,7 +1,8 @@
-//! The global "save the replay" hotkey.
+//! The global hotkeys: "save the replay" (Ctrl+Alt+S) and "start or stop
+//! recording" (Ctrl+Alt+R).
 //!
-//! Registered on a thread of its own with a message loop, so it works even
-//! while another window has the focus and does not depend on winit.
+//! Registered on a thread of its own with a message loop, so they work even
+//! while another window has the focus and do not depend on winit.
 
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::mpsc;
@@ -11,28 +12,45 @@ use std::time::Duration;
 
 use windows::Win32::System::Threading::GetCurrentThreadId;
 use windows::Win32::UI::Input::KeyboardAndMouse::{
-    RegisterHotKey, UnregisterHotKey, MOD_ALT, MOD_CONTROL, MOD_NOREPEAT, VK_S,
+    RegisterHotKey, UnregisterHotKey, MOD_ALT, MOD_CONTROL, MOD_NOREPEAT, VK_R, VK_S,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     GetMessageW, PostThreadMessageW, MSG, WM_HOTKEY, WM_QUIT,
 };
 
-/// What the user presses, as shown in the interface.
+/// What the user presses to save the replay, as shown in the interface.
 pub const LABEL: &str = "Ctrl+Alt+S";
-const HOTKEY_ID: i32 = 0x4B50;
+/// What the user presses to start or stop recording.
+pub const RECORD_LABEL: &str = "Ctrl+Alt+R";
+const SAVE_ID: i32 = 0x4B50;
+const RECORD_ID: i32 = 0x4B51;
+
+#[derive(Default)]
+struct Pressed {
+    save: AtomicBool,
+    record: AtomicBool,
+}
+
+/// Which hotkeys could be registered (another program may own a combination).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+struct Registered {
+    save: bool,
+    record: bool,
+}
 
 pub struct Hotkey {
-    pressed: Arc<AtomicBool>,
+    pressed: Arc<Pressed>,
     thread_id: Arc<AtomicU32>,
     thread: Option<JoinHandle<()>>,
-    registered: bool,
+    registered: Registered,
 }
 
 impl Hotkey {
-    /// Registers the hotkey. Check [`Hotkey::is_registered`]: another program
-    /// may already own the combination.
+    /// Registers the hotkeys. Check [`Hotkey::is_registered`] and
+    /// [`Hotkey::record_registered`]: another program may already own a
+    /// combination.
     pub fn register() -> Self {
-        let pressed = Arc::new(AtomicBool::new(false));
+        let pressed = Arc::new(Pressed::default());
         let thread_id = Arc::new(AtomicU32::new(0));
         let (tx, rx) = mpsc::channel();
 
@@ -43,8 +61,11 @@ impl Hotkey {
                 .spawn(move || run(&pressed, &thread_id, &tx))
                 .ok()
         };
-        let registered =
-            thread.is_some() && rx.recv_timeout(Duration::from_secs(2)).unwrap_or(false);
+        let registered = if thread.is_some() {
+            rx.recv_timeout(Duration::from_secs(2)).unwrap_or_default()
+        } else {
+            Registered::default()
+        };
         Self {
             pressed,
             thread_id,
@@ -53,13 +74,24 @@ impl Hotkey {
         }
     }
 
+    /// Whether the "save the replay" hotkey is registered.
     pub fn is_registered(&self) -> bool {
-        self.registered
+        self.registered.save
     }
 
-    /// Whether the hotkey was pressed since the last call.
+    /// Whether the "record" hotkey is registered.
+    pub fn record_registered(&self) -> bool {
+        self.registered.record
+    }
+
+    /// Whether "save the replay" was pressed since the last call.
     pub fn take_pressed(&self) -> bool {
-        self.pressed.swap(false, Ordering::Relaxed)
+        self.pressed.save.swap(false, Ordering::Relaxed)
+    }
+
+    /// Whether "record" was pressed since the last call.
+    pub fn take_record_pressed(&self) -> bool {
+        self.pressed.record.swap(false, Ordering::Relaxed)
     }
 }
 
@@ -78,29 +110,36 @@ impl Drop for Hotkey {
     }
 }
 
-fn run(pressed: &AtomicBool, thread_id: &AtomicU32, ready: &mpsc::Sender<bool>) {
-    // SAFETY: a registration and a message loop on this thread only; the
-    // hotkey is unregistered before the thread ends.
+fn run(pressed: &Pressed, thread_id: &AtomicU32, ready: &mpsc::Sender<Registered>) {
+    // SAFETY: registrations and a message loop on this thread only; the
+    // hotkeys are unregistered before the thread ends.
     unsafe {
         thread_id.store(GetCurrentThreadId(), Ordering::Relaxed);
-        let ok = RegisterHotKey(
-            None,
-            HOTKEY_ID,
-            MOD_CONTROL | MOD_ALT | MOD_NOREPEAT,
-            u32::from(VK_S.0),
-        )
-        .is_ok();
-        let _ = ready.send(ok);
-        if !ok {
+        let modifiers = MOD_CONTROL | MOD_ALT | MOD_NOREPEAT;
+        let registered = Registered {
+            save: RegisterHotKey(None, SAVE_ID, modifiers, u32::from(VK_S.0)).is_ok(),
+            record: RegisterHotKey(None, RECORD_ID, modifiers, u32::from(VK_R.0)).is_ok(),
+        };
+        let _ = ready.send(registered);
+        if !registered.save && !registered.record {
             return;
         }
         let mut message = MSG::default();
         while GetMessageW(&mut message, None, 0, 0).0 > 0 {
-            if message.message == WM_HOTKEY && message.wParam.0 as i32 == HOTKEY_ID {
-                pressed.store(true, Ordering::Relaxed);
+            if message.message == WM_HOTKEY {
+                match message.wParam.0 as i32 {
+                    SAVE_ID => pressed.save.store(true, Ordering::Relaxed),
+                    RECORD_ID => pressed.record.store(true, Ordering::Relaxed),
+                    _ => {}
+                }
             }
         }
-        let _ = UnregisterHotKey(None, HOTKEY_ID);
+        if registered.save {
+            let _ = UnregisterHotKey(None, SAVE_ID);
+        }
+        if registered.record {
+            let _ = UnregisterHotKey(None, RECORD_ID);
+        }
     }
 }
 
@@ -109,16 +148,19 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_label_names_the_combination() {
+    fn the_labels_name_the_combinations() {
         assert_eq!(LABEL, "Ctrl+Alt+S");
+        assert_eq!(RECORD_LABEL, "Ctrl+Alt+R");
+        assert_ne!(SAVE_ID, RECORD_ID);
     }
 
     #[test]
     fn registering_and_dropping_does_not_hang_or_leave_a_stale_press() {
-        // Whether the combination is free depends on the machine; either
+        // Whether the combinations are free depends on the machine; either
         // outcome must be handled without hanging.
         let hotkey = Hotkey::register();
         assert!(!hotkey.take_pressed());
+        assert!(!hotkey.take_record_pressed());
         drop(hotkey);
     }
 }
