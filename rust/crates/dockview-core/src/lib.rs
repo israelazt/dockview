@@ -8,6 +8,8 @@ pub mod audio_sync;
 pub mod capture;
 pub mod device;
 pub mod diagnostics;
+#[cfg(windows)]
+pub mod encode;
 pub mod frame;
 #[cfg(windows)]
 pub mod mf;

@@ -202,7 +202,7 @@ fn video_capture_activates() -> Result<Vec<IMFActivate>> {
 
 /// Reads a string attribute, freeing the CoTaskMem buffer Media Foundation
 /// allocated for it.
-fn get_string(attrs: &IMFAttributes, key: &GUID) -> Option<String> {
+pub(crate) fn get_string(attrs: &IMFAttributes, key: &GUID) -> Option<String> {
     // SAFETY: GetAllocatedString returns a CoTaskMem-allocated, NUL-terminated
     // UTF-16 string that we copy and then free exactly once.
     unsafe {
