@@ -2,6 +2,7 @@
 //! Platform-independent logic lives here so it can be unit tested.
 
 pub mod settings;
+pub mod stream;
 
 pub fn version() -> &'static str {
     env!("CARGO_PKG_VERSION")
