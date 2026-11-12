@@ -55,9 +55,9 @@ Cada paso se mide y se sube por separado. Las funciones propias de Dockview usan
 - Se documenta la API y se ofrece una plantilla de plugin antes de aceptar contribuciones.
 - Módulos pequeños, como el resto del proyecto.
 
-## Orden acordado con las escenas
+## Orden (actualizado: los plugins van al final)
 
-P-1 y P-2 → E-3b (popover de escenas) → transición de fusión (usa el registro de P-4) → E-3c (editor libre) → P-3 y P-5 → salida RTMP y atajos de escena (streaming) → P-6 y P-7 cuando haya un plugin real.
+El autor decidió que los plugins se hacen **al final**, después de las escenas, las animaciones, el editor rápido y el streaming. Hasta entonces se sigue el plan de `CAPTURE_PLAN.md` sin parar a preparar nada. Lo único que se vigila mientras tanto, sin coste extra: no añadir tipos cerrados nuevos donde pueda ser abierto, y mantener los módulos pequeños. Los pasos P-1 a P-7 se retoman cuando llegue el momento; P-1 (trait común de fuentes) y P-2 (tipos de fuente abiertos) son los primeros, y conviene hacerlos antes de añadir muchas más fuentes.
 
 ## Riesgos
 
