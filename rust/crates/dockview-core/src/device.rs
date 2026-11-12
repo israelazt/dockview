@@ -45,6 +45,20 @@ pub fn match_audio_to_video<'a>(
     })
 }
 
+const WEBCAM_WORDS: [&str; 4] = ["webcam", "camera", "cámara", "camara"];
+
+/// Whether `audio` is the sound of one of the `videos` that is a capture card
+/// (not a webcam, whose own microphone is a fair fallback). Cheap cards name
+/// their audio after the video device ("C7 USB3.0 Audio") with none of the
+/// words that give a capture card away, so it is found by name instead.
+fn is_capture_card_audio(audio: &AudioDevice, videos: &[VideoDevice]) -> bool {
+    videos.iter().any(|video| {
+        let name = video.friendly_name.to_lowercase();
+        !WEBCAM_WORDS.iter().any(|w| name.contains(w))
+            && match_audio_to_video(Some(video), std::slice::from_ref(audio)).is_some()
+    })
+}
+
 /// How much an input looks like a real microphone, judged by its name. Lower
 /// is better.
 fn mic_rank(name: &str) -> u8 {
@@ -62,10 +76,9 @@ fn mic_rank(name: &str) -> u8 {
         "stereo mix",
         "mezcla est",
     ];
-    const WEBCAM: [&str; 4] = ["webcam", "camera", "cámara", "camara"];
     if NOT_A_MIC.iter().any(|w| name.contains(w)) {
         2
-    } else if WEBCAM.iter().any(|w| name.contains(w)) {
+    } else if WEBCAM_WORDS.iter().any(|w| name.contains(w)) {
         1
     } else {
         0
@@ -80,20 +93,29 @@ fn mic_rank(name: &str) -> u8 {
 /// is `exclude`, the device already used for the game's sound); then the best
 /// remaining input wins: a real microphone before a webcam's. Returns `None`
 /// when there is nothing better than a capture card.
+///
+/// `videos` are all the video devices present, so the audio of every capture
+/// card is skipped, not just the one in use (with two cards plugged in, the
+/// other one's audio can be Windows' default input).
 pub fn pick_microphone<'a>(
     devices: &'a [AudioDevice],
     windows_default: Option<&'a AudioDevice>,
     exclude: Option<&AudioDevice>,
+    videos: &[VideoDevice],
 ) -> Option<&'a AudioDevice> {
-    let allowed = |d: &AudioDevice| exclude.is_none_or(|e| e.device_id != d.device_id);
+    let allowed = |d: &AudioDevice| {
+        exclude.is_none_or(|e| e.device_id != d.device_id)
+            && mic_rank(&d.friendly_name) < 2
+            && !is_capture_card_audio(d, videos)
+    };
     if let Some(default) = windows_default {
-        if allowed(default) && mic_rank(&default.friendly_name) < 2 {
+        if allowed(default) {
             return Some(default);
         }
     }
     devices
         .iter()
-        .filter(|d| allowed(d) && mic_rank(&d.friendly_name) < 2)
+        .filter(|d| allowed(d))
         .min_by_key(|d| mic_rank(&d.friendly_name))
 }
 
@@ -184,7 +206,7 @@ mod tests {
         let rode = input("Desktop Microphone (RØDE NT-USB Mini)", "rode");
         let all = [card.clone(), webcam.clone(), rode.clone()];
         assert_eq!(
-            pick_microphone(&all, Some(&card), None),
+            pick_microphone(&all, Some(&card), None, &[]),
             Some(&all[2]),
             "a real mic beats a webcam"
         );
@@ -197,8 +219,14 @@ mod tests {
         let rode = input("Desktop Microphone (RØDE NT-USB Mini)", "rode");
         let all = [card, webcam, rode];
         // The user chose the webcam as their default: that is their call.
-        assert_eq!(pick_microphone(&all, Some(&all[1]), None), Some(&all[1]));
-        assert_eq!(pick_microphone(&all, Some(&all[2]), None), Some(&all[2]));
+        assert_eq!(
+            pick_microphone(&all, Some(&all[1]), None, &[]),
+            Some(&all[1])
+        );
+        assert_eq!(
+            pick_microphone(&all, Some(&all[2]), None, &[]),
+            Some(&all[2])
+        );
     }
 
     #[test]
@@ -207,7 +235,40 @@ mod tests {
         let other = input("Line In", "line");
         let all = [headset.clone(), other];
         assert_eq!(
-            pick_microphone(&all, Some(&headset), Some(&headset)),
+            pick_microphone(&all, Some(&headset), Some(&headset), &[]),
+            Some(&all[1])
+        );
+    }
+
+    #[test]
+    fn the_audio_of_a_second_capture_card_is_never_the_microphone() {
+        // Two cards at once: Windows made the cheap one's audio the default
+        // input, and its name has no capture-card keyword.
+        let c7 = input("Interfaz de sonido digital (2- C7 USB3.0 Audio)", "c7");
+        let ugreen = input("HDMI (UGREEN 25173)", "ugreen");
+        let rode = input("Desktop Microphone (RØDE NT-USB Mini)", "rode");
+        let all = [c7.clone(), ugreen, rode];
+        let videos = [
+            video("C7 USB3.0 Video"),
+            video("UGREEN 25173"),
+            video("GENERAL WEBCAM"),
+        ];
+        assert_eq!(
+            pick_microphone(&all, Some(&c7), None, &videos),
+            Some(&all[2])
+        );
+        // Without the video list the card could not be told apart.
+        assert_eq!(pick_microphone(&all, Some(&c7), None, &[]), Some(&all[0]));
+    }
+
+    #[test]
+    fn a_webcams_microphone_is_still_a_fair_fallback() {
+        let c7 = input("Interfaz de sonido digital (2- C7 USB3.0 Audio)", "c7");
+        let webcam = input("Micrófono (GENERAL WEBCAM)", "cam");
+        let all = [c7.clone(), webcam];
+        let videos = [video("C7 USB3.0 Video"), video("GENERAL WEBCAM")];
+        assert_eq!(
+            pick_microphone(&all, Some(&c7), None, &videos),
             Some(&all[1])
         );
     }
@@ -217,8 +278,8 @@ mod tests {
         let card = input("HDMI (UGREEN 25173)", "card");
         let mix = input("Stereo Mix (Realtek)", "mix");
         let all = [card.clone(), mix];
-        assert_eq!(pick_microphone(&all, Some(&card), None), None);
-        assert_eq!(pick_microphone(&[], None, None), None);
+        assert_eq!(pick_microphone(&all, Some(&card), None, &[]), None);
+        assert_eq!(pick_microphone(&[], None, None, &[]), None);
     }
 
     #[test]

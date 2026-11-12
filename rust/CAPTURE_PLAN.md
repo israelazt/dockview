@@ -225,6 +225,22 @@ Lo que se quiere: componer **varias fuentes a la vez** (por ejemplo el juego a p
 - Nada de esto toca todavía la app: el visor y el replay siguen leyendo una sola fuente (E-2).
 - **Pendiente de medir**: GPU y FPS del juego con LoL abierto (lo mide el autor).
 
+## Segunda capturadora: C7 USB3.0 (2026-11-12)
+
+Capturadora muy económica (VID 345F, PID 2131, USB 3). Se midió con la Switch conectada.
+
+| Dato | Resultado |
+|---|---|
+| Modos | NV12 hasta **1080p a 50 fps** (sin 1080p60); 60 fps solo hasta 1280×720 (NV12 y MJPEG); YUY2 solo 10 fps a 1080p |
+| FPS reales | Exactos en 1080p50, 1080p30, 720p60 y 720×480@60, con 0 frames perdidos |
+| Color | Rango completo correcto: negros 0-4, blancos 255 |
+| Coste de Dockview a 1080p50 | 25 % de un núcleo (2,1 % del total), 1,4 ms de latencia propia |
+| Prueba de juego real (autor) | Audio y video sincronizados, una misión de campaña sin problemas; se nota el límite de 50 fps y una ligera pérdida de calidad. Sirve para jugar en casa |
+
+Pensada también como entrada de la **Canon M50 Mark II por HDMI limpio** (una cámara rara vez pasa de 30 fps, así que el tope de 50 no importa). Pendiente el spike 2b: modos, FPS reales y retraso de la cámara.
+
+**Fallo encontrado y corregido:** el audio de la C7 se llama «Interfaz de sonido digital (2- C7 USB3.0 Audio)», sin ninguna palabra que delate una capturadora, y Windows lo puso como entrada predeterminada. Con la UGREEN en uso, el modo «Automático» habría elegido ese audio como micrófono (pista muda). Ahora `pick_microphone` recibe todos los dispositivos de video y descarta el audio de **cualquier** capturadora que no sea una webcam (la webcam sigue valiendo como último recurso). Verificado con la app real: con la C7 como entrada predeterminada elige el RØDE.
+
 ## Tooltips (2026-11-12)
 
 Cada control explica qué hace al dejar el ratón encima medio segundo (aparece con un fundido corto; desaparece al pulsar o al moverse a otro control).

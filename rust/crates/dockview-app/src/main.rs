@@ -583,8 +583,13 @@ impl App {
     fn automatic_mic(&self) -> Option<String> {
         let default = on_helper_thread(|| Some(default_capture_device()));
         let game_audio = self.audio_index.and_then(|i| self.audio_devices.get(i));
-        pick_microphone(&self.audio_devices, default.as_ref(), game_audio)
-            .map(|d| d.device_id.clone())
+        pick_microphone(
+            &self.audio_devices,
+            default.as_ref(),
+            game_audio,
+            &self.video_devices,
+        )
+        .map(|d| d.device_id.clone())
     }
 
     /// The longest replay this PC's memory allows, in seconds.
