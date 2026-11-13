@@ -7,6 +7,7 @@
 #[cfg(not(windows))]
 compile_error!("Dockview only supports Windows.");
 
+mod auto_switch;
 mod cli;
 mod clips;
 mod hotkey;
@@ -18,6 +19,7 @@ mod scene_actions;
 mod scene_runtime;
 mod scene_transition;
 mod stats_log;
+mod telemetry;
 #[allow(dead_code)] // some tokens are used by the upcoming live controls
 mod theme;
 #[allow(dead_code)] // some helpers are used by the upcoming live controls
@@ -35,9 +37,7 @@ use dockview_core::capture::{CaptureOptions, CaptureStatus, VideoCapture};
 use dockview_core::compose::SceneCompositor;
 use dockview_core::device::{match_audio_to_video, pick_microphone, AudioDevice, VideoDevice};
 use dockview_core::device_names;
-use dockview_core::diagnostics::{
-    diagnose, switch_helped, FallbackWatch, Finding, Snapshot, VideoState,
-};
+use dockview_core::diagnostics::{diagnose, Finding, Snapshot, VideoState};
 use dockview_core::frame::FrameSlot;
 use dockview_core::mf::{enumerate_video_devices, MfSession};
 use dockview_core::recorder::{RecorderStatus, ReplayRecorder, ReplaySettings, SaveHandle};
@@ -65,12 +65,13 @@ use winit::keyboard::{Key, NamedKey};
 use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use winit::window::{CursorIcon, Fullscreen, Theme as WindowTheme, Window, WindowId};
 
+use auto_switch::{AutoSwitch, SwitchEvent};
 use cli::Cli;
 use i18n::{Lang, LangModeExt};
-use perf::ProcessSampler;
 use render::{Filter, Renderer};
 use scene_runtime::Overlay;
 use scene_transition::ActiveTransition;
+use telemetry::{Rates, Telemetry};
 use theme::{Appearance, Theme, ThemeModeExt};
 use ui::controls::{
     Action, Controls, CurrentSource, MicState, MicView, Model, RecState, RecView, SourcesView,
@@ -82,8 +83,6 @@ use ui::stats::{Stats, StatsPanel};
 use ui::toast::{ToastHost, ToastKind};
 use ui::Ui;
 
-/// Seconds after an automatic mode switch before its effect is judged.
-const SWITCH_CHECK_SECS: u32 = 7;
 /// How often the lists of monitors and windows are refreshed while shown.
 const SOURCES_REFRESH: Duration = Duration::from_millis(1500);
 /// Delay before trying to reopen a capture device that went away.
@@ -145,8 +144,6 @@ struct App {
     window: Option<Window>,
     renderer: Option<Renderer>,
     rendered: u64,
-    last_stats: Instant,
-    last_rendered: u64,
     video_size: (u32, u32),
     fullscreen: bool,
     cli: Cli,
@@ -159,7 +156,6 @@ struct App {
     controls: Controls,
     pointer: Pointer,
     last_frame: Instant,
-    fps: f32,
     needs_redraw: bool,
     cursor_pointer: bool,
     cursor_hidden: bool,
@@ -167,20 +163,11 @@ struct App {
     stats_open: bool,
     stats_panel: StatsPanel,
     stats: Stats,
-    sampler: ProcessSampler,
-    last_published: u64,
-    last_dropped: u64,
-    latency_sum_ms: f64,
-    latency_count: u32,
-    stats_updates: u32,
     stats_log: Option<stats_log::StatsLog>,
-    fallback: FallbackWatch,
-    /// The app switched to a compressed mode by itself this session.
-    auto_switched: bool,
-    /// A switch was already tried this session; never try twice.
-    fallback_tried: bool,
-    /// After a switch: seconds until its effect is judged, and the rate before.
-    switch_check: Option<(u32, f32)>,
+    /// The once-a-second counters (see `telemetry`).
+    telemetry: Telemetry,
+    /// The automatic move to a compressed mode (see `auto_switch`).
+    auto: AutoSwitch,
     /// The instant-replay buffer; `Some` while it is on.
     recorder: Option<ReplayRecorder>,
     /// A clip being written in the background.
@@ -294,8 +281,6 @@ impl App {
             window: None,
             renderer: None,
             rendered: 0,
-            last_stats: Instant::now(),
-            last_rendered: 0,
             video_size: (0, 0),
             fullscreen: false,
             cli,
@@ -308,7 +293,6 @@ impl App {
             controls: Controls::new(preview),
             pointer: Pointer::default(),
             last_frame: Instant::now(),
-            fps: 0.0,
             needs_redraw: true,
             cursor_pointer: false,
             cursor_hidden: false,
@@ -316,17 +300,9 @@ impl App {
             stats_open: show_stats,
             stats_panel: StatsPanel::new(),
             stats: Stats::default(),
-            sampler: ProcessSampler::new(),
-            last_published: 0,
-            last_dropped: 0,
-            latency_sum_ms: 0.0,
-            latency_count: 0,
-            stats_updates: 0,
             stats_log,
-            fallback: FallbackWatch::new(),
-            auto_switched: false,
-            fallback_tried: false,
-            switch_check: None,
+            telemetry: Telemetry::new(),
+            auto: AutoSwitch::new(),
             recorder: None,
             saving: None,
             hotkey: None,
@@ -1120,8 +1096,12 @@ impl App {
         };
         let resolution = if self.video_size.0 > 0 {
             // The rate is unknown for the first second; show just the height.
-            if self.fps >= 1.0 {
-                format!("{}p · {:.0} fps", self.video_size.1, self.fps)
+            if self.telemetry.shown_fps() >= 1.0 {
+                format!(
+                    "{}p · {:.0} fps",
+                    self.video_size.1,
+                    self.telemetry.shown_fps()
+                )
             } else {
                 format!("{}p", self.video_size.1)
             }
@@ -1320,10 +1300,7 @@ impl App {
                 self.settings.video_mode = mode;
                 // A deliberate choice ends any automatic switch and allows a
                 // new automatic attempt later (for example after changing port).
-                self.auto_switched = false;
-                self.fallback_tried = false;
-                self.switch_check = None;
-                self.fallback.reset();
+                self.auto.reset();
                 self.select_video(self.video_index);
             }
             Action::SetPreset(preset) => {
@@ -1346,29 +1323,22 @@ impl App {
 
     /// Refreshes the measurements once a second.
     fn update_stats(&mut self) {
-        let elapsed = self.last_stats.elapsed();
-        if elapsed < Duration::from_secs(1) {
+        let Some(Rates {
+            received_fps,
+            dropped_per_sec,
+            shown_fps,
+        }) = self.telemetry.close_window(
+            Instant::now(),
+            self.slot.published(),
+            self.slot.dropped(),
+            self.rendered,
+        )
+        else {
             return;
-        }
-        let secs = elapsed.as_secs_f32();
-        let published = self.slot.published();
-        let dropped = self.slot.dropped();
-        let received_fps = (published - self.last_published) as f32 / secs;
-        let dropped_per_sec = (dropped - self.last_dropped) as f32 / secs;
-        let shown_fps = (self.rendered - self.last_rendered) as f32 / secs;
-        self.last_published = published;
-        self.last_dropped = dropped;
-        self.last_rendered = self.rendered;
-        self.last_stats = Instant::now();
-        self.stats_updates += 1;
-        self.fps = shown_fps;
+        };
 
-        let usage = self.sampler.sample();
-        let latency_ms = (self.latency_count > 0)
-            .then(|| (self.latency_sum_ms / f64::from(self.latency_count)) as f32)
-            .or(self.stats.latency_ms);
-        self.latency_sum_ms = 0.0;
-        self.latency_count = 0;
+        let usage = self.telemetry.usage();
+        let latency_ms = self.telemetry.take_latency(self.stats.latency_ms);
 
         let native = self.native_mode();
         let video = match &self.source {
@@ -1411,19 +1381,16 @@ impl App {
             audio_ok,
         });
 
-        let has_compressed = self.capture_has_compressed();
-        let eligible = self.settings.video_mode == VideoModePref::Auto
+        let allowed = self.settings.video_mode == VideoModePref::Auto
             && video == VideoState::Running
-            && has_compressed
-            && !self.fallback_tried
+            && self.capture_has_compressed()
             && !self.cli.test_pattern;
         let usb_slow = findings.contains(&Finding::NeedsUsb3);
-        if self.fallback.observe(usb_slow, eligible) {
-            self.switch_to_compressed(received_fps);
+        if let Some(event) = self.auto.tick(usb_slow, allowed, received_fps) {
+            self.apply_switch_event(event);
         }
-        self.judge_switch(received_fps);
         let mut findings = findings;
-        if self.auto_switched {
+        if self.auto.is_switched() {
             findings.insert(0, Finding::SwitchedToCompressed);
         }
 
@@ -1478,38 +1445,28 @@ impl App {
         }
     }
 
-    /// Moves to a compressed mode because the USB port cannot carry the
-    /// uncompressed one, and schedules a check that it actually helped.
-    fn switch_to_compressed(&mut self, fps_before: f32) {
-        eprintln!("[auto] USB too slow for the uncompressed mode ({fps_before:.0} fps): switching to a compressed mode");
-        self.settings.video_mode = VideoModePref::Compressed;
-        self.auto_switched = true;
-        self.fallback_tried = true;
-        self.switch_check = Some((SWITCH_CHECK_SECS, fps_before));
+    /// Acts on what the automatic switch decided.
+    fn apply_switch_event(&mut self, event: SwitchEvent) {
+        match event {
+            SwitchEvent::ToCompressed { fps_before } => {
+                eprintln!("[auto] USB too slow for the uncompressed mode ({fps_before:.0} fps): switching to a compressed mode");
+                self.settings.video_mode = VideoModePref::Compressed;
+            }
+            SwitchEvent::Judged {
+                before,
+                now,
+                helped,
+            } => {
+                eprintln!("[auto] compressed mode: {now:.0} fps (was {before:.0} fps)");
+                if helped {
+                    return;
+                }
+                eprintln!("[auto] no clear improvement: going back to automatic mode");
+                self.settings.video_mode = VideoModePref::Auto;
+            }
+        }
         self.save_settings();
         self.select_video(self.video_index);
-    }
-
-    /// A few seconds after an automatic switch, keeps it only if the rate
-    /// clearly improved; otherwise the slowness had another cause, so the
-    /// better-quality mode comes back.
-    fn judge_switch(&mut self, fps_now: f32) {
-        let Some((remaining, before)) = self.switch_check else {
-            return;
-        };
-        if remaining > 1 {
-            self.switch_check = Some((remaining - 1, before));
-            return;
-        }
-        self.switch_check = None;
-        eprintln!("[auto] compressed mode: {fps_now:.0} fps (was {before:.0} fps)");
-        if !switch_helped(before, fps_now) {
-            eprintln!("[auto] no clear improvement: going back to automatic mode");
-            self.settings.video_mode = VideoModePref::Auto;
-            self.auto_switched = false;
-            self.save_settings();
-            self.select_video(self.video_index);
-        }
     }
 
     /// The device mode in use (a stand-in for the synthetic source).
@@ -1562,7 +1519,7 @@ impl App {
         let pointer = self.pointer;
         let scale = self.ui_scale;
         // The first seconds include start-up work; wait for steady numbers.
-        let settled = !self.cli.show_stats || self.stats_updates >= 3;
+        let settled = !self.cli.show_stats || self.telemetry.windows() >= 3;
         let capture =
             self.cli.screenshot.is_some() && self.rendered >= SCREENSHOT_AFTER_FRAMES && settled;
 
@@ -1625,8 +1582,8 @@ impl App {
             Err(e) => eprintln!("present failed: {e}"),
         }
         if let Some(arrived) = arrived {
-            self.latency_sum_ms += arrived.elapsed().as_secs_f64() * 1000.0;
-            self.latency_count += 1;
+            self.telemetry
+                .note_latency(arrived.elapsed().as_secs_f64() * 1000.0);
         }
 
         self.pointer.end_frame();

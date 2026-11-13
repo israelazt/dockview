@@ -98,6 +98,17 @@ Se quedaron fuera a propósito `render.rs` y el ejemplo `screen_probe`: crean el
 
 Comprobado volcando las 143 claves en los dos idiomas antes y después: **idénticas byte a byte**. Los usos (`i18n::Key::X`, `tr`) no cambian.
 
+### Avance de D-5: estadísticas y cambio automático (2026-11-12)
+Dos módulos nuevos en la app, sin ventana ni ajustes, con tests (10):
+- `telemetry.rs`: `Telemetry` guarda los contadores de cada segundo (recibidas, mostradas, saltadas), la latencia media y el muestreador de CPU/memoria. `close_window` recibe los totales y devuelve las tasas.
+- `auto_switch.rs`: `AutoSwitch` es la máquina de estados del cambio automático a MJPEG (observar la lentitud del USB, cambiar, juzgar a los 7 s, volver si no ayudó, no repetir). Solo decide; `App` actúa con `apply_switch_event`.
+
+`App` pierde 14 campos (`fallback`, `auto_switched`, `fallback_tried`, `switch_check`, `last_*`, `latency_*`, `stats_updates`, `fps`, `sampler`…) y `judge_switch` / `switch_to_compressed`. Arreglo de paso: la resta de contadores podía desbordar si un contador retrocedía; ahora satura.
+
+Comprobado con 365 tests y con la app real (50 fps recibidos y mostrados, 1,7 ms de latencia).
+
+Siguen pendientes de D-5 el replay, la grabación y el micrófono, y de D-4 las fuentes y el audio.
+
 ## Lo que no conviene tocar
 - La separación en dos crates y el sentido de las dependencias.
 - `Model` y `Action` como frontera entre la lógica y la interfaz: funcionan bien.
