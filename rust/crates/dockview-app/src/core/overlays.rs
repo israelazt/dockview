@@ -132,7 +132,7 @@ impl Core {
 
     /// Keeps the overlays alive: a capture card that drops out is reopened,
     /// and a screen source that ends is taken off the picture.
-    pub fn maintain_overlays(&mut self) {
+    pub fn maintain_overlays(&mut self, now: Instant) {
         let mut lost = Vec::new();
         for (index, overlay) in self.overlays.iter_mut().enumerate() {
             match &mut overlay.running {
@@ -145,7 +145,7 @@ impl Core {
                         capture.status(),
                         CaptureStatus::Disconnected { .. } | CaptureStatus::Failed(_)
                     );
-                    if reconnect.tick(gone, Instant::now()) {
+                    if reconnect.tick(gone, now) {
                         *capture = self.machine.start_capture(
                             link.clone(),
                             CaptureOptions::default(),

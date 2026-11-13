@@ -13,6 +13,8 @@ mod scene_transition;
 mod sources;
 mod startup;
 mod stats;
+#[cfg(test)]
+mod tests;
 
 use std::sync::Arc;
 use std::time::{Duration, Instant};

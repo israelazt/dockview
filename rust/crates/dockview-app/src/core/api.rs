@@ -18,13 +18,18 @@ impl Core {
     /// change along, refreshes the lists while the sources popover is open
     /// (`sources_open`), measures, and runs the replay.
     pub fn tick(&mut self, sources_open: bool) {
-        self.maintain_source();
-        self.maintain_overlays();
+        self.tick_at(Instant::now(), sources_open);
+    }
+
+    /// [`Core::tick`] at the time `now`, so tests can move the clock by hand.
+    pub fn tick_at(&mut self, now: Instant, sources_open: bool) {
+        self.maintain_source(now);
+        self.maintain_overlays(now);
         self.tick_transition();
-        if sources_open && self.sources_refreshed.elapsed() > SOURCES_REFRESH {
+        if sources_open && now.saturating_duration_since(self.sources_refreshed) > SOURCES_REFRESH {
             self.refresh_sources();
         }
-        self.update_stats();
+        self.update_stats(now);
         self.poll_replay();
     }
 

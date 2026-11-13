@@ -225,7 +225,7 @@ impl Core {
     }
 
     /// Restarts the capture thread if the device was lost.
-    pub(super) fn maintain_source(&mut self) {
+    pub(super) fn maintain_source(&mut self, now: Instant) {
         if let Source::Screen(capture) = &self.source {
             // The window went away or cannot be captured: back to the card.
             let lost = match capture.status() {
@@ -253,7 +253,7 @@ impl Core {
             capture.status(),
             CaptureStatus::Disconnected { .. } | CaptureStatus::Failed(_)
         );
-        if reconnect.tick(lost, Instant::now()) {
+        if reconnect.tick(lost, now) {
             let capture = self.start_capture(&link);
             self.source = Source::Capture {
                 capture,

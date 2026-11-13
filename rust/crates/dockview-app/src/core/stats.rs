@@ -5,13 +5,13 @@ use super::*;
 
 impl Core {
     /// Refreshes the measurements once a second.
-    pub(super) fn update_stats(&mut self) {
+    pub(super) fn update_stats(&mut self, now: Instant) {
         let Some(Rates {
             received_fps,
             dropped_per_sec,
             shown_fps,
         }) = self.telemetry.close_window(
-            Instant::now(),
+            now,
             self.slot.published(),
             self.slot.dropped(),
             self.rendered,

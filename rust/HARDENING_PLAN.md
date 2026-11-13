@@ -38,20 +38,22 @@ Hoy `Core::new` solo se llama desde `run.rs`. Son ~2.300 líneas (`dockview-app/
 
 | Tarea | Qué | Listo cuando |
 |---|---|---|
-| 1-1 | `app`: sacar los dobles del replay (`World`, `FakeMachine`, `FakeBuffer`, `FakeMic`, `FakeHotkeys`) de `replay_service/tests.rs` a un módulo de pruebas compartido (`src/testing/replay.rs`, solo `#[cfg(test)]`) | Los 19 tests del replay pasan sin cambios |
-| 1-2 | `app`: `testing/sources.rs` con `FakeSources` (`SourceMachine`) y sus manejadores (`FakeCapture`, `FakeScreen`, `FakePlayback`, `FakeLoopback`): anotan cada arranque y dejan fijar el estado desde el test | Test: el doble anota un `start_capture` y devuelve el estado que se le fijó |
-| 1-3 | `app`: `testing/system.rs` con `FakeSystem` (`SystemProbe`), `FakeStats` (`StatsSink`, guarda lo recibido) y `RecordingHost` (`Host`, anota las peticiones) | Test de cada doble |
-| 1-4 | `app`: `testing/rig.rs`: `Rig::new()` construye un `Core` con todos los dobles, `MemorySettingsStore` y una lista de dispositivos configurable | Test: un `Core` arranca con la primera capturadora y su audio emparejado |
-| 1-5 | `app`: el reloj entra por parámetro: `Core::tick_at(now, sources_open)` (y `tick` lo llama con `Instant::now()`); `maintain_source` y `update_stats` dejan de leer el reloj | Tests existentes en verde; el `Rig` puede avanzar el tiempo |
-| 1-6 | Test que faltaba en Estudio A-5: `ToggleStudio` alterna `studio_open` y lo guarda | Test en verde; marcar A-5 como cubierto en `STUDIO_PLAN.md` |
-| 1-7 | Tests de arranque: se restaura el dispositivo guardado; gana el audio de la capturadora sobre el último usado (regresión de `31c45f6`); sin dispositivos no arranca nada | 3 tests |
-| 1-8 | Tests de acciones: `SelectVideo` arrastra su audio; `SetVolume` llega al reproductor y se guarda; `ToggleReplay` grabando emite `StopRecordingFirst` | 3 tests |
-| 1-9 | Tests de recuperación del vídeo: capturadora `Disconnected` → se reabre a los 2 s; pantalla `Ended` → vuelve a la capturadora y emite `SourceLost` | 2 tests |
-| 1-10 | `ARCHITECTURE.md`: añadir el arnés a la receta («el servicio y su parte de `Core` se prueban con el `Rig`») | Doc al día |
+| 1-1 ✅ | `app`: sacar los dobles del replay (`World`, `FakeMachine`, `FakeBuffer`, `FakeMic`, `FakeHotkeys`) de `replay_service/tests.rs` a un módulo de pruebas compartido (`src/testing/replay.rs`, solo `#[cfg(test)]`) | Los 19 tests del replay pasan sin cambios |
+| 1-2 ✅ | `app`: `testing/sources.rs` con `FakeSources` (`SourceMachine`) y sus manejadores (`FakeCapture`, `FakeScreen`, `FakePlayback`, `FakeLoopback`): anotan cada arranque y dejan fijar el estado desde el test | Test: el doble anota un `start_capture` y devuelve el estado que se le fijó |
+| 1-3 ✅ | `app`: `testing/system.rs` con `FakeSystem` (`SystemProbe`), `FakeStats` (`StatsSink`, guarda lo recibido) y `RecordingHost` (`Host`, anota las peticiones) | Test de cada doble |
+| 1-4 ✅ | `app`: `testing/rig.rs`: `Rig::new()` construye un `Core` con todos los dobles, `MemorySettingsStore` y una lista de dispositivos configurable | Test: un `Core` arranca con la primera capturadora y su audio emparejado |
+| 1-5 ✅ | `app`: el reloj entra por parámetro: `Core::tick_at(now, sources_open)` (y `tick` lo llama con `Instant::now()`); `maintain_source` y `update_stats` dejan de leer el reloj | Tests existentes en verde; el `Rig` puede avanzar el tiempo |
+| 1-6 ✅ | Test que faltaba en Estudio A-5: `ToggleStudio` alterna `studio_open` y lo guarda | Test en verde; marcar A-5 como cubierto en `STUDIO_PLAN.md` |
+| 1-7 ✅ | Tests de arranque: se restaura el dispositivo guardado; gana el audio de la capturadora sobre el último usado (regresión de `31c45f6`); sin dispositivos no arranca nada | 3 tests |
+| 1-8 ✅ | Tests de acciones: `SelectVideo` arrastra su audio; `SetVolume` llega al reproductor y se guarda; `ToggleReplay` grabando emite `StopRecordingFirst` | 3 tests |
+| 1-9 ✅ | Tests de recuperación del vídeo: capturadora `Disconnected` → se reabre a los 2 s; pantalla `Ended` → vuelve a la capturadora y emite `SourceLost` | 2 tests |
+| 1-10 ✅ | `ARCHITECTURE.md`: añadir el arnés a la receta («el servicio y su parte de `Core` se prueban con el `Rig`») | Doc al día |
 
 **Cuidado:** la guarda de tamaño cuenta como producción todo archivo que no se llame `tests.rs`; cada archivo de `testing/` debe quedar bajo 400 líneas o la guarda se amplía, con su motivo, para esa carpeta.
 
 **Pausa 1:** revisar que el `Rig` es cómodo de usar antes de escribir más tests sobre él.
+
+**Hecho (2026-11-13).** Diferencias con lo previsto: el reloj entra por `tick_at` en `maintain_source`, `maintain_overlays` y `update_stats`; las transiciones de escena (`scene_transition`) y el servicio del replay (`replay_service`) aún leen `Instant::now()` y se inyectarán cuando un bloque los necesite. Los tests de conjunto viven en `core/tests.rs` (16 tests; el total de `dockview-app` pasó de 58 a 81).
 
 ---
 

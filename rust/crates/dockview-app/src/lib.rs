@@ -13,5 +13,7 @@ pub mod keys;
 pub mod replay_service;
 pub mod sources;
 pub mod telemetry;
+#[cfg(test)]
+mod testing;
 
 pub use crate::core::{Core, Ports};
