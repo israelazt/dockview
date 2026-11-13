@@ -34,16 +34,17 @@ use dockview_domain::scene::SceneLayer;
 use dockview_domain::settings::{
     self, AppSettings, LangMode, RenderPreset, SettingsStore, ThemeMode, VideoModePref,
 };
+use dockview_domain::sources::{CaptureOptions, CaptureStatus};
+use dockview_domain::sources::{
+    CaptureTarget, MonitorInfo, ScreenOptions, ScreenStatus, WindowInfo,
+};
 use dockview_domain::stream::StreamInfo;
 use dockview_platform::audio::{default_capture_device, enumerate_audio_devices, AudioEngine};
-use dockview_platform::capture::{CaptureOptions, CaptureStatus, VideoCapture};
+use dockview_platform::capture::VideoCapture;
 use dockview_platform::compose::SceneCompositor;
 use dockview_platform::mf::{enumerate_video_devices, MfSession};
 use dockview_platform::replay_machine::PlatformReplay;
-use dockview_platform::screen::{
-    list_monitors, list_windows, CaptureTarget, MonitorInfo, ScreenCapture, ScreenOptions,
-    ScreenStatus, WindowInfo,
-};
+use dockview_platform::screen::{list_monitors, list_windows, ScreenCapture};
 use dockview_platform::settings_store::FileSettingsStore;
 use dockview_platform::tap_capture::{CaptureSource, TapCapture as MicCapture};
 use dockview_platform::testsrc::TestSource;

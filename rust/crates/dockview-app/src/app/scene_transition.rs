@@ -11,8 +11,9 @@ use std::time::{Duration, Instant};
 
 use dockview_domain::frame::FrameSlot;
 use dockview_domain::scene::{Scene, SceneLayer};
+use dockview_domain::sources::Layer;
 use dockview_domain::transition::{Easing, Transition, DEFAULT_DURATION};
-use dockview_platform::compose::{Layer, SceneCompositor};
+use dockview_platform::compose::SceneCompositor;
 
 use dockview_domain::i18n;
 use dockview_ui::toast::ToastKind;

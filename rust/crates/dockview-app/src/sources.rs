@@ -9,8 +9,8 @@ use std::time::{Duration, Instant};
 
 use dockview_domain::device::{AudioDevice, VideoDevice};
 use dockview_domain::diagnostics::VideoState;
-use dockview_platform::capture::CaptureStatus;
-use dockview_platform::screen::{MonitorInfo, ScreenStatus, WindowInfo};
+use dockview_domain::sources::CaptureStatus;
+use dockview_domain::sources::{MonitorInfo, ScreenStatus, WindowInfo};
 
 use dockview_domain::i18n::{self, Lang};
 use dockview_domain::view::{CurrentSource, StatusKind};

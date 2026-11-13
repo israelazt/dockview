@@ -21,6 +21,7 @@ pub mod recording;
 pub mod replay;
 pub mod scene;
 pub mod settings;
+pub mod sources;
 pub mod stats;
 pub mod stream;
 pub mod theme;

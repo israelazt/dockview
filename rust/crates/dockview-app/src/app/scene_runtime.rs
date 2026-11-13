@@ -15,11 +15,12 @@ use std::time::Instant;
 
 use dockview_domain::frame::FrameSlot;
 use dockview_domain::scene::{NormRect, Scene, SceneLayer, SourceRef};
-use dockview_platform::capture::{CaptureOptions, CaptureStatus, VideoCapture};
-use dockview_platform::compose::{Layer, SceneCompositor};
-use dockview_platform::screen::{
-    list_monitors, list_windows, CaptureTarget, ScreenCapture, ScreenOptions, ScreenStatus,
-};
+use dockview_domain::sources::Layer;
+use dockview_domain::sources::{CaptureOptions, CaptureStatus};
+use dockview_domain::sources::{CaptureTarget, ScreenOptions, ScreenStatus};
+use dockview_platform::capture::VideoCapture;
+use dockview_platform::compose::SceneCompositor;
+use dockview_platform::screen::{list_monitors, list_windows, ScreenCapture};
 
 use crate::cli::PipSpec;
 use dockview_domain::i18n;

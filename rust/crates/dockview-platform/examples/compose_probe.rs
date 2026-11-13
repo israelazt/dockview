@@ -23,13 +23,15 @@ use std::time::{Duration, Instant};
 use dockview_domain::frame::FrameSlot;
 use dockview_domain::recording::RecordingState;
 use dockview_domain::recording::{RecorderStatus, ReplaySettings};
-use dockview_platform::capture::{CaptureOptions, VideoCapture};
-use dockview_platform::compose::{Fit, Layer, NormRect, SceneCompositor, SceneStatus};
+use dockview_domain::scene::{Fit, NormRect};
+use dockview_domain::sources::CaptureOptions;
+use dockview_domain::sources::{CaptureTarget, ScreenOptions};
+use dockview_domain::sources::{Layer, SceneStatus};
+use dockview_platform::capture::VideoCapture;
+use dockview_platform::compose::SceneCompositor;
 use dockview_platform::mf::{enumerate_video_devices, MfSession};
 use dockview_platform::recorder::ReplayRecorder;
-use dockview_platform::screen::{
-    list_monitors, list_windows, CaptureTarget, ScreenCapture, ScreenOptions,
-};
+use dockview_platform::screen::{list_monitors, list_windows, ScreenCapture};
 
 use windows::Win32::Foundation::FILETIME;
 use windows::Win32::System::Threading::{GetCurrentProcess, GetProcessTimes};

@@ -10,8 +10,9 @@ use std::time::{Duration, Instant};
 use dockview_domain::device::match_audio_to_video;
 use dockview_domain::frame::FrameSlot;
 use dockview_domain::recording::{RecorderStatus, ReplaySettings};
+use dockview_domain::sources::CaptureOptions;
 use dockview_platform::audio::{enumerate_audio_devices, AudioEngine};
-use dockview_platform::capture::{CaptureOptions, VideoCapture};
+use dockview_platform::capture::VideoCapture;
 use dockview_platform::mf::{enumerate_video_devices, MfSession};
 use dockview_platform::recorder::{ReplayRecorder, SaveHandleExt};
 
@@ -80,7 +81,7 @@ fn main() -> windows::core::Result<()> {
         println!(
             "t={:>2}s capture={:?}  recorder={:?}  video={:>5.1}s audio={:>5.1}s {:>6.1} MB  encoded={}  dropped={}",
             start.elapsed().as_secs(),
-            matches!(capture.status(), dockview_platform::capture::CaptureStatus::Running { .. }),
+            matches!(capture.status(), dockview_domain::sources::CaptureStatus::Running { .. }),
             recorder.status(),
             recorder.buffered_seconds(),
             recorder.buffered_audio_seconds(),

@@ -8,7 +8,8 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use dockview_domain::frame::FrameSlot;
-use dockview_platform::capture::{CaptureOptions, CaptureStatus, VideoCapture};
+use dockview_domain::sources::{CaptureOptions, CaptureStatus};
+use dockview_platform::capture::VideoCapture;
 use dockview_platform::mf::{enumerate_video_devices, MfSession};
 
 fn main() -> windows::core::Result<()> {

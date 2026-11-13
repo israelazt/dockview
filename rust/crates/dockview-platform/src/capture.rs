@@ -23,43 +23,12 @@ use windows::Win32::Media::MediaFoundation::{
 use crate::mf::{first_video_stream, open_source, read_native_types, unpack_pair, MfSession};
 use crate::worker::{StatusCell, Worker};
 use dockview_domain::frame::{Frame, FrameSlot, PixelFormat};
-use dockview_domain::stream::{select_best, select_best_compressed, CaptureProfile, StreamInfo};
+use dockview_domain::sources::{CaptureOptions, CaptureStatus};
+use dockview_domain::stream::{select_best, select_best_compressed, StreamInfo};
 
 /// How long `Drop` waits for the capture thread before detaching it. A source
 /// with no signal can leave `ReadSample` blocked indefinitely.
 const STOP_TIMEOUT: Duration = Duration::from_secs(2);
-
-/// Lifecycle of a [`VideoCapture`].
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum CaptureStatus {
-    /// The thread is opening the device.
-    Starting,
-    /// Frames are flowing. `native` is the device mode that was selected.
-    Running {
-        native: StreamInfo,
-        output: PixelFormat,
-        /// Whether the device also offers a compressed mode to fall back to.
-        has_compressed: bool,
-    },
-    /// The device was unplugged or the stream ended.
-    Disconnected { reason: String },
-    /// The device could not be opened or configured.
-    Failed(String),
-    /// Stopped on request.
-    Stopped,
-}
-
-/// Options for [`VideoCapture::start`].
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub struct CaptureOptions {
-    /// How to choose a device mode when `mode_index` is `None`.
-    pub profile: CaptureProfile,
-    /// Force a specific native mode by its `StreamInfo::type_index`.
-    pub mode_index: Option<u32>,
-    /// Choose among compressed (MJPEG) modes when the device has any. Used when
-    /// the USB connection cannot carry an uncompressed mode.
-    pub prefer_compressed: bool,
-}
 
 /// Handle to a running capture thread. Dropping it stops the capture.
 pub struct VideoCapture {

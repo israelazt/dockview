@@ -2,6 +2,7 @@
 
 use std::ffi::c_void;
 
+use dockview_domain::sources::{MonitorInfo, WindowInfo};
 use windows::core::BOOL;
 use windows::Win32::Foundation::{HWND, LPARAM, RECT};
 use windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_CLOAKED};
@@ -12,32 +13,6 @@ use windows::Win32::UI::WindowsAndMessaging::{
     EnumWindows, GetWindow, GetWindowLongPtrW, GetWindowTextW, GetWindowThreadProcessId, IsIconic,
     IsWindow, IsWindowVisible, GWL_EXSTYLE, GW_OWNER, WS_EX_TOOLWINDOW,
 };
-
-/// What to capture. The numbers are the raw `HMONITOR` / `HWND` handles.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CaptureTarget {
-    Monitor(isize),
-    Window(isize),
-}
-
-/// A monitor that can be captured.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct MonitorInfo {
-    pub handle: isize,
-    /// Windows' name for it, e.g. `\\.\DISPLAY1`.
-    pub device_name: String,
-    pub width: u32,
-    pub height: u32,
-    pub primary: bool,
-}
-
-/// A window that can be captured.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct WindowInfo {
-    pub handle: isize,
-    pub title: String,
-    pub process_id: u32,
-}
 
 unsafe extern "system" fn monitor_callback(
     monitor: HMONITOR,

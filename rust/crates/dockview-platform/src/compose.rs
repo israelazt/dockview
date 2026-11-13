@@ -38,33 +38,9 @@ use crate::gpu::{create_device, failed, Nv12Target};
 use crate::worker::{StatusCell, Worker};
 use dockview_domain::frame::{Frame, FrameSlot, PixelFormat};
 use dockview_domain::geometry::{even, layer_geometry, PixelRect};
+use dockview_domain::sources::{Layer, SceneStatus};
 
 pub use dockview_domain::scene::{Fit, NormRect};
-
-/// One layer of a scene: where a source's frames are drawn.
-#[derive(Clone)]
-pub struct Layer {
-    pub slot: Arc<FrameSlot>,
-    pub rect: NormRect,
-    pub fit: Fit,
-    pub visible: bool,
-    /// 1 is fully drawn, 0 invisible; in between it lets what is below show
-    /// through (scene transitions).
-    pub opacity: f32,
-}
-
-impl Layer {
-    /// A source drawn over the whole picture.
-    pub fn full(slot: Arc<FrameSlot>) -> Self {
-        Self {
-            slot,
-            rect: NormRect::FULL,
-            fit: Fit::Contain,
-            visible: true,
-            opacity: 1.0,
-        }
-    }
-}
 
 fn rect_of(r: PixelRect) -> RECT {
     RECT {
@@ -352,14 +328,6 @@ impl Compositor {
 // ---------------------------------------------------------------------------
 // The compositor thread
 // ---------------------------------------------------------------------------
-
-/// What the compositor thread reports.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum SceneStatus {
-    Starting,
-    Running,
-    Failed(String),
-}
 
 /// Runs a [`Compositor`] on a thread of its own while it is alive, drawing a
 /// new picture whenever a visible source has a new frame (or the layers

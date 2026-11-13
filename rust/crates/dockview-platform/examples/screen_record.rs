@@ -23,10 +23,9 @@ use std::time::{Duration, Instant};
 use dockview_domain::frame::FrameSlot;
 use dockview_domain::recording::RecordingState;
 use dockview_domain::recording::{RecorderStatus, ReplaySettings};
+use dockview_domain::sources::{CaptureTarget, ScreenOptions, ScreenStatus};
 use dockview_platform::recorder::ReplayRecorder;
-use dockview_platform::screen::{
-    list_monitors, list_windows, CaptureTarget, ScreenCapture, ScreenOptions, ScreenStatus,
-};
+use dockview_platform::screen::{list_monitors, list_windows, ScreenCapture};
 use dockview_platform::tap_capture::{CaptureSource, TapCapture};
 
 use windows::Win32::Foundation::FILETIME;

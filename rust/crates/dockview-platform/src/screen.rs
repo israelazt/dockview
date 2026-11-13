@@ -40,49 +40,14 @@ use windows::Win32::System::WinRT::Direct3D11::{
 use windows::Win32::System::WinRT::Graphics::Capture::IGraphicsCaptureItemInterop;
 use windows::Win32::System::WinRT::{RoInitialize, RO_INIT_MULTITHREADED};
 
-pub use crate::targets::{
-    list_monitors, list_windows, window_exists, CaptureTarget, MonitorInfo, WindowInfo,
-};
+pub use crate::targets::{list_monitors, list_windows, window_exists};
+use dockview_domain::sources::CaptureTarget;
 
 use crate::gpu::{create_device, rect, Nv12Target};
 use crate::worker::{StatusCell, Worker};
 use dockview_domain::frame::FrameSlot;
 use dockview_domain::geometry::{fit_in, output_size};
-
-/// Options for a capture.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct ScreenOptions {
-    /// The video is scaled down to at most this height (never up).
-    pub max_height: u32,
-    /// The most frames per second to deliver.
-    pub max_fps: u32,
-    /// Draw the mouse cursor into the video.
-    pub cursor: bool,
-}
-
-impl Default for ScreenOptions {
-    fn default() -> Self {
-        Self {
-            max_height: 1080,
-            max_fps: 60,
-            cursor: true,
-        }
-    }
-}
-
-/// State of a screen capture.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ScreenStatus {
-    Starting,
-    /// Delivering frames of this (output) size.
-    Running {
-        width: u32,
-        height: u32,
-    },
-    /// What was being captured went away (the window closed).
-    Ended(String),
-    Failed(String),
-}
+use dockview_domain::sources::{ScreenOptions, ScreenStatus};
 
 // ---------------------------------------------------------------------------
 // GPU conversion
