@@ -19,15 +19,21 @@ use dockview_platform::system_lang::detect_system_lang;
 use winit::event_loop::{ControlFlow, EventLoop};
 
 use crate::shell::host::{HostShared, ShellHost};
+use crate::shell::present::{report_startup_failure, StartupFailure};
 use crate::shell::Shell;
 
 /// Reads the command line, finds the devices and runs the event loop.
 pub fn run() {
+    // A window program has no console; from a terminal, use that terminal's.
+    dockview_platform::console::attach_parent_console();
+    // The log comes first, so whatever goes wrong afterwards is written down.
+    dockview_platform::log_file::install_default(true);
+    dockview_domain::log_info!("Dockview {} starting", env!("CARGO_PKG_VERSION"));
     let slot = Arc::new(FrameSlot::new());
     let cli = match Cli::parse(std::env::args().skip(1)) {
         Ok(cli) => cli,
         Err(e) => {
-            eprintln!("dockview: {e}");
+            dockview_domain::log_error!("dockview: {e}");
             std::process::exit(2);
         }
     };
@@ -35,8 +41,14 @@ pub fn run() {
     let event_loop = match EventLoop::new() {
         Ok(l) => l,
         Err(e) => {
-            eprintln!("could not create event loop: {e}");
-            return;
+            dockview_domain::log_error!("could not create event loop: {e}");
+            report_startup_failure(
+                detect_system_lang(),
+                StartupFailure::Window,
+                &e.to_string(),
+                cli.screenshot.is_some(),
+            );
+            std::process::exit(1);
         }
     };
     event_loop.set_control_flow(ControlFlow::Poll);
@@ -64,6 +76,9 @@ pub fn run() {
     let core = Core::new(slot, saved, ports, cli, detect_system_lang());
     let mut shell = Shell::new(core, host);
     if let Err(e) = event_loop.run_app(&mut shell) {
-        eprintln!("event loop error: {e}");
+        dockview_domain::log_error!("event loop error: {e}");
+    }
+    if shell.failed() {
+        std::process::exit(1);
     }
 }

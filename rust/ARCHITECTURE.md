@@ -44,7 +44,7 @@ Las flechas solo van hacia abajo. `ui`, `app` y `platform` no se ven entre sí: 
    Si una función no cabe en esta receta, se discute antes de escribirla.
 3. **Guardas automáticas** (tests que corren con `cargo test`): ninguna fuente de más de **400 líneas** (los de tests, de 1000) y las dependencias de cada `Cargo.toml` solo las permitidas por la tabla de arriba. Una excepción se escribe en el propio test, con su motivo.
 4. **Convenciones**
-   - Un error que el usuario debe conocer es un `AppEvent`; uno que no, se registra con `eprintln!`. Los fallos de hardware se devuelven como `Result<_, String>` a través de los puertos.
+   - Un error que el usuario debe conocer es un `AppEvent`; uno que no, se registra con `log_warn!` / `log_error!` / `log_info!` (de `dockview-domain`; van a `%APPDATA%\Dockview\dockview.log`). Una guarda prohíbe `println!`/`eprintln!` en el código de producción. Los fallos de hardware se devuelven como `Result<_, String>` a través de los puertos.
    - Un puerto se llama por lo que **necesita** el servicio (`ReplayBuffer`), no por cómo se implementa (`Mf…`).
    - Un servicio expone **datos** (`buffer_info()`), no vistas; la vista la compone `Core`.
    - Una función pura que decide algo va en `domain` o en el servicio, con su test; nunca en `Core::apply` ni en el binario.

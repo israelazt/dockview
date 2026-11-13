@@ -1,8 +1,65 @@
 //! How the application's events are shown: the words and the kind of toast.
 
+use std::path::Path;
+
 use dockview_domain::events::AppEvent;
-use dockview_domain::i18n::Key;
+use dockview_domain::i18n::{self, Key, Lang};
 use dockview_ui::toast::ToastKind;
+use windows::core::HSTRING;
+use windows::Win32::UI::WindowsAndMessaging::{MessageBoxW, MB_ICONERROR, MB_OK};
+
+/// Why the program could not start.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StartupFailure {
+    /// The window (or the event loop behind it) could not be created.
+    Window,
+    /// Direct3D could not be started.
+    Graphics,
+}
+
+/// What the box says when the program cannot start: the reason in the user's
+/// words, then the technical detail and where the log is.
+pub fn startup_failure_text(
+    lang: Lang,
+    failure: StartupFailure,
+    detail: &str,
+    log: Option<&Path>,
+) -> String {
+    let reason = match failure {
+        StartupFailure::Window => Key::StartupFailedWindow,
+        StartupFailure::Graphics => Key::StartupFailedGraphics,
+    };
+    let mut text = format!("{}\n\n{detail}", i18n::tr(lang, reason));
+    if let Some(log) = log {
+        text.push_str(&format!(
+            "\n\n{}\n{}",
+            i18n::tr(lang, Key::StartupFailedLog),
+            log.display()
+        ));
+    }
+    text
+}
+
+/// Tells the user the program cannot start. With no window to show it in, a
+/// message box does it; `silent` (a scripted run) skips the box, because
+/// nobody is there to close it and the exit code and the log say it already.
+pub fn report_startup_failure(lang: Lang, failure: StartupFailure, detail: &str, silent: bool) {
+    if silent {
+        return;
+    }
+    let log = dockview_platform::log_file::default_log_path();
+    let text = startup_failure_text(lang, failure, detail, log.as_deref());
+    let title = i18n::tr(lang, Key::StartupFailedTitle);
+    // SAFETY: a plain call with strings that outlive it and no owner window.
+    unsafe {
+        MessageBoxW(
+            None,
+            &HSTRING::from(text),
+            &HSTRING::from(title),
+            MB_OK | MB_ICONERROR,
+        );
+    }
+}
 
 /// How an event is shown: the words and the kind of toast.
 pub fn toast_for(event: AppEvent) -> (Key, ToastKind) {
@@ -41,6 +98,16 @@ mod tests {
     use dockview_domain::i18n;
 
     use super::*;
+
+    #[test]
+    fn the_start_up_failure_box_says_why_gives_the_detail_and_points_to_the_log() {
+        let log = Path::new(r"C:\Users\me\AppData\Roaming\Dockview\dockview.log");
+        let en = startup_failure_text(Lang::En, StartupFailure::Graphics, "E_FAIL", Some(log));
+        assert!(en.contains("Direct3D") && en.contains("E_FAIL") && en.contains("dockview.log"));
+        let es = startup_failure_text(Lang::Es, StartupFailure::Window, "no handle", None);
+        assert!(es.contains("ventana") && es.contains("no handle"));
+        assert!(!es.contains("registro"), "no log line without a log");
+    }
 
     #[test]
     fn every_event_has_a_message_and_failures_are_errors() {

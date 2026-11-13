@@ -79,7 +79,7 @@ impl Core {
             }
         }
         if missing > 0 {
-            eprintln!("{missing} source(s) of the scene could not be started");
+            dockview_domain::log_warn!("{missing} source(s) of the scene could not be started");
             self.emit(AppEvent::SceneMissing);
         }
         self.scene_base = Some(base);
@@ -154,7 +154,7 @@ impl Core {
         let elapsed = active.started.elapsed();
         if active.transition.is_done(elapsed) {
             if self.cli.show_stats {
-                eprintln!(
+                dockview_domain::log_info!(
                     "scene change: {} pictures in {} ms",
                     active.ticks,
                     elapsed.as_millis()

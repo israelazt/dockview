@@ -58,7 +58,7 @@ impl Core {
             }
             Err(reason) => {
                 // Still dirty: it is tried again. The user hears of it once.
-                eprintln!("could not save the settings: {reason}");
+                dockview_domain::log_warn!("could not save the settings: {reason}");
                 if !self.settings_failed {
                     self.settings_failed = true;
                     self.emit(AppEvent::SettingsNotSaved);

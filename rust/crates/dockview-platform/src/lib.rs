@@ -10,12 +10,16 @@ pub mod capture;
 pub mod clips;
 pub mod compose;
 #[cfg(windows)]
+pub mod console;
+#[cfg(windows)]
 pub mod device_watch;
 #[cfg(windows)]
 pub mod encode;
 pub mod gpu;
 #[cfg(windows)]
 pub mod hotkey;
+#[cfg(windows)]
+pub mod log_file;
 #[cfg(windows)]
 pub mod mf;
 #[cfg(windows)]

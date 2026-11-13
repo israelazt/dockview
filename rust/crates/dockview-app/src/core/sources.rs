@@ -89,7 +89,7 @@ impl Core {
                         pid: w.process_id,
                     },
                 ),
-                None => eprintln!("no window matches '{text}'"),
+                None => dockview_domain::log_warn!("no window matches '{text}'"),
             }
             return;
         }
@@ -258,7 +258,7 @@ impl Core {
             let lost = match capture.status() {
                 ScreenStatus::Ended(_) => Some(AppEvent::SourceLost),
                 ScreenStatus::Failed(e) => {
-                    eprintln!("screen capture failed: {e}");
+                    dockview_domain::log_warn!("screen capture failed: {e}");
                     Some(AppEvent::SourceFailed)
                 }
                 _ => None,

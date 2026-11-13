@@ -82,7 +82,7 @@ impl Core {
         } else if let Some(base) = self.main_source_ref() {
             base
         } else {
-            eprintln!("--pip needs a main source to draw over");
+            dockview_domain::log_warn!("--pip needs a main source to draw over");
             return;
         };
         let source = match &spec {
@@ -115,7 +115,7 @@ impl Core {
             }
         };
         let Some(source) = source else {
-            eprintln!("could not find the corner source {spec:?}");
+            dockview_domain::log_warn!("could not find the corner source {spec:?}");
             return;
         };
         let mut scene = Scene::with_base("--pip", base);

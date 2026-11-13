@@ -16,6 +16,7 @@ pub mod frame;
 pub mod geometry;
 pub mod i18n;
 pub mod layout;
+pub mod log;
 pub mod pcm;
 pub mod ports;
 pub mod recording;

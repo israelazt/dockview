@@ -28,7 +28,7 @@ use winit::window::Window;
 
 use helpers::{filter_for, system_animations_enabled};
 use host::{HostRequest, HostShared};
-use present::toast_for;
+use present::{report_startup_failure, toast_for, StartupFailure};
 
 /// How long the event loop waits for a new frame before checking events.
 const FRAME_WAIT: Duration = Duration::from_millis(4);
@@ -47,6 +47,8 @@ pub struct Shell {
     ui_gpu: Option<UiGpu>,
     ui_scale: f32,
     exit_requested: bool,
+    /// The program could not start (see `fail_startup`).
+    failed: bool,
     controls: Controls,
     pointer: Pointer,
     last_frame: Instant,
@@ -79,6 +81,7 @@ impl Shell {
             ui_gpu: None,
             ui_scale: 1.0,
             exit_requested: false,
+            failed: false,
             controls,
             pointer: Pointer::default(),
             last_frame: Instant::now(),
@@ -91,6 +94,19 @@ impl Shell {
             stats_panel: StatsPanel::new(),
             toasts: ToastHost::new(),
         }
+    }
+
+    /// Whether the program could not start; the caller then exits with an
+    /// error code.
+    pub fn failed(&self) -> bool {
+        self.failed
+    }
+
+    /// The window or Direct3D could not start: tells the user and stops.
+    pub(super) fn fail_startup(&mut self, failure: StartupFailure, detail: &str) {
+        self.failed = true;
+        let silent = self.core.cli().screenshot.is_some();
+        report_startup_failure(self.core.lang(), failure, detail, silent);
     }
 
     /// Does what the core asked of the window since the last call.

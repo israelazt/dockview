@@ -92,7 +92,7 @@ impl Core {
     pub(super) fn apply_switch_event(&mut self, event: SwitchEvent) {
         match event {
             SwitchEvent::ToCompressed { fps_before } => {
-                eprintln!("[auto] USB too slow for the uncompressed mode ({fps_before:.0} fps): switching to a compressed mode");
+                dockview_domain::log_info!("[auto] USB too slow for the uncompressed mode ({fps_before:.0} fps): switching to a compressed mode");
                 self.settings.video_mode = VideoModePref::Compressed;
             }
             SwitchEvent::Judged {
@@ -100,11 +100,15 @@ impl Core {
                 now,
                 helped,
             } => {
-                eprintln!("[auto] compressed mode: {now:.0} fps (was {before:.0} fps)");
+                dockview_domain::log_info!(
+                    "[auto] compressed mode: {now:.0} fps (was {before:.0} fps)"
+                );
                 if helped {
                     return;
                 }
-                eprintln!("[auto] no clear improvement: going back to automatic mode");
+                dockview_domain::log_info!(
+                    "[auto] no clear improvement: going back to automatic mode"
+                );
                 self.settings.video_mode = VideoModePref::Auto;
             }
         }

@@ -257,6 +257,98 @@ impl Default for TextSystem {
 mod tests {
     use super::*;
 
+    /// Glyph id 0 is the "missing glyph" box: a text or icon whose shaping
+    /// yields it is not in the bundled (cut) fonts. See `tools/subset_fonts.py`.
+    fn has_missing_glyph(text: &mut TextSystem, s: &str, face: Face) -> bool {
+        text.shape(s, 13.0, face, false)
+            .glyphs
+            .iter()
+            .any(|g| g.key.glyph_id == 0)
+    }
+
+    #[test]
+    fn every_interface_text_has_its_glyphs_in_both_languages() {
+        let mut text = TextSystem::new();
+        for lang in [
+            dockview_domain::i18n::Lang::En,
+            dockview_domain::i18n::Lang::Es,
+        ] {
+            for key in dockview_domain::i18n::ALL_KEYS {
+                let s = dockview_domain::i18n::tr(lang, key);
+                for weight in [Weight::Regular, Weight::Medium, Weight::SemiBold] {
+                    assert!(
+                        !has_missing_glyph(&mut text, s, Face::Text(weight)),
+                        "{lang:?} {key:?}: {s:?} needs a glyph the cut font lacks; \
+                         run tools/subset_fonts.py"
+                    );
+                }
+            }
+        }
+    }
+
+    /// The private-use icons written as `\u{eXXX}` in the sources of this crate.
+    fn icons_in_the_sources() -> Vec<char> {
+        fn walk(dir: &std::path::Path, out: &mut Vec<char>) {
+            for entry in std::fs::read_dir(dir).unwrap().flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    walk(&path, out);
+                } else if path.extension().is_some_and(|e| e == "rs") {
+                    let text = std::fs::read_to_string(&path).unwrap();
+                    let mut rest = text.as_str();
+                    while let Some(at) = rest.find("\\u{e") {
+                        rest = &rest[at + 3..];
+                        let digits: String = rest.chars().take_while(|c| *c != '}').collect();
+                        if let Some(c) = u32::from_str_radix(&digits, 16)
+                            .ok()
+                            .and_then(char::from_u32)
+                        {
+                            out.push(c);
+                        }
+                    }
+                }
+            }
+        }
+        let mut icons = Vec::new();
+        let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        walk(&src, &mut icons);
+        icons.sort_unstable();
+        icons.dedup();
+        icons
+    }
+
+    #[test]
+    fn every_icon_the_interface_uses_is_in_the_icon_font() {
+        let icons = icons_in_the_sources();
+        assert!(icons.len() >= 20, "found only {} icons", icons.len());
+        let mut text = TextSystem::new();
+        for icon in icons {
+            assert!(
+                !has_missing_glyph(&mut text, &icon.to_string(), Face::Icons),
+                "icon U+{:04X} is not in lucide.ttf; run tools/subset_fonts.py",
+                icon as u32
+            );
+        }
+    }
+
+    #[test]
+    fn the_three_weights_of_the_text_font_are_three_different_faces() {
+        // The cut fonts must keep the names that group them under one family,
+        // or every weight silently falls back to Regular.
+        let mut text = TextSystem::new();
+        let mut width = |weight| {
+            text.shape("Estadísticas del vídeo", 13.0, Face::Text(weight), false)
+                .width
+        };
+        let regular = width(Weight::Regular);
+        let medium = width(Weight::Medium);
+        let semibold = width(Weight::SemiBold);
+        assert!(
+            regular < medium && medium < semibold,
+            "{regular} {medium} {semibold}"
+        );
+    }
+
     #[test]
     fn after_a_reset_every_glyph_is_uploaded_again() {
         let mut text = TextSystem::new();

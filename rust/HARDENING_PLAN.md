@@ -170,15 +170,32 @@ Al quitar la consola desaparecen los `eprintln!`, así que el registro va antes.
 
 | Tarea | Qué | Listo cuando |
 |---|---|---|
-| 6-1 | `domain`: fachada de registro mínima (`log::info/warn/error` hacia un sumidero que fija el binario; sin sumidero no hace nada) | Tests con un sumidero en memoria |
-| 6-2 | `platform`: sumidero a `%APPDATA%\Dockview\dockview.log`, que rota al llegar a 1 MB y sigue escribiendo a la consola si la hay | Tests de escritura y rotación |
-| 6-3 | Sustituir todos los `eprintln!` de producción por la fachada, y guarda en `architecture.rs` que los prohíbe fuera de tests y ejemplos | Guarda en verde |
-| 6-4 | `shell`: si Direct3D o la ventana no arrancan, mostrar un cuadro de mensaje con el motivo en vez de cerrarse en silencio | Prueba forzando el error |
-| 6-5 | Binario: `windows_subsystem = "windows"` solo en release, y engancharse a la consola del padre cuando se lanza desde una terminal (`--screenshot`, `--log-stats` siguen imprimiendo) | Doble clic sin ventana negra; `ui_shots.ps1` sigue funcionando |
-| 6-6 | `build.rs` en el binario: icono y manifiesto (DPI por monitor v2, sin elevación). La dependencia de compilación se añade a la guarda de dependencias | El `.exe` muestra el icono; nítido al 150 % |
-| 6-7 | `tools/`: guion que recorta `lucide.ttf` a los iconos usados e Inter a Latin; test que comprueba que cada icono usado existe en la fuente | Ejecutable más pequeño (hoy 5,3 MB, 2,2 MB son fuentes); capturas idénticas |
-| 6-8 | `.github/workflows/release.yml`: al crear una etiqueta, compila en release y adjunta `dockview.exe` | Una etiqueta de prueba produce el artefacto |
-| 6-9 | Prueba en un Windows limpio (T-6.4 de `PLAN.md`): arranca sin instalar nada y solo escribe en `%APPDATA%\Dockview` | Resultado anotado |
+| 6-1 ✅ | `domain`: fachada de registro mínima (`log::info/warn/error` hacia un sumidero que fija el binario; sin sumidero no hace nada) | Tests con un sumidero en memoria |
+| 6-2 ✅ | `platform`: sumidero a `%APPDATA%\Dockview\dockview.log`, que rota al llegar a 1 MB y sigue escribiendo a la consola si la hay | Tests de escritura y rotación |
+| 6-3 ✅ | Sustituir todos los `eprintln!` de producción por la fachada, y guarda en `architecture.rs` que los prohíbe fuera de tests y ejemplos | Guarda en verde |
+| 6-4 ✅ | `shell`: si Direct3D o la ventana no arrancan, mostrar un cuadro de mensaje con el motivo en vez de cerrarse en silencio | Prueba forzando el error |
+| 6-5 ✅ | Binario: `windows_subsystem = "windows"` solo en release, y engancharse a la consola del padre cuando se lanza desde una terminal (`--screenshot`, `--log-stats` siguen imprimiendo) | Doble clic sin ventana negra; `ui_shots.ps1` sigue funcionando |
+| 6-6 ✅ | `build.rs` en el binario: icono y manifiesto (DPI por monitor v2, sin elevación). La dependencia de compilación se añade a la guarda de dependencias | El `.exe` muestra el icono; nítido al 150 % |
+| 6-7 ✅ | `tools/`: guion que recorta `lucide.ttf` a los iconos usados e Inter a Latin; test que comprueba que cada icono usado existe en la fuente | Ejecutable más pequeño (hoy 5,3 MB, 2,2 MB son fuentes); capturas idénticas |
+| 6-8 ✅ | `.github/workflows/release.yml`: al crear una etiqueta, compila en release y adjunta `dockview.exe` | Una etiqueta de prueba produce el artefacto |
+| 6-9 ⏳ | Prueba en un Windows limpio (T-6.4 de `PLAN.md`): arranca sin instalar nada y solo escribe en `%APPDATA%\Dockview` | Resultado anotado |
+
+**Hecho (2026-11-13), salvo 6-9 y las pruebas con ventana** (se hizo sin abrir la app: el autor estaba jugando; no se hizo ninguna compilación `--release`, que con LTO carga todos los núcleos durante minutos). Diferencias con lo previsto:
+- 6-1/6-2: la fachada es `dockview_domain::{log_info!, log_warn!, log_error!}` y el sumidero (`platform/src/log_file.rs`) escribe `dockview.log` con hora local, rota a `dockview.log.old` al llegar a 1 MB y refleja cada línea a la consola si hay. Se instala lo primero en `run()`.
+- 6-3: sin `eprintln!` en producción. La guarda (`production_code_logs_instead_of_printing`) corta en `#[cfg(test)] mod tests` (no en el primer `#[cfg(test)]`, que dejaba pasar un `eprintln!` añadido tras `mod testing;`) y tiene 4 excepciones con motivo: la línea `saved …` de `--screenshot`, el espejo del propio registro, `build.rs` y un ayudante de tests.
+- 6-4: cuadro de mensaje (con el motivo, el detalle y la ruta del registro, en el idioma del sistema) si no arranca la ventana, el bucle de eventos o Direct3D; sale con código 1 y no muestra el cuadro en ejecuciones con `--screenshot`.
+- 6-5: `windows_subsystem = "windows"` solo en release; `console::attach_parent_console` se engancha a la terminal del padre y redirige stdout/stderr solo si no estaban redirigidos.
+- 6-6: `build.rs` con `winresource`: icono (el de la app original, 370 KB), manifiesto (PerMonitorV2, `asInvoker`, rutas largas) e información de versión. Comprobado en el `.exe` de debug (icono 32×32, manifiesto y versión presentes). La guarda de dependencias ahora también mira `[build-dependencies]`.
+- 6-7: `tools/subset_fonts.py` (fontTools) recorta Inter (latín con extensiones, griego, cirílico, puntuación, flechas y monedas, más cualquier carácter de los textos) y Lucide (solo los 22 iconos usados). Las fuentes completas están en `assets/fonts/full/` y no se compilan. **Las fuentes pasaron de 2,25 MB a 0,49 MB.** Se verificó volcando los glifos rasterizados de todos los textos (en/es, 3 pesos, 3 tamaños, cifras tabulares) con las fuentes completas y las recortadas: idénticos byte a byte **con hinting y todos los nombres conservados**; quitando el hinting cambian los píxeles, y quitando los nombres 16/17 los tres pesos caían en Regular (hay un test que lo vigila). Un único icono (el de cerrar, U+E1B2) se dibuja con una fila transparente más y unos píxeles tenues en las esquinas a 18 px; los otros 21 son idénticos. Tests permanentes: cobertura de glifos de todos los textos e iconos, y que los tres pesos sean caras distintas.
+- 6-8: `.github/workflows/release.yml`: con una etiqueta `v*` compila en release y publica `Dockview.exe` más su SHA-256; ejecutado a mano (`workflow_dispatch`) solo sube el artefacto, sin publicar. **No se ha lanzado ninguna etiqueta** (crearía una publicación pública).
+
+Comprobaciones pendientes (con la app real, fuera de una partida):
+1. Compilar en release y ver el tamaño del `.exe` (hoy 5,3 MB; se espera ~3,5 MB) y que no aparece consola al hacer doble clic.
+2. Desde una terminal, `dockview.exe --screenshot x.png` imprime `saved …` y `ui_shots.ps1` sigue funcionando.
+3. `ui_shots.ps1` + `ui_compare.py` antes y después de las fuentes recortadas.
+4. Forzar un fallo de arranque (por ejemplo, sin GPU) y ver el cuadro de mensaje.
+5. 6-9: probar el `.exe` en un Windows limpio y anotar el resultado.
+6. Ejecutar «Release» a mano en GitHub para ver que produce el artefacto.
 
 **Pausa 6:** probar el `.exe` de la etiqueta en otra máquina.
 

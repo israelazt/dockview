@@ -39,7 +39,7 @@ impl Shell {
             return;
         };
         let size = window.inner_size();
-        eprintln!("the graphics device was lost: building the renderer again");
+        dockview_domain::log_warn!("the graphics device was lost: building the renderer again");
         // The old swap chain has to go before a new one can use the window.
         self.ui_gpu = None;
         self.renderer = None;
@@ -52,7 +52,7 @@ impl Shell {
                 self.ui.text.reset_atlas();
                 self.renderer = Some(renderer);
             }
-            Err(e) => eprintln!("could not build the renderer yet: {e}"),
+            Err(e) => dockview_domain::log_warn!("could not build the renderer yet: {e}"),
         }
         self.needs_redraw = true;
     }
@@ -91,7 +91,7 @@ impl Shell {
         if let Some(frame) = slot.take_latest() {
             arrived = Some(frame.arrived);
             if let Err(e) = renderer.upload(&frame) {
-                eprintln!("upload failed: {e}");
+                dockview_domain::log_warn!("upload failed: {e}");
                 graphics_lost |= is_device_lost(&e);
             }
             self.core.frame_uploaded((frame.width, frame.height));
@@ -131,7 +131,7 @@ impl Shell {
                 }
                 toasts.frame(ui, &model.theme, dt, animations);
                 if let Err(e) = gpu.render(context, &ui.draw_list()) {
-                    eprintln!("ui draw failed: {e}");
+                    dockview_domain::log_warn!("ui draw failed: {e}");
                 }
             },
             capture,
@@ -140,7 +140,7 @@ impl Shell {
             Ok(Some(shot)) => self.save_screenshot(&shot),
             Ok(None) => {}
             Err(e) => {
-                eprintln!("present failed: {e}");
+                dockview_domain::log_warn!("present failed: {e}");
                 graphics_lost |= is_device_lost(&e);
             }
         }
@@ -183,7 +183,7 @@ impl Shell {
             });
         match result {
             Ok(()) => println!("saved {}", path.display()),
-            Err(e) => eprintln!("could not save {}: {e}", path.display()),
+            Err(e) => dockview_domain::log_error!("could not save {}: {e}", path.display()),
         }
     }
 }

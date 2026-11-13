@@ -59,7 +59,14 @@ input, `Up`/`Down` volume, `Left`/`Right` audio sync, `P` render preset,
 `I` statistics.
 
 Settings are kept in `%APPDATA%\Dockview\settings.json` (a damaged file is kept
-as `settings.corrupt.json`).
+as `settings.corrupt.json`). The log is `%APPDATA%\Dockview\dockview.log` (it turns
+over at 1 MB into `dockview.log.old`); the release build has no console window,
+but from a terminal it prints there as well.
+
+The fonts are cut down to what the interface draws: after adding an icon or a
+new kind of text, run `python tools/subset_fonts.py` (needs `pip install
+fonttools`; the full fonts are in `crates/dockview-ui/assets/fonts/full/`). Tests
+fail if a text or an icon is missing from the cut fonts.
 
 ## Checking the interface
 

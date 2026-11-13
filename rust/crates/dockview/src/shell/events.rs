@@ -14,6 +14,7 @@ use winit::window::{Window, WindowId};
 
 use super::helpers::appearance_of;
 use super::keys::command_for;
+use super::present::StartupFailure;
 use super::*;
 
 impl ApplicationHandler for Shell {
@@ -37,7 +38,8 @@ impl ApplicationHandler for Shell {
         let window = match event_loop.create_window(attributes) {
             Ok(w) => w,
             Err(e) => {
-                eprintln!("could not create window: {e}");
+                dockview_domain::log_error!("could not create window: {e}");
+                self.fail_startup(StartupFailure::Window, &e.to_string());
                 event_loop.exit();
                 return;
             }
@@ -46,7 +48,8 @@ impl ApplicationHandler for Shell {
         let hwnd = match window.window_handle().map(|h| h.as_raw()) {
             Ok(RawWindowHandle::Win32(h)) => HWND(h.hwnd.get() as *mut c_void),
             _ => {
-                eprintln!("window has no Win32 handle");
+                dockview_domain::log_error!("window has no Win32 handle");
+                self.fail_startup(StartupFailure::Window, "the window has no Win32 handle");
                 event_loop.exit();
                 return;
             }
@@ -57,12 +60,15 @@ impl ApplicationHandler for Shell {
                 renderer.set_filter(filter_for(self.core.render_preset()));
                 match UiGpu::new(renderer.device()) {
                     Ok(gpu) => self.ui_gpu = Some(gpu),
-                    Err(e) => eprintln!("could not initialise the interface renderer: {e}"),
+                    Err(e) => dockview_domain::log_error!(
+                        "could not initialise the interface renderer: {e}"
+                    ),
                 }
                 self.renderer = Some(renderer);
             }
             Err(e) => {
-                eprintln!("could not initialise Direct3D: {e}");
+                dockview_domain::log_error!("could not initialise Direct3D: {e}");
+                self.fail_startup(StartupFailure::Graphics, &e.to_string());
                 event_loop.exit();
                 return;
             }
@@ -94,7 +100,7 @@ impl ApplicationHandler for Shell {
                 self.needs_redraw = true;
                 if let Some(renderer) = self.renderer.as_mut() {
                     if let Err(e) = renderer.resize(size.width, size.height) {
-                        eprintln!("resize failed: {e}");
+                        dockview_domain::log_warn!("resize failed: {e}");
                     }
                 }
             }

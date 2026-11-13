@@ -81,7 +81,7 @@ impl Core {
             .last_mic_device_id
             .clone()
             .or_else(|| self.automatic_mic());
-        eprintln!(
+        dockview_domain::log_info!(
             "microphone: {}",
             device
                 .as_deref()

@@ -159,6 +159,10 @@ strings! {
     ToastSourceFailed => "That window cannot be captured: back to the capture card", "No se puede capturar esa ventana: de vuelta a la capturadora";
     ToastAudioLost => "The capture card's sound stopped: reconnecting", "El sonido de la capturadora se detuvo: reconectando";
     ToastSettingsNotSaved => "Your settings could not be saved", "No se pudieron guardar tus ajustes";
+    StartupFailedTitle => "Dockview could not start", "Dockview no pudo iniciar";
+    StartupFailedWindow => "The window could not be created.", "No se pudo crear la ventana.";
+    StartupFailedGraphics => "Direct3D could not be started. Updating the graphics driver may fix it.", "No se pudo iniciar Direct3D. Actualizar el controlador de la tarjeta gráfica puede arreglarlo.";
+    StartupFailedLog => "Details are in the log:", "Los detalles están en el registro:";
     ToastAudioBack => "The sound is back", "El sonido volvió";
     ToastPipLost => "The corner source stopped and was taken off the picture", "La fuente de la esquina se detuvo y se quitó de la imagen";
     ToastSceneMissing => "Part of the scene is not available right now", "Una parte de la escena no está disponible ahora";

@@ -39,13 +39,13 @@ impl ReplayMachine for PlatformReplay {
     fn register_hotkeys(&self) -> Box<dyn ReplayHotkeys> {
         let hotkey = Hotkey::register();
         if !hotkey.is_registered() {
-            eprintln!(
+            dockview_domain::log_warn!(
                 "replay hotkey {} is taken by another program",
                 hotkey::LABEL
             );
         }
         if !hotkey.record_registered() {
-            eprintln!(
+            dockview_domain::log_warn!(
                 "record hotkey {} is taken by another program",
                 hotkey::RECORD_LABEL
             );

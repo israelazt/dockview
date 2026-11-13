@@ -8,6 +8,11 @@
 //! hands them to the application (`dockview-app`) and draws what it asks to
 //! show. The decisions are not here. See `rust/ARCHITECTURE.md`.
 
+// The release build is a window program: no console appears on a double click
+// (a terminal it was started from is attached to in `run`). Debug builds keep
+// the console, to see the log while developing.
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 #[cfg(not(windows))]
 compile_error!("Dockview only supports Windows.");
 

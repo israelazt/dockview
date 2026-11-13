@@ -22,7 +22,9 @@ fn dependencies_of(krate: &str) -> Vec<String> {
         let line = line.trim();
         if line.starts_with('[') {
             let table = line.trim_matches(|c| c == '[' || c == ']');
-            in_dependencies = table == "dependencies" || table.ends_with(".dependencies");
+            in_dependencies = table == "dependencies"
+                || table == "build-dependencies"
+                || table.ends_with(".dependencies");
         } else if in_dependencies && !line.starts_with('#') {
             let is_entry = line.contains('=') && !line.starts_with('"') && !line.starts_with(' ');
             if let (true, Some(name)) = (is_entry, line.split(['=', '.', ' ']).next()) {
@@ -59,6 +61,8 @@ fn each_crate_depends_only_on_what_the_layers_allow() {
                 "winit",
                 "png",
                 "windows",
+                // Build-time only: the icon and the manifest (see build.rs).
+                "winresource",
             ],
         ),
     ];
@@ -131,4 +135,97 @@ fn no_source_file_is_too_big() {
         "split these files:\n{}",
         too_big.join("\n")
     );
+}
+
+/// The part of a file before its `#[cfg(test)] mod tests`. Other items marked
+/// `#[cfg(test)]` (a helper module declared in `lib.rs`, say) do not end the
+/// production code.
+fn before_the_tests_module(text: &str) -> &str {
+    let mut from = 0;
+    while let Some(found) = text[from..].find("#[cfg(test)]") {
+        let at = from + found;
+        let after = text[at + "#[cfg(test)]".len()..].trim_start();
+        if after.starts_with("mod tests") {
+            return &text[..at];
+        }
+        from = at + 1;
+    }
+    text
+}
+
+/// Where the program may still print straight to the console, and why. Every
+/// other message goes through the log (`log_info!`, `log_warn!`, `log_error!`),
+/// which reaches the file and, when there is one, the console.
+const PRINT_EXCEPTIONS: [(&str, &str); 4] = [
+    (
+        "dockview/src/shell/window.rs",
+        "`--screenshot` reports the file it saved on the standard output, for scripts",
+    ),
+    (
+        "dockview-platform/src/log_file.rs",
+        "the log's own mirror to the console",
+    ),
+    (
+        "dockview/build.rs",
+        "a build script talks to cargo by printing `cargo:` lines",
+    ),
+    (
+        "dockview-platform/src/test_support.rs",
+        "a helper compiled only for tests",
+    ),
+];
+
+#[test]
+fn production_code_logs_instead_of_printing() {
+    let mut files = Vec::new();
+    rust_files(&workspace().join("crates"), &mut files);
+    let mut offenders = Vec::new();
+    for path in files {
+        let relative = path.strip_prefix(workspace()).unwrap().to_path_buf();
+        let shown = relative.to_string_lossy().replace('\\', "/");
+        // Examples and tests may print; so may the files listed above.
+        if relative
+            .components()
+            .any(|c| c.as_os_str() == "examples" || c.as_os_str() == "tests")
+            || shown.ends_with("/tests.rs")
+            || PRINT_EXCEPTIONS
+                .iter()
+                .any(|(allowed, _)| shown.ends_with(allowed))
+        {
+            continue;
+        }
+        let text = fs::read_to_string(&path).unwrap();
+        let production = before_the_tests_module(&text);
+        for (number, line) in production.lines().enumerate() {
+            let code = line.split("//").next().unwrap_or("");
+            if ["println!(", "eprintln!(", "print!(", "eprint!("]
+                .iter()
+                .any(|p| code.contains(p))
+            {
+                offenders.push(format!("{shown}:{}", number + 1));
+            }
+        }
+    }
+    assert!(
+        offenders.is_empty(),
+        "use log_info!/log_warn!/log_error! instead of printing (or add an exception with its reason):\n{}",
+        offenders.join("\n")
+    );
+}
+
+#[test]
+fn only_the_tests_module_ends_the_production_code() {
+    let file = "fn a() {}
+#[cfg(test)]
+mod testing;
+fn b() {}
+#[cfg(test)]
+mod tests {
+fn c() {}
+}
+";
+    let production = before_the_tests_module(file);
+    assert!(production.contains("fn b()"));
+    assert!(!production.contains("fn c()"));
+    assert_eq!(before_the_tests_module("fn only() {}"), "fn only() {}");
 }

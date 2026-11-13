@@ -279,7 +279,7 @@ impl ReplayService {
         match started {
             Some(Ok(())) => self.emit(AppEvent::RecordingStarted),
             Some(Err(e)) => {
-                eprintln!("recording not started: {e}");
+                dockview_domain::log_warn!("recording not started: {e}");
                 self.emit(AppEvent::RecordingFailed);
             }
             None => {}
@@ -374,7 +374,7 @@ impl ReplayService {
         }
         for outcome in outcomes {
             if let Err(e) = &outcome.result {
-                eprintln!("recording ended with an error: {e}");
+                dockview_domain::log_warn!("recording ended with an error: {e}");
             }
             if let Ok(clip) = &outcome.result {
                 self.last_saved = Some(clip.path.clone());
@@ -399,7 +399,7 @@ impl ReplayService {
                     self.emit(AppEvent::ClipSaved);
                 }
                 Err(e) => {
-                    eprintln!("clip not saved: {e}");
+                    dockview_domain::log_warn!("clip not saved: {e}");
                     self.emit(AppEvent::ClipFailed);
                 }
             }

@@ -184,7 +184,7 @@ impl Core {
             }
         }
         if missing > 0 {
-            eprintln!("{missing} source(s) of the scene could not be started");
+            dockview_domain::log_warn!("{missing} source(s) of the scene could not be started");
             self.emit(AppEvent::SceneMissing);
         }
         self.scene_base = Some(base);
