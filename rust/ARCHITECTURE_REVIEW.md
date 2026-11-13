@@ -75,9 +75,9 @@ Cada paso: sin cambio visible, comprobado con los mismos tests y, en la interfaz
 | D-1 ✅ | `Worker` común (hilo, parada, estado, cierre) en el núcleo | Quita 7 copias; base para fuentes nuevas | Bajo |
 | D-2 ✅ | Módulo `gpu` compartido (dispositivo, textura NV12, lectura al `Frame`) | Quita ≈ 120 líneas duplicadas | Bajo-medio |
 | D-3 ✅ | Partir `recorder.rs` en `recorder/` | Un archivo por responsabilidad | Medio (mucho movimiento, pocos cambios) |
-| D-4 | Extraer `Sources` de `App` (fuentes, audio y enrutado) | Mayor reducción de `main.rs`; permite probar el enrutado | Medio-alto |
-| D-5 | Extraer `ReplayService` (replay, grabación, micrófono) y `StatsService` | `App` queda como coordinador | Medio-alto |
-| D-6 | Capa de eventos entre servicios y la interfaz | Quita el `toast` de la lógica; base del bus de plugins | Medio |
+| D-4 ✅ | Extraer `Sources` de `App` (fuentes, audio y enrutado) | Mayor reducción de `main.rs`; permite probar el enrutado | Medio-alto |
+| D-5 ✅ | Extraer `ReplayService` (replay, grabación, micrófono) y `StatsService` | `App` queda como coordinador | Medio-alto |
+| D-6 ◐ | Capa de eventos entre servicios y la interfaz | Quita el `toast` de la lógica; base del bus de plugins | Medio |
 | D-7 ✅ | Macro de textos en `i18n.rs` | De cuatro ediciones a una | Bajo |
 | D-8 ✅ | Dividir las funciones de dibujo grandes y mover `Stats` fuera de `ui` | Interfaz más fácil de ampliar | Bajo-medio |
 
@@ -172,6 +172,13 @@ Comprobado con 386 tests y con la app real (capturadora + pantalla en la esquina
 
 ### Arranque de la app (2026-11-12)
 `App::new` dejó de decidir: `pick_video`, `pick_audio` (último usado, el que empareja con el vídeo, o el primero; ignora un índice fuera de rango) y `startup_scene` (la de la línea de comandos, la guardada o ninguna) son funciones puras con 3 tests en `sources.rs`. El final del arranque, que estaba escrito dos veces (con y sin patrón de prueba), es `finish_startup`. Comprobado con la app real arrancando sin argumentos (restaura el último dispositivo) y con `--video C7`.
+
+### Estado del plan (2026-11-12)
+Hecho: D-1, D-2, D-3, D-4, D-5, D-7 y D-8, y `main.rs` sin lógica (29 líneas). **D-6 está a medias** a propósito: `ReplayService` ya devuelve `Notice`s en vez de llamar a `toast`, que es lo que quitaba la lógica de la interfaz, pero todavía no hay un bus de eventos genérico; eso solo hace falta cuando lleguen los plugins (P-3) y diseñarlo antes sería adivinar. Un detalle pendiente de ese paso: `Notice` usa `ToastKind` de `ui`, así que un servicio sigue conociendo un tipo de la interfaz.
+
+Qué queda en `app/` y por qué: `App` sigue siendo el que une ventana, servicios y ajustes, y los métodos que quedan (`apply`, `model`, `render`, `update_stats`…) son la orquestación; las decisiones que había en ellos ya son funciones con tests. Cifras: `main.rs` 2020 → 29 líneas; `recorder.rs` 1548 → 5 archivos de ≤ 623; `i18n.rs` 734 → 334; 289 tests al empezar el día → 389.
+
+La latencia del visor grabando (~9 ms) **no cambió** respecto al commit anterior al refactor (medida alternando los dos binarios); sin grabar es 1,8 ms.
 
 ## Lo que no conviene tocar
 - La separación en dos crates y el sentido de las dependencias.
