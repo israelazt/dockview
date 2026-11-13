@@ -5,6 +5,7 @@
 mod actions;
 mod api;
 mod helpers;
+mod overlays;
 mod replay;
 mod scene_actions;
 mod scene_runtime;

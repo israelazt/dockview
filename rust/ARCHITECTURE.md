@@ -74,6 +74,6 @@ Las flechas solo van hacia abajo. `ui`, `app` y `platform` no se ven entre sí: 
 - [x] Paso 6: crate `dockview-ui` (la interfaz, sin Windows ni Direct3D; solo depende de `domain` y de cosmic-text). Lleva sus fuentes y sus 105 tests.
 - [x] Paso 7: puertos hechos: `SourceMachine`, `SystemProbe`, `StatsSink`, el resto de `ReplayMachine` y `Host` (la ventana). Todos los mensajes al usuario son `AppEvent`.
 - [x] Paso 8: `dockview-app` es una **biblioteca** que solo depende de `dockview-domain` (`Core`, con su API pública: `model`, `apply`, `on_key`, `tick`, `take_events`…), y el binario `dockview` es solo la ventana (`Shell`, el `Host` real y la raíz de composición `run`). Los cinco crates de la tabla existen y el compilador impone las dependencias.
-- [ ] Paso 9: las guardas automáticas (límite de líneas y dependencias), partir lo que las incumpla.
+- [x] Paso 9: guardas automáticas (`crates/dockview-domain/tests/architecture.rs`): dependencias permitidas por crate y límite de 400 líneas de código por archivo (1000 en `tests.rs`). Se partieron `encode`, `compose`, `render`, `scene_runtime` y `controls/scenes`.
 
 Cada paso deja la app funcionando, con todos los tests, una prueba con la app real y la comparación de la interfaz píxel a píxel, y se commitea y sube por separado.
