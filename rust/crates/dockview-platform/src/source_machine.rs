@@ -6,7 +6,7 @@ use std::sync::Arc;
 use std::thread;
 
 use dockview_domain::audio_status::AudioStatus;
-use dockview_domain::device::AudioDevice;
+use dockview_domain::device::{AudioDevice, DeviceLists};
 use dockview_domain::frame::FrameSlot;
 use dockview_domain::pcm::AudioTap;
 use dockview_domain::ports::{
@@ -20,13 +20,30 @@ use dockview_domain::sources::{
 use crate::audio::{default_capture_device, AudioEngine};
 use crate::capture::VideoCapture;
 use crate::compose::SceneCompositor as GpuCompositor;
+use crate::device_watch::DeviceWatch;
 use crate::screen::{list_monitors, list_windows, ScreenCapture};
 use crate::tap_capture::{CaptureSource, TapCapture};
 use crate::testsrc::TestSource;
 
 /// The machine the app really runs on.
-#[derive(Debug, Default, Clone, Copy)]
-pub struct PlatformSources;
+pub struct PlatformSources {
+    devices: DeviceWatch,
+}
+
+impl PlatformSources {
+    /// Lists the devices (waiting for the first list) and keeps watching them.
+    pub fn new() -> Self {
+        Self {
+            devices: DeviceWatch::start(),
+        }
+    }
+}
+
+impl Default for PlatformSources {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 /// Runs `work` on a helper thread. Media Foundation and WASAPI want an MTA
 /// thread, while winit initialises the main thread as an STA.
@@ -69,6 +86,10 @@ impl SourceMachine for PlatformSources {
 
     fn list_windows(&self) -> Vec<WindowInfo> {
         list_windows()
+    }
+
+    fn devices(&self) -> DeviceLists {
+        self.devices.lists()
     }
 
     fn start_playback(

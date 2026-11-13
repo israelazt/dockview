@@ -7,12 +7,19 @@ impl Core {
         slot: Arc<FrameSlot>,
         settings: AppSettings,
         ports: Ports,
-        video_devices: Vec<VideoDevice>,
-        audio_devices: Vec<AudioDevice>,
         cli: Cli,
         system_lang: Lang,
     ) -> Self {
         let system = ports.system;
+        // The synthetic source has no devices; the real machine lists them.
+        let DeviceLists {
+            video: video_devices,
+            audio: audio_devices,
+        } = if cli.test_pattern {
+            DeviceLists::default()
+        } else {
+            ports.sources.devices()
+        };
         let test_pattern = cli.test_pattern;
         let preview = cli.ui_preview;
         let show_stats = cli.show_stats;
@@ -56,6 +63,8 @@ impl Core {
             monitors: Vec::new(),
             windows: Vec::new(),
             sources_refreshed: Instant::now(),
+            audio_reconnect: Reconnect::new(),
+            audio_lost: false,
         };
 
         if test_pattern {

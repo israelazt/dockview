@@ -63,15 +63,28 @@ Hoy `maintain_source` (`core/sources.rs:238`) solo reconecta el vídeo, y los di
 
 | Tarea | Qué | Listo cuando |
 |---|---|---|
-| 2-1 | `app/sources.rs`: regla pura `audio_is_lost(&AudioStatus) -> bool` y reutilizar `Reconnect` para el audio | Tests de la regla |
-| 2-2 | `app`: `Core::maintain_audio(now)`: si el reproductor está `Disconnected` o `Failed`, lo reinicia tras la pausa de `Reconnect`, y reengancha el tap de grabación | Tests con el `Rig`: se reinicia, respeta la pausa, conserva volumen y sincronía |
-| 2-3 | `domain` + binario: `AppEvent::AudioLost` y `AudioBack`, sus textos en/es y su aviso en `toast_for` | Test de `toast_for` y guarda de i18n en verde |
-| 2-4 | `platform/audio.rs`: el hilo de salida comprueba cada segundo el id de la salida por defecto y se reabre sobre la nueva si cambió | Prueba real: enchufar y quitar auriculares; el sonido sigue |
-| 2-5 | `domain` + `platform`: puerto `SourceMachine::devices() -> DeviceLists`; en `platform`, un hilo enumera vídeo y audio cada 2 s y el puerto devuelve la última lista **sin bloquear** | Test del doble; la app arranca igual que antes |
-| 2-6 | `run.rs` deja de enumerar: `Core::new` recibe las listas del puerto | `run.rs` más corto; tests en verde |
-| 2-7 | `app/sources.rs`: regla pura `reconcile(viejos, nuevos, seleccionado)` → nuevo índice (por enlace simbólico o id, no por posición), aparecidos y desaparecidos | Tests: reordenar, quitar el seleccionado, añadir uno |
-| 2-8 | `app`: `Core` aplica `reconcile` en cada `tick`; si no hay fuente y aparece una capturadora, la arranca con su audio | Tests con el `Rig`: enchufar tras arrancar muestra imagen sin reiniciar |
-| 2-9 | Prueba real y anotarla en `CAPTURE_PLAN.md` (cierra el pendiente de la línea 116): desenchufar y reenchufar el USB viendo y grabando; arrancar sin capturadora y enchufarla | Resultado anotado |
+| 2-1 ✅ | `app/sources.rs`: regla pura `audio_is_lost(&AudioStatus) -> bool` y reutilizar `Reconnect` para el audio | Tests de la regla |
+| 2-2 ✅ | `app`: `Core::maintain_audio(now)`: si el reproductor está `Disconnected` o `Failed`, lo reinicia tras la pausa de `Reconnect`, y reengancha el tap de grabación | Tests con el `Rig`: se reinicia, respeta la pausa, conserva volumen y sincronía |
+| 2-3 ✅ | `domain` + binario: `AppEvent::AudioLost` y `AudioBack`, sus textos en/es y su aviso en `toast_for` | Test de `toast_for` y guarda de i18n en verde |
+| 2-4 ✅ | `platform/audio.rs`: el hilo de salida comprueba cada segundo el id de la salida por defecto y se reabre sobre la nueva si cambió | Prueba real: enchufar y quitar auriculares; el sonido sigue |
+| 2-5 ✅ | `domain` + `platform`: puerto `SourceMachine::devices() -> DeviceLists`; en `platform`, un hilo enumera vídeo y audio cada 2 s y el puerto devuelve la última lista **sin bloquear** | Test del doble; la app arranca igual que antes |
+| 2-6 ✅ | `run.rs` deja de enumerar: `Core::new` recibe las listas del puerto | `run.rs` más corto; tests en verde |
+| 2-7 ✅ | `app/sources.rs`: regla pura `reconcile(viejos, nuevos, seleccionado)` → nuevo índice (por enlace simbólico o id, no por posición), aparecidos y desaparecidos | Tests: reordenar, quitar el seleccionado, añadir uno |
+| 2-8 ✅ | `app`: `Core` aplica `reconcile` en cada `tick`; si no hay fuente y aparece una capturadora, la arranca con su audio | Tests con el `Rig`: enchufar tras arrancar muestra imagen sin reiniciar |
+| 2-9 ⏳ | Prueba real y anotarla en `CAPTURE_PLAN.md` (cierra el pendiente de la línea 116): desenchufar y reenchufar el USB viendo y grabando; arrancar sin capturadora y enchufarla | Resultado anotado |
+
+**Hecho (2026-11-13), salvo 2-9.** Diferencias con lo previsto:
+- 2-4: la salida de audio no se reabre sola; detecta el cambio de altavoces por defecto (cada 1 s) y termina con error, y `Core` la reinicia con la misma regla de 2-2.
+- 2-5: `PlatformSources::new()` espera la primera lista (máx. 5 s) y un hilo (`platform/src/device_watch.rs`) la refresca cada 2 s. Una lista que no se pudo leer conserva la anterior.
+- 2-8: si la capturadora en uso se desenchufa, la imagen **no** salta a otra cámara (la webcam): se queda en «problema» sin reintentos, y vuelve sola cuando regresa esa misma capturadora. Solo si no había nada abierto se elige la primera.
+- 2-9 queda a medias: el arranque real con la UGREEN se comprobó (1080p60, 0 saltados, audio activo, 2,2 ms) con el hilo de dispositivos en marcha. Falta la prueba con cables y altavoces, que necesita manos: ver la lista de abajo.
+- Sin cambios en `Core::new`: ahora **no recibe** las listas de dispositivos (las pide al puerto).
+
+Pruebas manuales pendientes de 2-9 (anotar el resultado en `CAPTURE_PLAN.md`):
+1. Ver con la UGREEN y desenchufar el USB: sale «problema» y el aviso de audio, sin saltar a otra cámara. Volver a enchufar: vuelven imagen y sonido solos.
+2. Lo mismo grabando (`--record`): el archivo se cierra o continúa bien.
+3. Arrancar sin capturadora y enchufarla con la app abierta.
+4. Con sonido en marcha, cambiar los altavoces de Windows (auriculares): el sonido pasa a los nuevos tras ~3 s con el aviso.
 
 **Pausa 2:** probar con la UGREEN y la pacoxi; decidir si los avisos de audio molestan o ayudan.
 

@@ -157,6 +157,8 @@ strings! {
     SourcePrimary => "primary", "principal";
     ToastSourceLost => "The captured window closed: back to the capture card", "La ventana capturada se cerró: de vuelta a la capturadora";
     ToastSourceFailed => "That window cannot be captured: back to the capture card", "No se puede capturar esa ventana: de vuelta a la capturadora";
+    ToastAudioLost => "The capture card's sound stopped: reconnecting", "El sonido de la capturadora se detuvo: reconectando";
+    ToastAudioBack => "The sound is back", "El sonido volvió";
     ToastPipLost => "The corner source stopped and was taken off the picture", "La fuente de la esquina se detuvo y se quitó de la imagen";
     ToastSceneMissing => "Part of the scene is not available right now", "Una parte de la escena no está disponible ahora";
     ScenesSection => "Scenes", "Escenas";

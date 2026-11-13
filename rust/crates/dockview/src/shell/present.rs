@@ -30,6 +30,8 @@ pub fn toast_for(event: AppEvent) -> (Key, ToastKind) {
         AppEvent::PipLost => (Key::ToastPipLost, ToastKind::Error),
         AppEvent::SourceLost => (Key::ToastSourceLost, ToastKind::Error),
         AppEvent::SourceFailed => (Key::ToastSourceFailed, ToastKind::Error),
+        AppEvent::AudioLost => (Key::ToastAudioLost, ToastKind::Error),
+        AppEvent::AudioBack => (Key::ToastAudioBack, ToastKind::Success),
     }
 }
 
@@ -66,6 +68,8 @@ mod tests {
             PipLost,
             SourceLost,
             SourceFailed,
+            AudioLost,
+            AudioBack,
         ] {
             let (key, _) = toast_for(event);
             assert!(!i18n::tr(i18n::Lang::En, key).is_empty(), "{event:?}");
@@ -73,5 +77,7 @@ mod tests {
         assert_eq!(toast_for(ClipSaved).1, ToastKind::Success);
         assert_eq!(toast_for(ClipFailed).1, ToastKind::Error);
         assert_eq!(toast_for(LowDisk).1, ToastKind::Error);
+        assert_eq!(toast_for(AudioLost).1, ToastKind::Error);
+        assert_eq!(toast_for(AudioBack).1, ToastKind::Success);
     }
 }

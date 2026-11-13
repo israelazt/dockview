@@ -1,8 +1,6 @@
 //! Small functions of the window side: what Windows says about animations and
 //! the theme, how the video is filtered, and the helper thread.
 
-use std::thread;
-
 use dockview_domain::settings::RenderPreset;
 use dockview_domain::theme::Appearance;
 use dockview_platform::render::Filter;
@@ -39,18 +37,6 @@ pub fn appearance_of(theme: Option<WindowTheme>) -> Appearance {
         Some(WindowTheme::Light) => Appearance::Light,
         _ => Appearance::Dark,
     }
-}
-
-/// Runs `work` on a helper thread. Media Foundation and WASAPI want an MTA
-/// thread, while winit initialises the main thread as an STA.
-pub fn on_helper_thread<T: Default + Send + 'static>(
-    work: impl FnOnce() -> Option<T> + Send + 'static,
-) -> T {
-    thread::spawn(work)
-        .join()
-        .ok()
-        .flatten()
-        .unwrap_or_default()
 }
 
 #[cfg(test)]

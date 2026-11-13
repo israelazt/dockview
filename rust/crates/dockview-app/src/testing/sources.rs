@@ -6,7 +6,7 @@
 use std::sync::{Arc, Mutex};
 
 use dockview_domain::audio_status::AudioStatus;
-use dockview_domain::device::AudioDevice;
+use dockview_domain::device::{AudioDevice, DeviceLists};
 use dockview_domain::frame::{FrameSlot, PixelFormat};
 use dockview_domain::pcm::AudioTap;
 use dockview_domain::ports::{
@@ -100,6 +100,8 @@ pub fn running_capture() -> CaptureStatus {
 pub struct SourcesWorld {
     pub monitors: Vec<MonitorInfo>,
     pub windows: Vec<WindowInfo>,
+    /// The capture cards and audio inputs Windows lists right now.
+    pub devices: DeviceLists,
     pub default_audio: Option<AudioDevice>,
     pub captures: Vec<Live<CaptureState>>,
     pub screens: Vec<Live<ScreenState>>,
@@ -245,6 +247,10 @@ impl SourceMachine for FakeSources {
 
     fn list_windows(&self) -> Vec<WindowInfo> {
         self.0.lock().unwrap().windows.clone()
+    }
+
+    fn devices(&self) -> DeviceLists {
+        self.0.lock().unwrap().devices.clone()
     }
 
     fn start_playback(

@@ -41,6 +41,10 @@ pub enum AppEvent {
     SourceLost,
     /// The screen or window could not be captured.
     SourceFailed,
+    /// The capture card's sound stopped; it is being reconnected.
+    AudioLost,
+    /// The capture card's sound is playing again.
+    AudioBack,
 }
 
 /// What to tell the user when a recording (or one of its files) ends, if

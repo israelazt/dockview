@@ -224,6 +224,29 @@ impl Core {
         }
     }
 
+    /// Starts the card's sound again when it stopped (the device went away or
+    /// the speakers changed), after a pause, and tells the user once.
+    pub(super) fn maintain_audio(&mut self, now: Instant) {
+        if self.source_kind != SourceKind::Capture || self.cli.test_pattern {
+            return;
+        }
+        let Some(status) = self.audio.as_ref().map(|a| a.status()) else {
+            return;
+        };
+        let lost = audio_is_lost(&status);
+        if lost && !self.audio_lost {
+            self.audio_lost = true;
+            self.emit(AppEvent::AudioLost);
+        } else if self.audio_lost && status == AudioStatus::Running {
+            self.audio_lost = false;
+            self.emit(AppEvent::AudioBack);
+        }
+        // With no input selected (it was unplugged), wait for it to come back.
+        if self.audio_reconnect.tick(lost, now) && self.audio_index.is_some() {
+            self.select_audio(self.audio_index);
+        }
+    }
+
     /// Restarts the capture thread if the device was lost.
     pub(super) fn maintain_source(&mut self, now: Instant) {
         if let Source::Screen(capture) = &self.source {

@@ -19,6 +19,13 @@ pub struct AudioDevice {
     pub device_id: String,
 }
 
+/// Everything Windows lists to capture from, at one moment.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct DeviceLists {
+    pub video: Vec<VideoDevice>,
+    pub audio: Vec<AudioDevice>,
+}
+
 /// Finds the first audio device whose name shares a significant word with the
 /// video device (for example both contain `UGREEN`).
 ///

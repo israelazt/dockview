@@ -10,6 +10,8 @@ pub mod capture;
 pub mod clips;
 pub mod compose;
 #[cfg(windows)]
+pub mod device_watch;
+#[cfg(windows)]
 pub mod encode;
 pub mod gpu;
 #[cfg(windows)]

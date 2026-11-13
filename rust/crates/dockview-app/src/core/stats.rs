@@ -27,12 +27,7 @@ impl Core {
         let video = self.source.video_state();
         let monitor_hz = self.host.monitor_hz();
         let gpu_ms = self.host.gpu_ms();
-        let audio_ok = self.audio.as_ref().map(|a| {
-            !matches!(
-                a.status(),
-                AudioStatus::Disconnected(_) | AudioStatus::Failed(_)
-            )
-        });
+        let audio_ok = self.audio.as_ref().map(|a| !audio_is_lost(&a.status()));
 
         let findings = diagnose(&Snapshot {
             video,

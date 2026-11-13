@@ -24,6 +24,9 @@ use dockview_domain::pcm::AudioTap;
 
 /// How often the render thread re-evaluates drift.
 const DRIFT_CHECK_INTERVAL: Duration = Duration::from_millis(500);
+/// How often the render thread checks that the default speakers are still the
+/// ones it plays on.
+const OUTPUT_CHECK_INTERVAL: Duration = Duration::from_secs(1);
 /// Event wait timeout; also how quickly the threads notice a stop request.
 const EVENT_TIMEOUT_MS: u32 = 100;
 /// How long `Drop` waits for the audio threads before detaching them.
@@ -241,6 +244,7 @@ fn render_loop(shared: &Shared, stop: &AtomicBool) -> Result<(), WasapiError> {
     let _ = initialize_mta();
     let enumerator = DeviceEnumerator::new()?;
     let device = enumerator.get_default_device(Direction::Render)?;
+    let output_id = device.get_id()?;
     let mut client = device.get_iaudioclient()?;
     init_stream(&mut client, Direction::Render, false)?;
     let event = client.set_get_eventhandle()?;
@@ -251,8 +255,21 @@ fn render_loop(shared: &Shared, stop: &AtomicBool) -> Result<(), WasapiError> {
     let mut bytes: Vec<u8> = Vec::new();
     let mut primed = false;
     let mut last_drift_check = Instant::now();
+    let mut last_output_check = Instant::now();
 
     while !stop.load(Ordering::Relaxed) {
+        if last_output_check.elapsed() >= OUTPUT_CHECK_INTERVAL {
+            last_output_check = Instant::now();
+            // The user plugged in headphones or picked other speakers: stop
+            // with an error, and the application opens the sound again on the
+            // new default output.
+            if default_output_changed(&enumerator, &output_id) {
+                let _ = client.stop_stream();
+                return Err(WasapiError::DeviceNotFound(
+                    "the default output changed".into(),
+                ));
+            }
+        }
         if event.wait_for_event(EVENT_TIMEOUT_MS).is_err() {
             continue;
         }
@@ -291,4 +308,12 @@ fn render_loop(shared: &Shared, stop: &AtomicBool) -> Result<(), WasapiError> {
     }
     let _ = client.stop_stream();
     Ok(())
+}
+
+/// Whether the default output is no longer the device with `current_id`.
+fn default_output_changed(enumerator: &DeviceEnumerator, current_id: &str) -> bool {
+    enumerator
+        .get_default_device(Direction::Render)
+        .and_then(|device| device.get_id())
+        .is_ok_and(|id| id != current_id)
 }

@@ -4,6 +4,7 @@
 
 use std::time::Duration;
 
+use dockview_domain::device::{AudioDevice, DeviceLists, VideoDevice};
 use dockview_domain::events::AppEvent;
 use dockview_domain::recording::{RecordingInfo, RecordingState};
 use dockview_domain::settings::AppSettings;
@@ -293,4 +294,238 @@ fn the_command_line_can_open_the_stats_panel() {
         })
         .build();
     assert!(rig.core.model().stats_open);
+}
+
+// -- Recovery of the sound -----------------------------------------------
+
+#[test]
+fn healthy_sound_is_left_alone() {
+    let mut rig = Rig::new();
+    for _ in 0..10 {
+        rig.advance(SECOND);
+    }
+    assert_eq!(rig.sources.lock().unwrap().playbacks.len(), 1);
+    assert!(rig.core.take_events().is_empty());
+}
+
+#[test]
+fn lost_sound_is_started_again_after_a_pause_and_the_user_is_told() {
+    use dockview_domain::audio_status::AudioStatus;
+    let mut rig = Rig::new();
+    rig.core.apply(Action::SetVolume(0.4));
+    rig.core.apply(Action::SetSync(30));
+    rig.sources
+        .lock()
+        .unwrap()
+        .last_playback()
+        .lock()
+        .unwrap()
+        .status = AudioStatus::Disconnected("unplugged".into());
+
+    rig.advance(Duration::from_millis(100)); // starts the pause
+    assert_eq!(rig.core.take_events(), [AppEvent::AudioLost]);
+    rig.advance(SECOND);
+    assert_eq!(rig.sources.lock().unwrap().playbacks.len(), 1, "too soon");
+
+    rig.advance(SECOND + SECOND / 2);
+    {
+        let sources = rig.sources.lock().unwrap();
+        assert_eq!(sources.playbacks.len(), 2, "it must try again");
+        assert_eq!(sources.open_playbacks(), 1, "the dead one is let go");
+        let playback = sources.last_playback();
+        let playback = playback.lock().unwrap();
+        assert_eq!(playback.device_id, "audio:ugreen");
+        assert_eq!((playback.volume, playback.offset_ms), (0.4, 30));
+        assert!(playback.tapped, "the recorder must be fed again");
+    }
+
+    rig.advance(Duration::from_millis(100));
+    assert_eq!(rig.core.take_events(), [AppEvent::AudioBack]);
+}
+
+#[test]
+fn sound_that_keeps_failing_is_retried_but_announced_once() {
+    use dockview_domain::audio_status::AudioStatus;
+    let mut rig = Rig::new();
+    rig.sources
+        .lock()
+        .unwrap()
+        .last_playback()
+        .lock()
+        .unwrap()
+        .status = AudioStatus::Failed("no device".into());
+    rig.advance(Duration::from_millis(100));
+    assert_eq!(rig.core.take_events(), [AppEvent::AudioLost]);
+
+    // Every new attempt fails too.
+    for _ in 0..3 {
+        rig.advance(Duration::from_millis(2100));
+        rig.sources
+            .lock()
+            .unwrap()
+            .last_playback()
+            .lock()
+            .unwrap()
+            .status = AudioStatus::Failed("no device".into());
+    }
+    assert!(rig.sources.lock().unwrap().playbacks.len() >= 3);
+    assert!(rig.core.take_events().is_empty());
+}
+
+// -- Plugging and unplugging ---------------------------------------------
+
+fn ugreen() -> (VideoDevice, AudioDevice) {
+    (
+        VideoDevice {
+            friendly_name: "UGREEN 25173".into(),
+            symbolic_link: "link:ugreen".into(),
+        },
+        AudioDevice {
+            friendly_name: "HDMI (UGREEN 25173)".into(),
+            device_id: "audio:ugreen".into(),
+        },
+    )
+}
+
+fn webcam() -> (VideoDevice, AudioDevice) {
+    (
+        VideoDevice {
+            friendly_name: "Integrated Camera".into(),
+            symbolic_link: "link:webcam".into(),
+        },
+        AudioDevice {
+            friendly_name: "Microphone (Integrated Camera)".into(),
+            device_id: "audio:webcam".into(),
+        },
+    )
+}
+
+fn plug(rig: &Rig, devices: &[(VideoDevice, AudioDevice)]) {
+    rig.sources.lock().unwrap().devices = DeviceLists {
+        video: devices.iter().map(|d| d.0.clone()).collect(),
+        audio: devices.iter().map(|d| d.1.clone()).collect(),
+    };
+}
+
+#[test]
+fn a_card_plugged_in_after_starting_is_opened_with_its_own_audio() {
+    let mut rig = Rig::builder().build();
+    assert!(rig.sources.lock().unwrap().captures.is_empty());
+
+    plug(&rig, &[webcam(), ugreen()]);
+    rig.advance(Duration::from_millis(100));
+
+    let sources = rig.sources.lock().unwrap();
+    // Nothing was open, so it takes the first card, like a normal start.
+    assert_eq!(sources.last_capture().lock().unwrap().link, "link:webcam");
+    assert_eq!(
+        sources.last_playback().lock().unwrap().device_id,
+        "audio:webcam"
+    );
+    drop(sources);
+    assert_eq!(rig.core.model().video_devices.len(), 2);
+}
+
+#[test]
+fn an_extra_device_plugged_in_does_not_disturb_what_is_running() {
+    let mut rig = Rig::builder()
+        .video(&[("UGREEN 25173", "link:ugreen")])
+        .audio(&[("HDMI (UGREEN 25173)", "audio:ugreen")])
+        .build();
+
+    plug(&rig, &[webcam(), ugreen()]); // the new one lands first in the list
+    rig.advance(Duration::from_millis(100));
+
+    let sources = rig.sources.lock().unwrap();
+    assert_eq!(sources.captures.len(), 1, "no restart");
+    assert_eq!(sources.playbacks.len(), 1, "no restart");
+    drop(sources);
+    let model = rig.core.model();
+    assert_eq!(model.video_devices.len(), 2);
+    assert_eq!(
+        model.video_selected,
+        Some(1),
+        "the selection followed its card"
+    );
+}
+
+#[test]
+fn unplugging_the_card_does_not_move_the_picture_to_the_webcam() {
+    let mut rig = Rig::new(); // UGREEN selected, webcam also listed
+    plug(&rig, &[webcam()]);
+    rig.sources
+        .lock()
+        .unwrap()
+        .last_capture()
+        .lock()
+        .unwrap()
+        .status = CaptureStatus::Disconnected {
+        reason: "unplugged".into(),
+    };
+
+    for _ in 0..6 {
+        rig.advance(SECOND);
+    }
+
+    let sources = rig.sources.lock().unwrap();
+    assert_eq!(
+        sources.captures.len(),
+        1,
+        "no retries on a card that is gone"
+    );
+    drop(sources);
+    let model = rig.core.model();
+    assert_eq!(model.video_selected, None);
+    assert_eq!(model.status, StatusKind::Problem);
+}
+
+#[test]
+fn the_card_that_comes_back_is_used_again_with_its_audio() {
+    let mut rig = Rig::new();
+    plug(&rig, &[webcam()]);
+    rig.sources
+        .lock()
+        .unwrap()
+        .last_capture()
+        .lock()
+        .unwrap()
+        .status = CaptureStatus::Disconnected {
+        reason: "unplugged".into(),
+    };
+    rig.advance(SECOND);
+
+    plug(&rig, &[webcam(), ugreen()]);
+    rig.advance(SECOND);
+
+    let sources = rig.sources.lock().unwrap();
+    assert_eq!(sources.captures.len(), 2);
+    assert_eq!(sources.open_captures(), 1);
+    assert_eq!(sources.last_capture().lock().unwrap().link, "link:ugreen");
+    assert_eq!(
+        sources.last_playback().lock().unwrap().device_id,
+        "audio:ugreen"
+    );
+    drop(sources);
+    assert_eq!(rig.core.model().video_selected, Some(1));
+}
+
+#[test]
+fn an_audio_input_that_comes_back_alone_is_used_again() {
+    let mut rig = Rig::new();
+    // Only the audio of the card goes away (a flaky cable).
+    rig.sources
+        .lock()
+        .unwrap()
+        .devices
+        .audio
+        .retain(|a| a.device_id != "audio:ugreen");
+    rig.advance(SECOND);
+    assert_eq!(rig.core.model().audio_selected, None);
+
+    plug(&rig, &[webcam(), ugreen()]);
+    rig.advance(SECOND);
+
+    let playback = rig.sources.lock().unwrap().last_playback();
+    assert_eq!(playback.lock().unwrap().device_id, "audio:ugreen");
+    assert!(rig.core.model().audio_selected.is_some());
 }

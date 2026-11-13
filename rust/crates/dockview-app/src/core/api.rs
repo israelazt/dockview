@@ -23,7 +23,9 @@ impl Core {
 
     /// [`Core::tick`] at the time `now`, so tests can move the clock by hand.
     pub fn tick_at(&mut self, now: Instant, sources_open: bool) {
+        self.refresh_devices();
         self.maintain_source(now);
+        self.maintain_audio(now);
         self.maintain_overlays(now);
         self.tick_transition();
         if sources_open && now.saturating_duration_since(self.sources_refreshed) > SOURCES_REFRESH {

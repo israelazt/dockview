@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use crate::audio_status::AudioStatus;
-use crate::device::AudioDevice;
+use crate::device::{AudioDevice, DeviceLists};
 use crate::frame::FrameSlot;
 use crate::pcm::AudioTap;
 use crate::recording::{
@@ -166,6 +166,9 @@ pub trait SourceMachine {
 
     fn list_monitors(&self) -> Vec<MonitorInfo>;
     fn list_windows(&self) -> Vec<WindowInfo>;
+    /// The capture cards and audio inputs that exist now, as of the last scan.
+    /// It never waits: the machine keeps the lists up to date on its own.
+    fn devices(&self) -> DeviceLists;
 
     /// Plays the sound of the audio device `device_id` to the speakers.
     fn start_playback(

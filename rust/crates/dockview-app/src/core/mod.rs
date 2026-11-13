@@ -4,6 +4,7 @@
 
 mod actions;
 mod api;
+mod devices;
 mod helpers;
 mod overlays;
 mod replay;
@@ -20,7 +21,9 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use dockview_domain::audio_status::AudioStatus;
-use dockview_domain::device::{match_audio_to_video, pick_microphone, AudioDevice, VideoDevice};
+use dockview_domain::device::{
+    match_audio_to_video, pick_microphone, AudioDevice, DeviceLists, VideoDevice,
+};
 use dockview_domain::device_names;
 use dockview_domain::diagnostics::{diagnose, Finding, Snapshot, VideoState};
 use dockview_domain::events::AppEvent;
@@ -54,8 +57,9 @@ use crate::cli::Cli;
 use crate::keys::KeyCommand;
 use crate::replay_service::{RecordToggle, ReplayService};
 use crate::sources::{
-    find_window, monitor_label, pick_audio, pick_video, startup_scene, status_kind,
-    video_state_of_capture, video_state_of_screen, AudioRoute, Reconnect, SourceKind, StartupScene,
+    audio_is_lost, find_window, monitor_label, pick_audio, pick_video, reconcile, startup_scene,
+    status_kind, video_state_of_capture, video_state_of_screen, AudioRoute, Reconnect, SourceKind,
+    StartupScene,
 };
 use crate::telemetry::{Rates, Telemetry};
 
@@ -150,6 +154,10 @@ pub struct Core {
     monitors: Vec<MonitorInfo>,
     windows: Vec<WindowInfo>,
     sources_refreshed: Instant,
+    /// When to start the card's sound again after it was lost.
+    audio_reconnect: Reconnect,
+    /// Whether the user was told the sound was lost (so the return is told too).
+    audio_lost: bool,
     /// What the application asks of the window (the real one, or none in tests).
     host: Box<dyn Host>,
 }

@@ -3,7 +3,7 @@
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use dockview_domain::device::{AudioDevice, VideoDevice};
+use dockview_domain::device::{AudioDevice, DeviceLists, VideoDevice};
 use dockview_domain::frame::FrameSlot;
 use dockview_domain::i18n::Lang;
 use dockview_domain::settings::{AppSettings, MemoryStore, SettingsStore};
@@ -92,6 +92,10 @@ impl RigBuilder {
     pub fn build(self) -> Rig {
         let replay = replay::world();
         let (machine, sources) = FakeSources::new();
+        sources.lock().unwrap().devices = DeviceLists {
+            video: self.video,
+            audio: self.audio,
+        };
         let host = SharedHost::default();
         let stats = FakeStats::default();
         let stats_log = Arc::clone(&stats.0);
@@ -109,8 +113,6 @@ impl RigBuilder {
             Arc::new(FrameSlot::new()),
             self.settings,
             ports,
-            self.video,
-            self.audio,
             self.cli,
             Lang::En,
         );

@@ -7,6 +7,7 @@
 
 use std::time::{Duration, Instant};
 
+use dockview_domain::audio_status::AudioStatus;
 use dockview_domain::device::{AudioDevice, VideoDevice};
 use dockview_domain::diagnostics::VideoState;
 use dockview_domain::sources::CaptureStatus;
@@ -95,6 +96,32 @@ impl Reconnect {
     }
 }
 
+/// What changed between two lists of devices.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Reconciled {
+    /// Whether the new list differs from the old one at all.
+    pub changed: bool,
+    /// Where the selected device is in the new list; `None` when nothing was
+    /// selected or the selected device is gone.
+    pub selected: Option<usize>,
+}
+
+/// Compares the list of devices before and after a scan. The selected device
+/// is followed by its `key` (a link or an id), not by its position, because
+/// plugging something in can shift every index.
+pub fn reconcile<T: PartialEq>(
+    old: &[T],
+    new: &[T],
+    selected_key: Option<&str>,
+    key: impl Fn(&T) -> &str,
+) -> Reconciled {
+    Reconciled {
+        changed: old != new,
+        selected: selected_key
+            .and_then(|wanted| new.iter().position(|device| key(device) == wanted)),
+    }
+}
+
 /// The window whose title is `title`: an exact match (ignoring case) first,
 /// then one that contains the text. Never one of our own (`own_pid`).
 pub fn find_window<'a>(
@@ -123,6 +150,15 @@ pub fn monitor_label(lang: Lang, index: usize, monitor: &MonitorInfo) -> String 
         monitor.width,
         monitor.height,
         primary
+    )
+}
+
+/// Whether the sound pipeline stopped for good (the device went away or could
+/// not be opened) and has to be started again.
+pub fn audio_is_lost(status: &AudioStatus) -> bool {
+    matches!(
+        status,
+        AudioStatus::Disconnected(_) | AudioStatus::Failed(_)
     )
 }
 
@@ -243,6 +279,60 @@ mod tests {
             height: 1080,
             primary,
         }
+    }
+
+    fn card(name: &str) -> VideoDevice {
+        VideoDevice {
+            friendly_name: name.into(),
+            symbolic_link: format!("link:{name}"),
+        }
+    }
+
+    #[test]
+    fn an_unchanged_list_is_not_a_change_and_keeps_the_selection() {
+        let list = [card("a"), card("b")];
+        let r = reconcile(&list, &list, Some("link:b"), |d| &d.symbolic_link);
+        assert_eq!(
+            r,
+            Reconciled {
+                changed: false,
+                selected: Some(1)
+            }
+        );
+    }
+
+    #[test]
+    fn the_selection_is_followed_when_the_devices_shift() {
+        let old = [card("a"), card("b")];
+        let new = [card("new"), card("a"), card("b")];
+        let r = reconcile(&old, &new, Some("link:b"), |d| &d.symbolic_link);
+        assert!(r.changed);
+        assert_eq!(r.selected, Some(2));
+    }
+
+    #[test]
+    fn a_selected_device_that_vanished_is_no_longer_selected() {
+        let old = [card("a"), card("b")];
+        let new = [card("a")];
+        let r = reconcile(&old, &new, Some("link:b"), |d| &d.symbolic_link);
+        assert!(r.changed);
+        assert_eq!(r.selected, None);
+    }
+
+    #[test]
+    fn nothing_selected_stays_that_way() {
+        let r = reconcile(&[], &[card("a")], None, |d: &VideoDevice| &d.symbolic_link);
+        assert!(r.changed);
+        assert_eq!(r.selected, None);
+    }
+
+    #[test]
+    fn only_a_disconnected_or_failed_pipeline_counts_as_lost() {
+        assert!(audio_is_lost(&AudioStatus::Disconnected("gone".into())));
+        assert!(audio_is_lost(&AudioStatus::Failed("no device".into())));
+        assert!(!audio_is_lost(&AudioStatus::Starting));
+        assert!(!audio_is_lost(&AudioStatus::Running));
+        assert!(!audio_is_lost(&AudioStatus::Stopped));
     }
 
     #[test]

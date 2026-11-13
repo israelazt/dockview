@@ -10,8 +10,6 @@ use dockview_app::{Core, Ports};
 use dockview_domain::frame::FrameSlot;
 use dockview_domain::ports::StatsSink;
 use dockview_domain::settings::{AppSettings, SettingsStore};
-use dockview_platform::audio::enumerate_audio_devices;
-use dockview_platform::mf::{enumerate_video_devices, MfSession};
 use dockview_platform::perf::PlatformSystem;
 use dockview_platform::replay_machine::PlatformReplay;
 use dockview_platform::settings_store::FileSettingsStore;
@@ -20,7 +18,6 @@ use dockview_platform::stats_log::StatsLog;
 use dockview_platform::system_lang::detect_system_lang;
 use winit::event_loop::{ControlFlow, EventLoop};
 
-use crate::shell::helpers::on_helper_thread;
 use crate::shell::host::{HostShared, ShellHost};
 use crate::shell::Shell;
 
@@ -33,18 +30,6 @@ pub fn run() {
             eprintln!("dockview: {e}");
             std::process::exit(2);
         }
-    };
-
-    let (video_devices, audio_devices) = if cli.test_pattern {
-        (Vec::new(), Vec::new())
-    } else {
-        (
-            on_helper_thread(|| {
-                let session = MfSession::start().ok()?;
-                enumerate_video_devices(&session).ok()
-            }),
-            on_helper_thread(|| enumerate_audio_devices().ok()),
-        )
     };
 
     let event_loop = match EventLoop::new() {
@@ -67,7 +52,7 @@ pub fn run() {
     let ports = Ports {
         settings: Box::new(store),
         replay: Box::new(PlatformReplay),
-        sources: Box::new(PlatformSources),
+        sources: Box::new(PlatformSources::new()),
         system: Arc::new(PlatformSystem::new()),
         stats_sink: cli
             .log_stats
@@ -76,15 +61,7 @@ pub fn run() {
             .map(|log| Box::new(log) as Box<dyn StatsSink>),
         host: Box::new(ShellHost::new(Rc::clone(&host))),
     };
-    let core = Core::new(
-        slot,
-        saved,
-        ports,
-        video_devices,
-        audio_devices,
-        cli,
-        detect_system_lang(),
-    );
+    let core = Core::new(slot, saved, ports, cli, detect_system_lang());
     let mut shell = Shell::new(core, host);
     if let Err(e) = event_loop.run_app(&mut shell) {
         eprintln!("event loop error: {e}");
