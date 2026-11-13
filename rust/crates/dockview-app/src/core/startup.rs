@@ -43,6 +43,7 @@ impl Core {
             host: ports.host,
             system_lang,
             stats_open: show_stats,
+            studio: false,
             stats: Stats::default(),
             stats_sink: ports.stats_sink,
             telemetry: Telemetry::new(Arc::clone(&system)),

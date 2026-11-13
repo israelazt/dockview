@@ -178,11 +178,20 @@ pub struct Model {
     pub lang_mode: LangMode,
     pub video_mode: VideoModePref,
     pub stats_open: bool,
+    /// Studio mode: the side panel is open (it stays hidden in full screen).
+    pub studio: bool,
     pub replay: ReplayView,
     pub mic: MicView,
     pub rec: RecView,
     pub sources: SourcesView,
     pub scenes: ScenesView,
+}
+
+impl Model {
+    /// Whether the Studio panel is on screen: full screen shows only the video.
+    pub fn studio_visible(&self) -> bool {
+        self.studio && !self.fullscreen
+    }
 }
 
 /// A change the user asked for.
@@ -206,6 +215,8 @@ pub enum Action {
     SetLang(LangMode),
     SetVideoMode(VideoModePref),
     ToggleStats,
+    /// Open or close the Studio side panel.
+    ToggleStudio,
     ToggleReplay,
     /// Move the clip length one step longer (+1) or shorter (-1).
     ReplayLength(i32),
@@ -251,4 +262,51 @@ pub struct ScenesView {
     pub layers: Vec<LayerView>,
     /// Whether another layer fits in the active scene.
     pub can_add: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn model(studio: bool, fullscreen: bool) -> Model {
+        Model {
+            theme: Theme::dark(),
+            lang: Lang::En,
+            status: StatusKind::Live,
+            resolution: String::new(),
+            volume: 1.0,
+            sync_ms: 0,
+            fullscreen,
+            video_devices: vec![],
+            video_selected: None,
+            audio_devices: vec![],
+            audio_selected: None,
+            mic_devices: vec![],
+            mic_selected: None,
+            preset: RenderPreset::Balanced,
+            theme_mode: ThemeMode::Auto,
+            lang_mode: LangMode::Auto,
+            video_mode: VideoModePref::Auto,
+            stats_open: false,
+            studio,
+            replay: ReplayView::off("Ctrl+Alt+S"),
+            mic: MicView::off(),
+            rec: RecView::idle(),
+            sources: SourcesView::default(),
+            scenes: ScenesView::default(),
+        }
+    }
+
+    #[test]
+    fn the_studio_panel_shows_only_when_asked_for() {
+        assert!(model(true, false).studio_visible());
+        assert!(!model(false, false).studio_visible());
+    }
+
+    #[test]
+    fn full_screen_hides_the_studio_panel_without_closing_it() {
+        let m = model(true, true);
+        assert!(!m.studio_visible());
+        assert!(m.studio, "leaving full screen brings it back");
+    }
 }

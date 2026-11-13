@@ -126,6 +126,7 @@ pub struct Core {
     system_appearance: Appearance,
     system_lang: Lang,
     stats_open: bool,
+    studio: bool,
     stats: Stats,
     stats_sink: Option<Box<dyn StatsSink>>,
     /// The once-a-second counters (see `telemetry`).
