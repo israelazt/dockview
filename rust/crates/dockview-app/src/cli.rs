@@ -2,7 +2,8 @@
 //!
 //! ```text
 //! dockview.exe [--test-pattern] [--ui-preview] [--theme auto|dark|light]
-//!              [--lang auto|en|es] [--scale N] [--open-settings] [--stats]
+//!              [--lang auto|en|es] [--scale N] [--open-settings] [--open-studio]
+//!              [--stats]
 //!              [--log-stats FILE.csv] [--video NAME]
 //!              [--screenshot FILE.png] [--pip SOURCE] [--pip-size N]
 //! ```
@@ -69,6 +70,8 @@ pub struct Cli {
     pub open_sources: bool,
     /// Start with the scenes popover open.
     pub open_scenes: bool,
+    /// Start with the Studio side panel open.
+    pub open_studio: bool,
     /// Start with the microphone on (for tests and screenshots; it is off by default).
     pub mic: bool,
     /// Start recording right away (for tests and screenshots).
@@ -149,6 +152,7 @@ impl Cli {
                 "--open-replay" => cli.open_replay = true,
                 "--open-sources" => cli.open_sources = true,
                 "--open-scenes" => cli.open_scenes = true,
+                "--open-studio" => cli.open_studio = true,
                 "--mic" => cli.mic = true,
                 "--record" => cli.record = true,
                 "--screen" => {
@@ -245,6 +249,12 @@ mod tests {
     fn open_settings_is_a_flag() {
         assert!(parse(&["--open-settings"]).unwrap().open_settings);
         assert!(!parse(&[]).unwrap().open_settings);
+    }
+
+    #[test]
+    fn open_studio_is_a_flag() {
+        assert!(parse(&["--open-studio"]).unwrap().open_studio);
+        assert!(!parse(&[]).unwrap().open_studio);
     }
 
     #[test]

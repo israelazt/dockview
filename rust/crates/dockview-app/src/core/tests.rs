@@ -690,3 +690,84 @@ fn a_file_from_before_monitor_names_still_restores_by_position() {
         CaptureTarget::Monitor(2)
     );
 }
+
+// -- The Studio panel by keyboard -----------------------------------------
+
+#[test]
+fn tab_opens_and_closes_the_studio_panel_and_remembers_it() {
+    use crate::keys::KeyCommand;
+    let mut rig = Rig::new();
+    rig.core.on_key(KeyCommand::ToggleStudio);
+    assert!(rig.core.model().studio);
+    assert!(rig.saved_soon().expect("saved").studio_open);
+
+    rig.core.on_key(KeyCommand::ToggleStudio);
+    assert!(!rig.core.model().studio);
+    assert!(!rig.saved_soon().expect("saved").studio_open);
+}
+
+#[test]
+fn escape_closes_the_studio_panel_when_nothing_else_is_open() {
+    use crate::keys::KeyCommand;
+    let mut rig = Rig::builder()
+        .settings(AppSettings {
+            studio_open: true,
+            ..AppSettings::default()
+        })
+        .build();
+    assert!(rig.core.model().studio);
+
+    rig.core.on_key(KeyCommand::Escape);
+    assert!(!rig.core.model().studio);
+    assert!(!rig.saved_soon().expect("saved").studio_open);
+
+    // With the panel closed, Escape does nothing at all.
+    rig.core.on_key(KeyCommand::Escape);
+    assert!(!rig.core.model().studio);
+    assert!(rig.host.lock().unwrap().fullscreen.is_empty());
+}
+
+#[test]
+fn escape_in_full_screen_leaves_full_screen_and_keeps_the_panel_for_afterwards() {
+    use crate::keys::KeyCommand;
+    let mut rig = Rig::builder()
+        .settings(AppSettings {
+            studio_open: true,
+            ..AppSettings::default()
+        })
+        .build();
+    rig.core.on_key(KeyCommand::ToggleFullscreen);
+    assert!(
+        !rig.core.model().studio_visible(),
+        "full screen hides the panel"
+    );
+
+    rig.core.on_key(KeyCommand::Escape);
+    assert_eq!(rig.host.lock().unwrap().fullscreen, [true, false]);
+    assert!(
+        rig.core.model().studio_visible(),
+        "leaving full screen brings the panel back"
+    );
+}
+
+#[test]
+fn the_panels_close_button_and_the_pills_button_do_the_same_as_tab() {
+    let mut rig = Rig::new();
+    rig.core.apply(Action::ToggleStudio);
+    assert!(rig.core.model().studio);
+    rig.core.apply(Action::ToggleStudio);
+    assert!(!rig.core.model().studio);
+}
+
+#[test]
+fn the_command_line_can_start_with_the_studio_panel_open() {
+    let rig = Rig::builder()
+        .cli(crate::cli::Cli {
+            open_studio: true,
+            ..crate::cli::Cli::default()
+        })
+        .build();
+    assert!(rig.core.model().studio);
+    let closed = Rig::new();
+    assert!(!closed.core.model().studio, "closed unless it is asked for");
+}

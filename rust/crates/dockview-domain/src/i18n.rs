@@ -159,6 +159,16 @@ strings! {
     ToastSourceFailed => "That window cannot be captured: back to the capture card", "No se puede capturar esa ventana: de vuelta a la capturadora";
     ToastAudioLost => "The capture card's sound stopped: reconnecting", "El sonido de la capturadora se detuvo: reconectando";
     ToastSettingsNotSaved => "Your settings could not be saved", "No se pudieron guardar tus ajustes";
+    StudioTitle => "Studio", "Estudio";
+    StudioSources => "Sources", "Fuentes";
+    StudioScenes => "Scenes", "Escenas";
+    StudioAudio => "Audio", "Audio";
+    StudioRecording => "Recording", "Grabación";
+    StudioSettings => "Settings", "Ajustes";
+    StudioStats => "Statistics", "Estadísticas";
+    StudioEmpty => "Nothing here yet", "Aún no hay nada aquí";
+    TipStudio => "Open the Studio panel with every tool (Tab)", "Abrir el panel Estudio con todas las herramientas (Tab)";
+    TipStudioClose => "Close the Studio panel (Tab)", "Cerrar el panel Estudio (Tab)";
     StartupFailedTitle => "Dockview could not start", "Dockview no pudo iniciar";
     StartupFailedWindow => "The window could not be created.", "No se pudo crear la ventana.";
     StartupFailedGraphics => "Direct3D could not be started. Updating the graphics driver may fix it.", "No se pudo iniciar Direct3D. Actualizar el controlador de la tarjeta gráfica puede arreglarlo.";

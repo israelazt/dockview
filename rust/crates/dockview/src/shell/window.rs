@@ -3,6 +3,7 @@
 use dockview_domain::render_plan::{render_plan, video_frame_due};
 use dockview_domain::view::RecState;
 use dockview_platform::render::{is_device_lost, Renderer, Screenshot};
+use dockview_ui::studio::route_pointer;
 use winit::window::CursorIcon;
 
 use super::*;
@@ -13,7 +14,7 @@ impl Shell {
         let Some(window) = &self.window else {
             return;
         };
-        let pointer = self.controls.wants_pointer();
+        let pointer = self.controls.wants_pointer() || self.studio.wants_pointer();
         if pointer != self.cursor_pointer {
             self.cursor_pointer = pointer;
             window.set_cursor(if pointer {
@@ -73,6 +74,16 @@ impl Shell {
         self.last_frame = now;
         let pointer = self.pointer;
         let scale = self.ui_scale;
+        // The Studio panel opens (and in full screen, goes at once) and takes
+        // its room; the pointer belongs to the video or to the panel.
+        self.studio
+            .update(model.studio_visible(), model.fullscreen, dt);
+        let window_size = self.window.as_ref().map_or((1, 1), |w| {
+            let size = w.inner_size();
+            (size.width, size.height)
+        });
+        let place = studio::place(window_size, scale, self.studio.openness());
+        let (video_pointer, panel_pointer) = route_pointer(&pointer, place.panel);
         // The first seconds include start-up work; wait for steady numbers.
         let settled = !self.core.cli().show_stats || self.core.measurement_windows() >= 3;
         let capture = self.core.cli().screenshot.is_some()
@@ -85,6 +96,8 @@ impl Shell {
         // Wait for a free present slot *before* picking the frame so we always
         // show the freshest one.
         renderer.wait_for_present_slot(100);
+        // The video fits the room the panel leaves (all of it when closed).
+        renderer.set_video_area(place.panel.map(|_| place.video));
         let mut arrived = None;
         let mut graphics_lost = false;
         let slot = Arc::clone(self.core.output_slot());
@@ -103,6 +116,7 @@ impl Shell {
         }
 
         let (ui, ui_gpu, controls) = (&mut self.ui, &mut self.ui_gpu, &mut self.controls);
+        let studio = &mut self.studio;
         let stats_panel = &mut self.stats_panel;
         let (stats, stats_open) = (self.core.stats(), self.core.stats_open());
         let animations = self.animations;
@@ -113,7 +127,9 @@ impl Shell {
                     return;
                 };
                 ui.begin(size, scale);
-                controls.frame(ui, &model, &pointer, dt);
+                // What floats over the video anchors to the video's room.
+                ui.limit_width(Some(place.video_width));
+                controls.frame(ui, &model, &video_pointer, dt);
                 stats_panel.frame(
                     ui,
                     &model.theme,
@@ -133,6 +149,16 @@ impl Shell {
                     );
                 }
                 toasts.frame(ui, &model.theme, dt, animations);
+                // The panel, on top, in the room it took.
+                ui.limit_width(None);
+                studio.frame(
+                    ui,
+                    &model,
+                    place.panel,
+                    place.full_width,
+                    &panel_pointer,
+                    dt,
+                );
                 if let Err(e) = gpu.render(context, &ui.draw_list()) {
                     dockview_domain::log_warn!("ui draw failed: {e}");
                 }
@@ -157,7 +183,8 @@ impl Shell {
         }
 
         self.pointer.end_frame();
-        for action in self.controls.take_actions() {
+        let actions = self.controls.take_actions();
+        for action in actions.into_iter().chain(self.studio.take_actions()) {
             self.core.apply(action);
         }
         self.apply_host_requests();

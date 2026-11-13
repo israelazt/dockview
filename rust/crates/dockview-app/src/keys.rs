@@ -5,8 +5,11 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum KeyCommand {
     ToggleFullscreen,
-    /// Closes the settings first; leaves full screen if there was nothing to close.
+    /// Closes the settings first; then leaves full screen, or else closes the
+    /// Studio panel, if there was nothing else to close.
     Escape,
+    /// Opens or closes the Studio panel.
+    ToggleStudio,
     VolumeUp,
     VolumeDown,
     SyncEarlier,

@@ -69,6 +69,9 @@ pub(super) const ICON_REPLAY: char = '\u{e1f5}';
 pub(super) const ICON_SAVE: char = '\u{e14d}';
 pub(super) const ICON_FOLDER: char = '\u{e247}';
 pub(super) const ICON_SOURCE: char = '\u{e11d}';
+/// The Studio button: a window with a side panel, shown opening or closing.
+pub(super) const ICON_STUDIO_OPEN: char = '\u{e434}';
+pub(super) const ICON_STUDIO_CLOSE: char = '\u{e432}';
 pub(super) const ICON_MIC: char = '\u{e118}';
 pub(super) const ICON_MIC_OFF: char = '\u{e119}';
 

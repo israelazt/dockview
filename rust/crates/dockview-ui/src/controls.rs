@@ -58,6 +58,8 @@ pub(super) enum Hit {
     Lang(usize),
     VideoMode(usize),
     Stats,
+    /// Pill button that opens or closes the Studio panel.
+    Studio,
     /// Pill button that opens the replay popover.
     Replay,
     /// Pill button that saves the replay.

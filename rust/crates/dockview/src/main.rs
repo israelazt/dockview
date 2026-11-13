@@ -2,7 +2,7 @@
 //!
 //! Keys: `F`/`F11` fullscreen · `Esc` leave fullscreen · `V` next video device
 //! · `A` next audio device · `↑`/`↓` volume · `←`/`→` audio sync (±10 ms)
-//! · `P` render preset.
+//! · `P` render preset · `Tab` Studio panel.
 //!
 //! This crate is only the window and the wiring: it creates the real adapters,
 //! hands them to the application (`dockview-app`) and draws what it asks to

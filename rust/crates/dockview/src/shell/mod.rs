@@ -4,6 +4,7 @@
 
 mod events;
 mod keys;
+mod studio;
 mod window;
 
 pub mod helpers;
@@ -22,6 +23,7 @@ use dockview_platform::ui_gpu::UiGpu;
 use dockview_ui::controls::Controls;
 use dockview_ui::input::Pointer;
 use dockview_ui::stats::StatsPanel;
+use dockview_ui::studio::StudioPanel;
 use dockview_ui::toast::{ToastHost, ToastKind};
 use dockview_ui::Ui;
 use winit::window::Window;
@@ -61,6 +63,8 @@ pub struct Shell {
     cursor_hidden: bool,
     animations: bool,
     stats_panel: StatsPanel,
+    /// The side panel of the Studio mode.
+    studio: StudioPanel,
     toasts: ToastHost,
 }
 
@@ -71,6 +75,8 @@ impl Shell {
         let animations = core.cli().screenshot.is_none() && system_animations_enabled();
         let mut controls = Controls::new(preview);
         controls.set_animations(animations);
+        let mut studio = StudioPanel::new();
+        studio.set_animations(animations);
         open_requested_popover(&mut core, &mut controls);
         Self {
             core,
@@ -92,6 +98,7 @@ impl Shell {
             cursor_hidden: false,
             animations,
             stats_panel: StatsPanel::new(),
+            studio,
             toasts: ToastHost::new(),
         }
     }

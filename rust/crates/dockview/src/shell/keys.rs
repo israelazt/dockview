@@ -8,6 +8,7 @@ pub fn command_for(key: &Key) -> Option<KeyCommand> {
     match key {
         Key::Named(NamedKey::F11) => Some(KeyCommand::ToggleFullscreen),
         Key::Named(NamedKey::Escape) => Some(KeyCommand::Escape),
+        Key::Named(NamedKey::Tab) => Some(KeyCommand::ToggleStudio),
         Key::Named(NamedKey::ArrowUp) => Some(KeyCommand::VolumeUp),
         Key::Named(NamedKey::ArrowDown) => Some(KeyCommand::VolumeDown),
         Key::Named(NamedKey::ArrowLeft) => Some(KeyCommand::SyncEarlier),
@@ -37,6 +38,7 @@ mod tests {
         let named = |k| command_for(&Key::Named(k));
         assert_eq!(named(NamedKey::F11), Some(KeyCommand::ToggleFullscreen));
         assert_eq!(named(NamedKey::Escape), Some(KeyCommand::Escape));
+        assert_eq!(named(NamedKey::Tab), Some(KeyCommand::ToggleStudio));
         assert_eq!(named(NamedKey::ArrowUp), Some(KeyCommand::VolumeUp));
         assert_eq!(named(NamedKey::ArrowDown), Some(KeyCommand::VolumeDown));
         assert_eq!(named(NamedKey::ArrowLeft), Some(KeyCommand::SyncEarlier));

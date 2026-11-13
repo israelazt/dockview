@@ -27,6 +27,10 @@ impl Core {
         // one, so a scene can start or stop without restarting anything.
         let input_slot = Arc::new(FrameSlot::new());
         input_slot.set_forward(Some(Arc::clone(&slot)));
+        let mut settings = settings;
+        if cli.open_studio {
+            settings.studio_open = true;
+        }
         let mut app = Self {
             slot,
             scenes: ScenesService::new(),

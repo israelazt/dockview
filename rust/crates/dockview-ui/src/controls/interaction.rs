@@ -73,6 +73,7 @@ impl Controls {
             Hit::MicToggle => Action::ToggleMic,
             Hit::MicDevice(i) => Action::SelectMic(i),
             Hit::Fullscreen => Action::ToggleFullscreen,
+            Hit::Studio => Action::ToggleStudio,
             Hit::SyncMinus => Action::SetSync(sync(-SYNC_STEP_MS)),
             Hit::SyncPlus => Action::SetSync(sync(SYNC_STEP_MS)),
             Hit::Video(i) => Action::SelectVideo(i),

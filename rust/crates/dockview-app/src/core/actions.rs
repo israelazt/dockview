@@ -27,6 +27,12 @@ impl Core {
         self.settings_changed();
     }
 
+    /// Opens or closes the Studio panel, and remembers it.
+    pub(super) fn toggle_studio(&mut self) {
+        self.settings.studio_open = !self.settings.studio_open;
+        self.settings_changed();
+    }
+
     /// Enters or leaves full screen.
     pub fn set_fullscreen(&mut self, on: bool) {
         self.view.fullscreen = on;
@@ -251,8 +257,7 @@ impl Core {
                 return;
             }
             Action::ToggleStudio => {
-                self.settings.studio_open = !self.settings.studio_open;
-                self.settings_changed();
+                self.toggle_studio();
                 return;
             }
             Action::SetVideoMode(mode) => {
@@ -286,8 +291,11 @@ impl Core {
                 // The window closes its popover first; this is what is left.
                 if self.view.fullscreen {
                     self.set_fullscreen(false);
+                } else if self.settings.studio_open {
+                    self.toggle_studio();
                 }
             }
+            KeyCommand::ToggleStudio => self.toggle_studio(),
             KeyCommand::VolumeUp => self.change_volume(VOLUME_STEP),
             KeyCommand::VolumeDown => self.change_volume(-VOLUME_STEP),
             KeyCommand::SyncEarlier => self.change_offset(-OFFSET_STEP_MS),

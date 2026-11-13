@@ -106,6 +106,8 @@ pub(super) fn tooltip_for(hit: Hit, m: &Model) -> Option<String> {
             RecState::Recording => Key::TipRecordStop,
         },
         Hit::Settings => Key::TipSettings,
+        Hit::Studio if m.studio_visible() => Key::TipStudioClose,
+        Hit::Studio => Key::TipStudio,
         Hit::Fullscreen if m.fullscreen => Key::TipExitFullscreen,
         Hit::Fullscreen => Key::TipFullscreen,
         Hit::Volume => Key::TipVolume,

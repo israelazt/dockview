@@ -3,44 +3,18 @@
 use super::popover_settings::*;
 use super::tooltip::*;
 use super::*;
+use crate::test_model::model;
 use dockview_domain::i18n::Lang;
 use dockview_domain::settings::{LangMode, RecordingQuality, RenderPreset, VideoModePref};
 use dockview_domain::theme::{Theme, ThemeMode};
-
-fn model() -> Model {
-    Model {
-        theme: Theme::dark(),
-        lang: Lang::En,
-        status: StatusKind::Live,
-        resolution: "1080p · 60 fps".into(),
-        volume: 0.5,
-        sync_ms: 0,
-        fullscreen: false,
-        video_devices: vec!["UGREEN 25173".into(), "Webcam".into()],
-        video_selected: Some(0),
-        audio_devices: vec!["HDMI (UGREEN 25173)".into()],
-        audio_selected: Some(0),
-        mic_devices: vec!["Windows default".into(), "USB Microphone".into()],
-        mic_selected: Some(0),
-        preset: RenderPreset::Balanced,
-        theme_mode: ThemeMode::Auto,
-        lang_mode: LangMode::Auto,
-        video_mode: VideoModePref::Auto,
-        stats_open: false,
-        studio: false,
-        replay: ReplayView::off("Ctrl+Alt+S"),
-        mic: MicView::off(),
-        rec: RecView::idle(),
-        sources: SourcesView::default(),
-        scenes: ScenesView::default(),
-    }
-}
 
 pub(super) struct Rig {
     ui: Ui,
     pub(super) controls: Controls,
     pub(super) model: Model,
     pointer: Pointer,
+    /// The width left for the video, when something else takes the rest.
+    limit: Option<f32>,
 }
 
 impl Rig {
@@ -50,6 +24,7 @@ impl Rig {
             controls: Controls::new(always_visible),
             model: model(),
             pointer: Pointer::default(),
+            limit: None,
         };
         rig.frame(0.016);
         rig
@@ -57,6 +32,7 @@ impl Rig {
 
     pub(super) fn frame(&mut self, dt: f32) {
         self.ui.begin((1280, 720), 1.0);
+        self.ui.limit_width(self.limit);
         self.controls
             .frame(&mut self.ui, &self.model, &self.pointer, dt);
         self.pointer.end_frame();
@@ -983,4 +959,85 @@ fn wants_pointer_only_over_widgets_not_backgrounds() {
     let (x, y) = rig.controls.rect_of(Hit::Fullscreen).center();
     rig.move_to(x, y);
     assert!(rig.controls.wants_pointer());
+}
+
+// -- The Studio button ----------------------------------------------------
+
+#[test]
+fn the_studio_button_asks_to_toggle_the_panel() {
+    let mut rig = Rig::new(true);
+    rig.click_on(Hit::Studio);
+    assert_eq!(rig.actions(), [Action::ToggleStudio]);
+}
+
+#[test]
+fn the_studio_button_says_open_or_close_by_what_it_would_do() {
+    let mut m = model();
+    let open = tooltip_for(Hit::Studio, &m).expect("a tooltip");
+    assert!(open.contains("Tab"), "the key is in the tooltip: {open}");
+    m.studio = true;
+    let close = tooltip_for(Hit::Studio, &m).expect("a tooltip");
+    assert_ne!(open, close);
+    assert!(close.starts_with("Close"), "{close}");
+    // Full screen hides the panel, so the button offers to open it again.
+    m.fullscreen = true;
+    assert_eq!(tooltip_for(Hit::Studio, &m).unwrap(), open);
+}
+
+#[test]
+fn the_studio_button_sits_between_settings_and_full_screen_and_fits_the_pill() {
+    let rig = Rig::new(true);
+    let (settings, studio, fullscreen) = (
+        rig.controls.rect_of(Hit::Settings),
+        rig.controls.rect_of(Hit::Studio),
+        rig.controls.rect_of(Hit::Fullscreen),
+    );
+    assert!(settings.x < studio.x && studio.x < fullscreen.x);
+    let pill = rig.controls.rect_of(Hit::Pill);
+    assert!(
+        fullscreen.x + fullscreen.w <= pill.x + pill.w,
+        "inside the pill"
+    );
+    assert!(
+        pill.x >= 0.0 && pill.x + pill.w <= 1280.0,
+        "inside a 1280 window"
+    );
+}
+
+#[test]
+fn a_pill_that_does_not_fit_the_video_area_drops_the_resolution_then_the_sync() {
+    let width_in = |limit: f32| {
+        let mut rig = Rig::new(true);
+        rig.limit = Some(limit);
+        rig.frame(0.016);
+        let pill = rig.controls.rect_of(Hit::Pill);
+        (
+            pill,
+            rig.controls.hits.iter().any(|(h, _)| *h == Hit::SyncPlus),
+        )
+    };
+    let (full, has_sync) = width_in(1280.0);
+    assert!(has_sync);
+    // Room for everything but the resolution.
+    let (short, has_sync) = width_in(full.w - 20.0);
+    assert!(has_sync && short.w < full.w);
+    // Room for less still: no sync block either.
+    let (least, has_sync) = width_in(short.w - 20.0);
+    assert!(!has_sync && least.w < short.w);
+    for (pill, limit) in [(short, full.w - 20.0), (least, short.w - 20.0)] {
+        assert!(
+            pill.x >= 8.0 && pill.x + pill.w <= limit,
+            "{pill:?} in {limit}"
+        );
+    }
+}
+
+#[test]
+fn the_pill_is_centred_in_the_video_area_not_in_the_window() {
+    let mut rig = Rig::new(true);
+    rig.limit = Some(960.0);
+    rig.frame(0.016);
+    let pill = rig.controls.rect_of(Hit::Pill);
+    let middle = pill.x + pill.w / 2.0;
+    assert!((middle - 480.0).abs() <= 1.0, "{middle}");
 }

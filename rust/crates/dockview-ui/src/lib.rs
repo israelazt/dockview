@@ -1,13 +1,19 @@
 //! Immediate-mode drawing layer: shapes and text are queued as vertices in
 //! logical pixels and drawn on the GPU (by the platform) on top of the video.
 
+mod clip;
 pub mod controls;
 pub mod input;
+pub mod motion;
 pub mod rec;
 pub mod stats;
+pub mod studio;
+#[cfg(test)]
+mod test_model;
 pub mod text;
 pub mod toast;
 
+use clip::{clip_quad, ClipRect};
 use dockview_domain::draw::{DrawList, Vertex, ATLAS_SIZE};
 use dockview_domain::theme::Color;
 use text::{Face, TextSystem, Weight};
@@ -71,6 +77,10 @@ pub struct Ui {
     opacity: f32,
     /// Logical-pixel translation applied to everything drawn (for slides).
     offset: (f32, f32),
+    /// Where drawing is cut off, in physical pixels (see [`Ui::set_clip`]).
+    clip: Option<ClipRect>,
+    /// The width [`Ui::logical_size`] reports, when less than the window's.
+    width_limit: Option<f32>,
 }
 
 impl Ui {
@@ -82,6 +92,8 @@ impl Ui {
             viewport: (1, 1),
             opacity: 1.0,
             offset: (0.0, 0.0),
+            clip: None,
+            width_limit: None,
         }
     }
 
@@ -93,6 +105,27 @@ impl Ui {
         self.scale = scale.max(0.5);
         self.opacity = 1.0;
         self.offset = (0.0, 0.0);
+        self.clip = None;
+        self.width_limit = None;
+    }
+
+    /// Cuts off everything drawn from now on outside `area` (in the same
+    /// coordinates shapes are drawn in, shifted by the current offset). `None`
+    /// draws everywhere again. For lists that scroll.
+    pub fn set_clip(&mut self, area: Option<Rect>) {
+        let s = self.scale;
+        self.clip = area.map(|r| {
+            let (x, y) = ((r.x + self.offset.0) * s, (r.y + self.offset.1) * s);
+            [x, y, x + r.w * s, y + r.h * s]
+        });
+    }
+
+    /// Makes [`Ui::logical_size`] report at most `width` logical pixels
+    /// across, so whatever anchors itself to the window (the pill, the
+    /// notices) anchors to the part of it left for the video. `None` goes back
+    /// to the whole window. Drawing itself is not clipped.
+    pub fn limit_width(&mut self, width: Option<f32>) {
+        self.width_limit = width;
     }
 
     /// Translates everything drawn from now on, in logical pixels.
@@ -109,10 +142,11 @@ impl Ui {
         color.with_alpha(color.a * self.opacity).to_array()
     }
 
-    /// Viewport size in logical pixels.
+    /// Viewport size in logical pixels (narrowed by [`Ui::limit_width`]).
     pub fn logical_size(&self) -> (f32, f32) {
+        let width = self.viewport.0 as f32 / self.scale;
         (
-            self.viewport.0 as f32 / self.scale,
+            self.width_limit.map_or(width, |limit| limit.min(width)),
             self.viewport.1 as f32 / self.scale,
         )
     }
@@ -196,8 +230,15 @@ impl Ui {
     }
 
     fn push_quad(&mut self, q: &[Vertex]) {
+        let quad = match self.clip {
+            None => [q[0], q[1], q[2], q[3]],
+            Some(clip) => match clip_quad(&[q[0], q[1], q[2], q[3]], clip) {
+                Some(cut) => cut,
+                None => return,
+            },
+        };
         self.vertices
-            .extend_from_slice(&[q[0], q[1], q[2], q[0], q[2], q[3]]);
+            .extend_from_slice(&[quad[0], quad[1], quad[2], quad[0], quad[2], quad[3]]);
     }
 
     fn face(style: TextStyle) -> Face {
@@ -298,6 +339,54 @@ mod tests {
         let mut ui = Ui::new();
         ui.begin((1280, 720), 1.0);
         ui
+    }
+
+    #[test]
+    fn drawing_outside_the_clip_is_dropped_and_across_it_is_cut() {
+        let mut ui = ui();
+        ui.set_clip(Some(Rect::new(0.0, 0.0, 100.0, 100.0)));
+        ui.rect(Rect::new(300.0, 300.0, 50.0, 50.0), 4.0, Theme::dark().text);
+        assert!(ui.vertices().is_empty(), "outside: nothing is drawn");
+
+        ui.rect(Rect::new(80.0, 10.0, 60.0, 20.0), 4.0, Theme::dark().text);
+        assert_eq!(ui.vertices().len(), 6);
+        assert!(ui.vertices().iter().all(|v| v.pos[0] <= 100.0));
+
+        ui.set_clip(None);
+        ui.rect(Rect::new(300.0, 300.0, 50.0, 50.0), 4.0, Theme::dark().text);
+        assert_eq!(ui.vertices().len(), 12, "without a clip it draws again");
+    }
+
+    #[test]
+    fn the_clip_follows_scale_and_offset_and_resets_each_frame() {
+        let mut ui = Ui::new();
+        ui.begin((2560, 1440), 2.0);
+        ui.set_offset(10.0, 0.0);
+        ui.set_clip(Some(Rect::new(0.0, 0.0, 50.0, 50.0)));
+        // Logical 70..80 + offset 10 = 80..90: outside the clip (10..60).
+        ui.rect(Rect::new(70.0, 0.0, 10.0, 10.0), 0.0, Theme::dark().text);
+        assert!(ui.vertices().is_empty());
+        ui.begin((2560, 1440), 2.0);
+        ui.rect(Rect::new(500.0, 500.0, 10.0, 10.0), 0.0, Theme::dark().text);
+        assert_eq!(ui.vertices().len(), 6, "a new frame has no clip");
+    }
+
+    #[test]
+    fn limiting_the_width_narrows_the_logical_size_only() {
+        let mut ui = ui();
+        assert_eq!(ui.logical_size(), (1280.0, 720.0));
+        ui.limit_width(Some(960.0));
+        assert_eq!(ui.logical_size(), (960.0, 720.0));
+        ui.limit_width(Some(5000.0));
+        assert_eq!(
+            ui.logical_size(),
+            (1280.0, 720.0),
+            "never wider than the window"
+        );
+        assert_eq!(ui.viewport(), (1280, 720), "the target keeps its size");
+        ui.limit_width(Some(100.0));
+        ui.begin((1280, 720), 1.0);
+        assert_eq!(ui.logical_size(), (1280.0, 720.0), "reset by a new frame");
     }
 
     #[test]

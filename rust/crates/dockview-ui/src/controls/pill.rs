@@ -12,6 +12,10 @@ struct PillMetrics {
     sync_value_w: f32,
     /// The whole pill.
     width: f32,
+    /// Whether the resolution text and the sync block are drawn. They are left
+    /// out, in that order, when the pill does not fit the room it has.
+    show_res: bool,
+    show_sync: bool,
 }
 
 /// Where a group of controls sits vertically.
@@ -23,7 +27,7 @@ struct Row {
     text_y: f32,
 }
 
-fn pill_metrics(ui: &mut Ui, m: &Model) -> PillMetrics {
+fn pill_metrics(ui: &mut Ui, m: &Model, room: f32) -> PillMetrics {
     let value = BODY.tabular();
     let status_w = ui.measure(status_text(m), LABEL).0;
     let res_w = ui
@@ -34,19 +38,31 @@ fn pill_metrics(ui: &mut Ui, m: &Model) -> PillMetrics {
     let percent_w = ui.measure("100%", value).0;
     let sync_value_w = ui.measure("−300 ms", value).0;
 
-    let status_block = 8.0 + 8.0 + status_w + 12.0 + res_w;
+    let status_full = 8.0 + 8.0 + status_w + 12.0 + res_w;
+    let status_short = 8.0 + 8.0 + status_w;
     let volume_block = ICON_SIZE + 10.0 + SLIDER_WIDTH + 10.0 + percent_w;
     let sync_block = sync_label_w + 10.0 + BUTTON + sync_value_w + BUTTON;
-    let buttons_block = BUTTON * 4.0 + 12.0;
+    let buttons_block = BUTTON * 5.0 + 16.0;
     let divider = GAP * 2.0 + 1.0;
     let replay_block = BUTTON * 3.0 + 8.0 + divider;
-    let width = PAD_X * 2.0
-        + status_block
-        + volume_block
-        + sync_block
-        + replay_block
-        + buttons_block
-        + divider * 3.0;
+    let width_of = |status: f32, with_sync: bool| {
+        PAD_X * 2.0
+            + status
+            + volume_block
+            + if with_sync { sync_block + divider } else { 0.0 }
+            + replay_block
+            + buttons_block
+            + divider * 3.0
+    };
+    // Too wide for the room: drop the resolution, then the sync block.
+    let (show_res, show_sync) = if width_of(status_full, true) <= room {
+        (true, true)
+    } else if width_of(status_short, true) <= room {
+        (false, true)
+    } else {
+        (false, false)
+    };
+    let width = width_of(if show_res { status_full } else { status_short }, show_sync);
     PillMetrics {
         status_w,
         res_w,
@@ -54,6 +70,8 @@ fn pill_metrics(ui: &mut Ui, m: &Model) -> PillMetrics {
         percent_w,
         sync_value_w,
         width,
+        show_res,
+        show_sync,
     }
 }
 
@@ -84,11 +102,11 @@ fn volume_icon(volume: f32) -> char {
 impl Controls {
     pub(super) fn draw_pill(&mut self, ui: &mut Ui, m: &Model) -> Rect {
         let t = &m.theme;
-        let metrics = pill_metrics(ui, m);
-
         let (screen_w, screen_h) = ui.logical_size();
+        let metrics = pill_metrics(ui, m, screen_w - 16.0);
+
         let pill = Rect::new(
-            ((screen_w - metrics.width) / 2.0).round(),
+            ((screen_w - metrics.width) / 2.0).round().max(8.0),
             (screen_h - BOTTOM_MARGIN - PILL_HEIGHT).round(),
             metrics.width.round(),
             PILL_HEIGHT,
@@ -109,8 +127,10 @@ impl Controls {
         x = divider_at(ui, t, x, cy);
         x = self.pill_volume(ui, m, &metrics, row, x);
         x = divider_at(ui, t, x, cy);
-        x = self.pill_sync(ui, m, &metrics, row, x);
-        x = divider_at(ui, t, x, cy);
+        if metrics.show_sync {
+            x = self.pill_sync(ui, m, &metrics, row, x);
+            x = divider_at(ui, t, x, cy);
+        }
         x = self.pill_replay(ui, m, row, x);
         x = divider_at(ui, t, x, cy);
         self.pill_actions(ui, m, row, x);
@@ -145,7 +165,11 @@ impl Controls {
         );
         x += 16.0;
         ui.text(status_text(m), x, row.text_y, LABEL, t.text);
-        x += met.status_w + 12.0;
+        x += met.status_w;
+        if !met.show_res {
+            return x;
+        }
+        x += 12.0;
         if !m.resolution.is_empty() {
             ui.text(&m.resolution, x, row.text_y, BODY.tabular(), t.text_dim);
         }
@@ -260,7 +284,8 @@ impl Controls {
         x + BUTTON
     }
 
-    /// The row of actions at the right: sources, scenes, settings, full screen.
+    /// The row of actions at the right: sources, scenes, settings, Studio, full
+    /// screen.
     fn pill_actions(&mut self, ui: &mut Ui, m: &Model, row: Row, mut x: f32) {
         let sources_open = self.sources_open;
         self.icon_button(
@@ -286,6 +311,23 @@ impl Controls {
             row.cy,
             ICON_SIZE,
             settings_open,
+        );
+        x += BUTTON + 4.0;
+        let studio_open = m.studio_visible();
+        let studio_icon = if studio_open {
+            ICON_STUDIO_CLOSE
+        } else {
+            ICON_STUDIO_OPEN
+        };
+        self.icon_button(
+            ui,
+            m,
+            Hit::Studio,
+            studio_icon,
+            x + BUTTON / 2.0,
+            row.cy,
+            ICON_SIZE,
+            studio_open,
         );
         x += BUTTON + 4.0;
         let fullscreen_icon = if m.fullscreen {
