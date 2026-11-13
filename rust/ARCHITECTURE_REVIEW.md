@@ -116,7 +116,24 @@ Lógica de decisión que antes estaba enterrada en `App` y ahora es una función
 
 Regla del autor (2026-11-12): **`main.rs` solo orquesta; no debe tener lógica.** Eso fija el destino de lo que queda: `App` y sus métodos salen de `main.rs` (a `app/`), y `main.rs` se queda con la declaración de módulos y el arranque.
 
-Siguen pendientes de D-4 las fuentes y el audio.
+### `main.rs` sin lógica (2026-11-12)
+Por la regla del autor, `main.rs` pasó de 1724 a **29 líneas**: la lista de módulos y `fn main() { app::run(); }`. `App` y todo lo que la rodea vive ahora en `app/`, un archivo por responsabilidad:
+
+| Archivo | Qué contiene |
+|---|---|
+| `mod.rs` | `App`, `Source`, `SourceKind`, constantes |
+| `startup.rs` | `run`, `App::new`, vista previa de dispositivos |
+| `sources.rs` | elegir capturadora, pantalla o ventana; enrutado del audio |
+| `replay.rs` | el lado de la app del replay, grabación y micrófono |
+| `actions.rs` | `apply` (clics y teclas), `model`, volumen, ajustes |
+| `stats.rs` | reúne las medidas y actúa sobre el cambio automático |
+| `window.rs` | dibujar un frame, cursor, pantalla completa, capturas |
+| `events.rs` | los callbacks de winit |
+| `helpers.rs` | funciones pequeñas con sus tests |
+| `scene_*.rs` | escenas y transiciones (antes sueltas en la raíz) |
+
+Es un movimiento sin cambio de comportamiento (mismos 372 tests, mismo resultado con la app real). Lo siguiente es seguir sacando de esos archivos la **lógica de decisión** a servicios con tests, empezando por `Sources` (D-4).
+
 
 ## Lo que no conviene tocar
 - La separación en dos crates y el sentido de las dependencias.

@@ -1,0 +1,324 @@
+//! What the user asks for (clicks and keys) and what the controls are shown.
+
+use super::*;
+
+impl App {
+    pub(super) fn toast(&mut self, key: i18n::Key, kind: ToastKind) {
+        let lang = self.lang_mode().resolve(self.system_lang);
+        self.toasts.show(i18n::tr(lang, key), kind);
+        self.needs_redraw = true;
+    }
+
+    pub(super) fn change_volume(&mut self, delta: f32) {
+        self.settings.volume = (self.settings.volume + delta).clamp(0.0, 1.0);
+        // Snap away accumulated float error so 5% steps stay exact.
+        self.settings.volume = (self.settings.volume * 100.0).round() / 100.0;
+        if let Some(audio) = &self.audio {
+            audio.set_volume(self.settings.volume);
+        }
+        self.save_settings();
+    }
+
+    pub(super) fn change_offset(&mut self, delta_ms: i32) {
+        self.settings.audio_offset_ms = (self.settings.audio_offset_ms + delta_ms)
+            .clamp(-MAX_AUDIO_OFFSET_MS, MAX_AUDIO_OFFSET_MS);
+        if let Some(audio) = &self.audio {
+            audio.set_offset_ms(self.settings.audio_offset_ms);
+        }
+        self.save_settings();
+    }
+
+    pub(super) fn cycle_preset(&mut self) {
+        self.settings.render_preset = next_preset(self.settings.render_preset);
+        if let Some(renderer) = self.renderer.as_mut() {
+            renderer.set_filter(filter_for(self.settings.render_preset));
+        }
+        self.save_settings();
+    }
+
+    pub(super) fn save_settings(&mut self) {
+        if self.cli.ui_preview {
+            return;
+        }
+        self.settings.was_fullscreen = self.fullscreen;
+        settings::save(&self.settings);
+    }
+
+    pub(super) fn theme_mode(&self) -> ThemeMode {
+        self.cli.theme.unwrap_or(self.settings.theme)
+    }
+
+    pub(super) fn lang_mode(&self) -> LangMode {
+        self.cli.lang.unwrap_or(self.settings.language)
+    }
+
+    /// Snapshot of everything the controls display.
+    pub(super) fn model(&self) -> Model {
+        let status = match &self.source {
+            Source::Test(_) => StatusKind::Live,
+            Source::None => StatusKind::Idle,
+            Source::Capture { capture, .. } => match capture.status() {
+                CaptureStatus::Running { .. } | CaptureStatus::Stopped => StatusKind::Live,
+                CaptureStatus::Starting => StatusKind::Connecting,
+                CaptureStatus::Disconnected { .. } | CaptureStatus::Failed(_) => {
+                    StatusKind::Problem
+                }
+            },
+            Source::Screen(capture) => match capture.status() {
+                ScreenStatus::Running { .. } => StatusKind::Live,
+                ScreenStatus::Starting => StatusKind::Connecting,
+                ScreenStatus::Ended(_) | ScreenStatus::Failed(_) => StatusKind::Problem,
+            },
+        };
+        let resolution = if self.video_size.0 > 0 {
+            // The rate is unknown for the first second; show just the height.
+            if self.telemetry.shown_fps() >= 1.0 {
+                format!(
+                    "{}p · {:.0} fps",
+                    self.video_size.1,
+                    self.telemetry.shown_fps()
+                )
+            } else {
+                format!("{}p", self.video_size.1)
+            }
+        } else {
+            String::new()
+        };
+        let appearance = self.theme_mode().resolve(self.system_appearance);
+        let names = |devices: &[String]| devices.to_vec();
+        Model {
+            theme: Theme::for_appearance(appearance),
+            lang: self.lang_mode().resolve(self.system_lang),
+            status,
+            resolution,
+            volume: self.settings.volume,
+            sync_ms: self.settings.audio_offset_ms,
+            fullscreen: self.fullscreen,
+            // The names shown can differ from the ones Windows gives (aliases).
+            video_devices: names(
+                &self
+                    .video_devices
+                    .iter()
+                    .map(|d| {
+                        device_names::display_name(
+                            &d.symbolic_link,
+                            &d.friendly_name,
+                            &self.settings.device_aliases,
+                        )
+                    })
+                    .collect::<Vec<_>>(),
+            ),
+            video_selected: self.video_index,
+            audio_devices: names(
+                &self
+                    .audio_devices
+                    .iter()
+                    .map(|d| d.friendly_name.clone())
+                    .collect::<Vec<_>>(),
+            ),
+            audio_selected: self.audio_index,
+            preset: self.settings.render_preset,
+            theme_mode: self.theme_mode(),
+            lang_mode: self.lang_mode(),
+            video_mode: self.settings.video_mode,
+            stats_open: self.stats_open,
+            replay: self.replay_view(),
+            mic_devices: self.mic_device_names(self.lang_mode().resolve(self.system_lang)),
+            mic_selected: Some(self.mic_selected()),
+            mic: self.replay.mic_view(),
+            rec: self.replay.rec_view(),
+            sources: self.sources_view(self.lang_mode().resolve(self.system_lang)),
+            scenes: self.scenes_view(self.lang_mode().resolve(self.system_lang)),
+        }
+    }
+
+    /// Applies a change requested through the controls.
+    pub(super) fn apply(&mut self, action: Action) {
+        match action {
+            Action::SetVolume(volume) => {
+                self.settings.volume = volume;
+                if let Some(audio) = &self.audio {
+                    audio.set_volume(volume);
+                }
+            }
+            Action::SetSync(ms) => {
+                self.settings.audio_offset_ms = ms;
+                if let Some(audio) = &self.audio {
+                    audio.set_offset_ms(ms);
+                }
+            }
+            Action::Scene(action) => {
+                self.apply_scene_action(action);
+                return;
+            }
+            Action::ToggleFullscreen => {
+                self.set_fullscreen(!self.fullscreen);
+                return;
+            }
+            Action::SelectVideo(index) => {
+                self.select_video(Some(index));
+                // Follow the new video device with its matching audio.
+                if let Some(audio) = self.match_audio(Some(index)) {
+                    self.select_audio(Some(audio));
+                }
+            }
+            Action::SelectAudio(index) => self.select_audio(Some(index)),
+            Action::ToggleReplay if self.replay.recording_active() => {
+                // Turning the buffer off would cut the recording short.
+                self.toast(i18n::Key::ToastStopRecordingFirst, ToastKind::Info);
+                return;
+            }
+            Action::ToggleReplay => {
+                self.settings.replay_enabled = !self.settings.replay_enabled;
+                self.sync_replay();
+                let key = if self.settings.replay_enabled {
+                    i18n::Key::ToastReplayOn
+                } else {
+                    i18n::Key::ToastReplayOff
+                };
+                self.toast(key, ToastKind::Info);
+            }
+            Action::SelectMonitor(index) => {
+                if let Some(monitor) = self.monitors.get(index) {
+                    let handle = monitor.handle;
+                    self.start_screen(CaptureTarget::Monitor(handle), SourceKind::Monitor(handle));
+                    self.settings.last_monitor = Some(index as u32);
+                }
+            }
+            Action::SelectWindow(index) => {
+                if let Some(window) = self.windows.get(index).cloned() {
+                    self.start_screen(
+                        CaptureTarget::Window(window.handle),
+                        SourceKind::Window {
+                            handle: window.handle,
+                            pid: window.process_id,
+                        },
+                    );
+                    self.settings.last_monitor = None;
+                }
+            }
+            Action::ToggleRecord => {
+                self.toggle_record();
+                return;
+            }
+            Action::ToggleMic => {
+                let on = !self.replay.mic_on();
+                self.set_mic(on);
+                if self.replay.mic_on() == on {
+                    let key = if on {
+                        i18n::Key::ToastMicOn
+                    } else {
+                        i18n::Key::ToastMicOff
+                    };
+                    self.toast(key, ToastKind::Info);
+                }
+                return; // the microphone always starts off; nothing to save
+            }
+            Action::SelectMic(index) => {
+                self.settings.last_mic_device_id = index
+                    .checked_sub(1)
+                    .and_then(|i| self.audio_devices.get(i))
+                    .map(|d| d.device_id.clone());
+                if self.replay.mic_on() {
+                    // Reopen on the new device.
+                    self.set_mic(false);
+                    self.set_mic(true);
+                }
+            }
+            Action::ReplayLength(delta) => {
+                self.settings.replay_seconds =
+                    settings::step_replay_seconds(self.settings.replay_seconds, delta);
+                self.clamp_replay_length();
+                self.replay.set_keep_seconds(f64::from(
+                    self.settings.replay_seconds + settings::REPLAY_MARGIN_SECONDS,
+                ));
+            }
+            Action::SaveReplay => {
+                self.save_replay();
+                return;
+            }
+            Action::OpenReplayFolder => {
+                self.show_saved();
+                return;
+            }
+            Action::ChooseFolder => self.choose_folder(),
+            Action::SetQuality(quality) => {
+                if self.replay.recording_active() {
+                    // A new encoder would cut the recording short.
+                    self.toast(i18n::Key::ToastStopRecordingFirst, ToastKind::Info);
+                    return;
+                }
+                if self.settings.replay_bitrate_mbps != quality.mbps() {
+                    self.settings.replay_bitrate_mbps = quality.mbps();
+                    self.clamp_replay_length();
+                    if self.replay.is_on() {
+                        self.restart_recorder();
+                        self.toast(i18n::Key::ToastQualityChanged, ToastKind::Info);
+                    }
+                }
+            }
+            Action::ToggleStats => {
+                self.stats_open = !self.stats_open;
+                return;
+            }
+            Action::SetVideoMode(mode) => {
+                self.settings.video_mode = mode;
+                // A deliberate choice ends any automatic switch and allows a
+                // new automatic attempt later (for example after changing port).
+                self.auto.reset();
+                self.select_video(self.video_index);
+            }
+            Action::SetPreset(preset) => {
+                self.settings.render_preset = preset;
+                if let Some(renderer) = self.renderer.as_mut() {
+                    renderer.set_filter(filter_for(preset));
+                }
+            }
+            Action::SetTheme(mode) => {
+                self.settings.theme = mode;
+                self.cli.theme = None; // an explicit choice wins over --theme
+            }
+            Action::SetLang(mode) => {
+                self.settings.language = mode;
+                self.cli.lang = None;
+            }
+        }
+        self.save_settings();
+    }
+
+    pub(super) fn on_key(&mut self, key: &Key) {
+        match key {
+            Key::Named(NamedKey::F11) => self.set_fullscreen(!self.fullscreen),
+            Key::Named(NamedKey::Escape) => {
+                if !self.controls.close_settings() && self.fullscreen {
+                    self.set_fullscreen(false);
+                }
+            }
+            Key::Named(NamedKey::ArrowUp) => self.change_volume(VOLUME_STEP),
+            Key::Named(NamedKey::ArrowDown) => self.change_volume(-VOLUME_STEP),
+            Key::Named(NamedKey::ArrowLeft) => self.change_offset(-OFFSET_STEP_MS),
+            Key::Named(NamedKey::ArrowRight) => self.change_offset(OFFSET_STEP_MS),
+            Key::Character(c) => match c.to_ascii_lowercase().as_str() {
+                "f" => self.set_fullscreen(!self.fullscreen),
+                "p" => self.cycle_preset(),
+                "i" => self.stats_open = !self.stats_open,
+                "v" => {
+                    let next = next_index(self.video_index, self.video_devices.len());
+                    self.select_video(next);
+                    // Follow the new video device with its matching audio.
+                    if let Some(audio) = self.match_audio(next) {
+                        self.select_audio(Some(audio));
+                    }
+                    self.save_settings();
+                }
+                "a" => {
+                    let next = next_index(self.audio_index, self.audio_devices.len());
+                    self.select_audio(next);
+                    self.save_settings();
+                }
+                _ => {}
+            },
+            _ => {}
+        }
+    }
+}

@@ -8,11 +8,13 @@ use dockview_core::device_names;
 use dockview_core::frame::FrameSlot;
 use dockview_core::scene::{Scene, SourceRef, MAX_SCENE_LAYERS};
 
+use crate::i18n;
 use crate::i18n::LangModeExt;
-use crate::scene_runtime::Overlay;
 use crate::ui::controls::{LayerView, SceneAction, ScenesView};
 use crate::ui::toast::ToastKind;
-use crate::{i18n, App};
+
+use super::scene_runtime::Overlay;
+use super::App;
 
 /// Scenes a user may keep.
 const MAX_SCENES: usize = 12;

@@ -14,9 +14,11 @@ use dockview_core::frame::FrameSlot;
 use dockview_core::scene::{Scene, SceneLayer};
 use dockview_core::transition::{Easing, Transition, DEFAULT_DURATION};
 
-use crate::scene_runtime::{Overlay, SCENE_HEIGHT, SCENE_WIDTH};
+use crate::i18n;
 use crate::ui::toast::ToastKind;
-use crate::{i18n, App};
+
+use super::scene_runtime::{Overlay, SCENE_HEIGHT, SCENE_WIDTH};
+use super::App;
 
 /// A scene change in progress.
 pub struct ActiveTransition {
@@ -196,7 +198,7 @@ impl App {
         self.transition.as_ref().is_some_and(|t| {
             t.leaving
                 .iter()
-                .any(|o| matches!(o.running, crate::scene_runtime::OverlayRunning::Screen(_)))
+                .any(|o| matches!(o.running, super::scene_runtime::OverlayRunning::Screen(_)))
         })
     }
 }

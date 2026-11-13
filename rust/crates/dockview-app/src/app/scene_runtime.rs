@@ -22,8 +22,10 @@ use dockview_core::screen::{
 };
 
 use crate::cli::PipSpec;
+use crate::i18n;
 use crate::ui::toast::ToastKind;
-use crate::{i18n, App, SourceKind, RECONNECT_DELAY};
+
+use super::{App, SourceKind, RECONNECT_DELAY};
 
 /// The size of the picture a scene is drawn at.
 pub const SCENE_WIDTH: u32 = 1920;
