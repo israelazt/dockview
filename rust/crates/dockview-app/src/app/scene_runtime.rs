@@ -25,7 +25,8 @@ use crate::cli::PipSpec;
 use crate::i18n;
 use crate::ui::toast::ToastKind;
 
-use super::{App, SourceKind, RECONNECT_DELAY};
+use super::{App, SourceKind};
+use crate::sources::{find_window, Reconnect};
 
 /// The size of the picture a scene is drawn at.
 pub const SCENE_WIDTH: u32 = 1920;
@@ -38,7 +39,7 @@ pub enum OverlayRunning {
     Capture {
         capture: VideoCapture,
         link: String,
-        retry_at: Option<Instant>,
+        reconnect: Reconnect,
     },
     Screen(ScreenCapture),
 }
@@ -155,13 +156,7 @@ impl App {
     /// A window (its handle and process) by title: an exact match first,
     /// then one that contains the text. Never one of our own.
     fn find_window(&self, title: &str) -> Option<(isize, u32)> {
-        let wanted = title.to_lowercase();
-        let own = std::process::id();
-        let others = || self.windows.iter().filter(|w| w.process_id != own);
-        others()
-            .find(|w| w.title.to_lowercase() == wanted)
-            .or_else(|| others().find(|w| w.title.to_lowercase().contains(&wanted)))
-            .map(|w| (w.handle, w.process_id))
+        find_window(&self.windows, title, std::process::id()).map(|w| (w.handle, w.process_id))
     }
 
     /// Starts the source of an overlay, publishing to `slot`.
@@ -193,7 +188,7 @@ impl App {
                         Arc::clone(slot),
                     ),
                     link: symbolic_link.clone(),
-                    retry_at: None,
+                    reconnect: Reconnect::new(),
                 })
             }
             SourceRef::Monitor { device_name } => {
@@ -385,23 +380,20 @@ impl App {
                 OverlayRunning::Capture {
                     capture,
                     link,
-                    retry_at,
-                } => match capture.status() {
-                    CaptureStatus::Disconnected { .. } | CaptureStatus::Failed(_) => {
-                        let due = retry_at.unwrap_or_else(|| Instant::now() + RECONNECT_DELAY);
-                        if Instant::now() >= due {
-                            *capture = VideoCapture::start(
-                                link.clone(),
-                                CaptureOptions::default(),
-                                Arc::clone(&overlay.slot),
-                            );
-                            *retry_at = None;
-                        } else {
-                            *retry_at = Some(due);
-                        }
+                    reconnect,
+                } => {
+                    let gone = matches!(
+                        capture.status(),
+                        CaptureStatus::Disconnected { .. } | CaptureStatus::Failed(_)
+                    );
+                    if reconnect.tick(gone, Instant::now()) {
+                        *capture = VideoCapture::start(
+                            link.clone(),
+                            CaptureOptions::default(),
+                            Arc::clone(&overlay.slot),
+                        );
                     }
-                    _ => *retry_at = None,
-                },
+                }
                 OverlayRunning::Screen(capture) => {
                     if matches!(
                         capture.status(),

@@ -17,6 +17,7 @@ mod i18n;
 mod perf;
 mod render;
 mod replay_service;
+mod sources;
 mod stats_log;
 mod telemetry;
 #[allow(dead_code)] // some tokens are used by the upcoming live controls

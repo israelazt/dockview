@@ -134,6 +134,15 @@ Por la regla del autor, `main.rs` pasó de 1724 a **29 líneas**: la lista de m�
 
 Es un movimiento sin cambio de comportamiento (mismos 372 tests, mismo resultado con la app real). Lo siguiente es seguir sacando de esos archivos la **lógica de decisión** a servicios con tests, empezando por `Sources` (D-4).
 
+### D-4: reglas de las fuentes, `sources.rs` (2026-11-12)
+Módulo sin hilos ni ventana con lo que `App` decidía a mano, ahora con 7 tests:
+- `SourceKind` y `AudioRoute`: de dónde sale el sonido según la fuente (tarjeta, sistema o un programa) y qué entrada del popover es la actual.
+- `Reconnect`: cuándo reintentar un dispositivo perdido (una pausa, un intento, y vuelta a empezar). **Estaba copiada** en `maintain_source` y en `maintain_overlays`; ahora hay una sola.
+- `find_window`: buscar una ventana por título (exacto primero, luego «contiene», nunca la propia). También estaba duplicada (CLI y escenas).
+- `monitor_label`, `video_state_of_capture` y `video_state_of_screen`.
+
+Efecto menor: `--capture-window` ahora prefiere un título exacto antes que uno que solo lo contiene, como ya hacían las escenas. Comprobado con 379 tests y con la app real (capturadora + pantalla en la esquina, y una pantalla como fuente principal).
+
 
 ## Lo que no conviene tocar
 - La separación en dos crates y el sentido de las dependencias.

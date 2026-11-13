@@ -10,15 +10,15 @@ impl App {
     pub(super) fn route_audio(&mut self) {
         self.loopback = None;
         let tap = self.replay.audio_tap();
-        match self.source_kind {
-            SourceKind::Capture => {
+        match self.source_kind.audio_route() {
+            AudioRoute::Card => {
                 if let Some(audio) = &self.audio {
                     audio.set_tap(tap);
                 }
             }
-            SourceKind::Monitor(_) | SourceKind::Window { .. } => {
-                let source = match self.source_kind {
-                    SourceKind::Window { pid, .. } => CaptureSource::ProcessLoopback(pid),
+            route => {
+                let source = match route {
+                    AudioRoute::Process(pid) => CaptureSource::ProcessLoopback(pid),
                     _ => CaptureSource::SystemLoopback,
                 };
                 if let Some(tap) = tap {
@@ -73,12 +73,7 @@ impl App {
     /// session asked for one.
     pub(super) fn restore_screen(&mut self) {
         if let Some(text) = self.cli.capture_window.clone() {
-            let needle = text.to_lowercase();
-            let found = self
-                .windows
-                .iter()
-                .find(|w| w.title.to_lowercase().contains(&needle))
-                .cloned();
+            let found = find_window(&self.windows, &text, std::process::id()).cloned();
             match found {
                 Some(w) => self.start_screen(
                     CaptureTarget::Window(w.handle),
@@ -107,34 +102,10 @@ impl App {
             .monitors
             .iter()
             .enumerate()
-            .map(|(i, m)| {
-                format!(
-                    "{} {} · {}×{}{}",
-                    i18n::tr(lang, i18n::Key::SourceScreenWord),
-                    i + 1,
-                    m.width,
-                    m.height,
-                    if m.primary {
-                        format!(" ({})", i18n::tr(lang, i18n::Key::SourcePrimary))
-                    } else {
-                        String::new()
-                    }
-                )
-            })
+            .map(|(i, m)| monitor_label(lang, i, m))
             .collect();
         let windows = self.windows.iter().map(|w| w.title.clone()).collect();
-        let current = match self.source_kind {
-            SourceKind::Capture => CurrentSource::Capture,
-            SourceKind::Monitor(handle) => CurrentSource::Monitor(
-                self.monitors
-                    .iter()
-                    .position(|m| m.handle == handle)
-                    .unwrap_or(0),
-            ),
-            SourceKind::Window { handle, .. } => {
-                CurrentSource::Window(self.windows.iter().position(|w| w.handle == handle))
-            }
-        };
+        let current = self.source_kind.current(&self.monitors, &self.windows);
         SourcesView {
             monitors,
             windows,
@@ -172,7 +143,7 @@ impl App {
         self.settings.last_video_device_symbolic_link = Some(device.symbolic_link.clone());
         self.source = Source::Capture {
             capture: self.start_capture(&device.symbolic_link.clone()),
-            retry_at: None,
+            reconnect: Reconnect::new(),
         };
         if from_screen {
             // The card's sound was stopped while a screen was captured.
@@ -268,27 +239,19 @@ impl App {
             return;
         };
         let link = device.symbolic_link.clone();
-        let Source::Capture { capture, retry_at } = &self.source else {
+        let Source::Capture { capture, reconnect } = &mut self.source else {
             return;
         };
-        match capture.status() {
-            CaptureStatus::Disconnected { .. } | CaptureStatus::Failed(_) => {
-                let due = retry_at.unwrap_or_else(|| Instant::now() + RECONNECT_DELAY);
-                if Instant::now() >= due {
-                    let capture = self.start_capture(&link);
-                    self.source = Source::Capture {
-                        capture,
-                        retry_at: None,
-                    };
-                } else if let Source::Capture { retry_at, .. } = &mut self.source {
-                    *retry_at = Some(due);
-                }
-            }
-            _ => {
-                if let Source::Capture { retry_at, .. } = &mut self.source {
-                    *retry_at = None;
-                }
-            }
+        let lost = matches!(
+            capture.status(),
+            CaptureStatus::Disconnected { .. } | CaptureStatus::Failed(_)
+        );
+        if reconnect.tick(lost, Instant::now()) {
+            let capture = self.start_capture(&link);
+            self.source = Source::Capture {
+                capture,
+                reconnect: Reconnect::new(),
+            };
         }
     }
 }

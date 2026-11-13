@@ -27,16 +27,8 @@ impl App {
         let video = match &self.source {
             Source::Test(_) => VideoState::Running,
             Source::None => VideoState::NoDevice,
-            Source::Capture { capture, .. } => match capture.status() {
-                CaptureStatus::Running { .. } | CaptureStatus::Stopped => VideoState::Running,
-                CaptureStatus::Starting => VideoState::Connecting,
-                CaptureStatus::Disconnected { .. } | CaptureStatus::Failed(_) => VideoState::Lost,
-            },
-            Source::Screen(capture) => match capture.status() {
-                ScreenStatus::Running { .. } => VideoState::Running,
-                ScreenStatus::Starting => VideoState::Connecting,
-                ScreenStatus::Ended(_) | ScreenStatus::Failed(_) => VideoState::Lost,
-            },
+            Source::Capture { capture, .. } => video_state_of_capture(&capture.status()),
+            Source::Screen(capture) => video_state_of_screen(&capture.status()),
         };
         let monitor_hz = self
             .window

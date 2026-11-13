@@ -61,11 +61,13 @@ use crate::cli::Cli;
 use crate::i18n::{self, Lang, LangModeExt};
 use crate::render::{self, Filter, Renderer};
 use crate::replay_service::{RecordToggle, ReplayService};
+use crate::sources::{
+    find_window, monitor_label, video_state_of_capture, video_state_of_screen, AudioRoute,
+    Reconnect, SourceKind,
+};
 use crate::telemetry::{Rates, Telemetry};
 use crate::theme::{Appearance, Theme, ThemeModeExt};
-use crate::ui::controls::{
-    Action, Controls, CurrentSource, Model, RecState, SourcesView, StatusKind,
-};
+use crate::ui::controls::{Action, Controls, Model, RecState, SourcesView, StatusKind};
 use crate::ui::gpu::UiGpu;
 use crate::ui::input::Pointer;
 use crate::ui::stats::{Stats, StatsPanel};
@@ -80,8 +82,6 @@ use scene_transition::ActiveTransition;
 
 /// How often the lists of monitors and windows are refreshed while shown.
 const SOURCES_REFRESH: Duration = Duration::from_millis(1500);
-/// Delay before trying to reopen a capture device that went away.
-const RECONNECT_DELAY: Duration = Duration::from_secs(2);
 /// How long the event loop waits for a new frame before checking events.
 const FRAME_WAIT: Duration = Duration::from_millis(4);
 /// Frames to render before a `--screenshot` is taken.
@@ -96,22 +96,11 @@ enum Source {
     Test(#[allow(dead_code)] TestSource),
     Capture {
         capture: VideoCapture,
-        retry_at: Option<Instant>,
+        reconnect: Reconnect,
     },
     /// A monitor or a window, captured by Windows Graphics Capture.
     Screen(ScreenCapture),
     None,
-}
-
-/// What is being shown and recorded.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum SourceKind {
-    /// The selected capture card.
-    Capture,
-    /// A monitor (its handle).
-    Monitor(isize),
-    /// A window (its handle) and the program that owns it.
-    Window { handle: isize, pid: u32 },
 }
 
 struct App {
