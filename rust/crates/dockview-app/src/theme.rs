@@ -48,7 +48,7 @@ pub fn contrast_ratio(a: Color, b: Color) -> f32 {
     (hi + 0.05) / (lo + 0.05)
 }
 
-pub use dockview_platform::settings::ThemeMode;
+pub use dockview_domain::settings::ThemeMode;
 
 /// A resolved theme (never "auto").
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

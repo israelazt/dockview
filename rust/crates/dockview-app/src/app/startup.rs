@@ -7,6 +7,7 @@ impl App {
     pub(super) fn new(
         slot: Arc<FrameSlot>,
         settings: AppSettings,
+        store: Box<dyn SettingsStore>,
         video_devices: Vec<VideoDevice>,
         audio_devices: Vec<AudioDevice>,
         cli: Cli,
@@ -38,6 +39,7 @@ impl App {
             audio_index: None,
             audio: None,
             settings,
+            store,
             window: None,
             renderer: None,
             rendered: 0,
@@ -217,12 +219,20 @@ pub fn run() {
     event_loop.set_control_flow(ControlFlow::Poll);
 
     // The preview must look the same on every machine: ignore saved settings.
+    let store = FileSettingsStore::at_default_location();
     let saved = if cli.ui_preview {
         AppSettings::default()
     } else {
-        settings::load()
+        store.load()
     };
-    let mut app = App::new(slot, saved, video_devices, audio_devices, cli);
+    let mut app = App::new(
+        slot,
+        saved,
+        Box::new(store),
+        video_devices,
+        audio_devices,
+        cli,
+    );
     if let Err(e) = event_loop.run_app(&mut app) {
         eprintln!("event loop error: {e}");
     }

@@ -17,10 +17,8 @@ pub mod recorder;
 #[cfg(windows)]
 pub mod recording;
 #[cfg(windows)]
-pub mod replay;
-#[cfg(windows)]
 pub mod screen;
-pub mod settings;
+pub mod settings_store;
 #[cfg(windows)]
 pub mod tap_capture;
 #[cfg(windows)]

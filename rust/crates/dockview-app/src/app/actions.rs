@@ -39,7 +39,7 @@ impl App {
             return;
         }
         self.settings.was_fullscreen = self.fullscreen;
-        settings::save(&self.settings);
+        self.store.save(&self.settings);
     }
 
     pub(super) fn theme_mode(&self) -> ThemeMode {

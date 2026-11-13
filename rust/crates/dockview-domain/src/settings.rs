@@ -1,17 +1,16 @@
-//! User preferences persisted to `%APPDATA%\Dockview\settings.json`.
+//! User preferences: the model, its defaults and the rules that keep it in
+//! range. Reading and writing the file is the platform's job (see the
+//! [`SettingsStore`] port); the file lives at `%APPDATA%\Dockview\settings.json`.
 //!
 //! The on-disk format is compatible with the original C# app (camelCase keys,
 //! `renderPreset` stored as a number) so both versions can share one file
 //! during the migration.
 
-use std::fs;
-use std::path::{Path, PathBuf};
-
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use dockview_domain::scene::Scene;
+use crate::scene::Scene;
 
 /// Maximum audio sync offset in either direction, in milliseconds.
 pub const MAX_AUDIO_OFFSET_MS: i32 = 300;
@@ -300,63 +299,95 @@ impl AppSettings {
             .map(Scene::sanitized)
             .filter(|s| !s.layers.is_empty())
             .collect();
-        self.device_aliases = dockview_domain::device_names::sanitize_aliases(self.device_aliases);
+        self.device_aliases = crate::device_names::sanitize_aliases(self.device_aliases);
         // The scene in use must exist.
         self.active_scene = self.active_scene.filter(|&i| i < self.scenes.len());
         self
     }
 }
 
-/// Location of the settings file: `%APPDATA%\Dockview\settings.json`.
-pub fn settings_path() -> Option<PathBuf> {
-    std::env::var_os("APPDATA").map(|dir| PathBuf::from(dir).join("Dockview").join("settings.json"))
-}
-
-/// Loads settings from `path`. A missing, unreadable or corrupt file yields
-/// the defaults; this never fails.
-pub fn load_from(path: &Path) -> AppSettings {
-    fs::read_to_string(path)
-        .ok()
+impl AppSettings {
+    /// Reads settings from JSON text. A damaged or empty text yields the
+    /// defaults; this never fails, and out-of-range values are clamped.
+    pub fn from_json(json: &str) -> Self {
         // Editors such as Notepad (and PowerShell 5.1) prepend a UTF-8 byte
         // order mark, which JSON parsers reject.
-        .and_then(|json| {
-            serde_json::from_str::<AppSettings>(json.trim_start_matches('\u{feff}')).ok()
-        })
-        .unwrap_or_default()
-        .sanitized()
-}
-
-/// Saves settings to `path`, creating parent directories as needed.
-pub fn save_to(path: &Path, settings: &AppSettings) -> std::io::Result<()> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)?;
+        serde_json::from_str::<Self>(json.trim_start_matches('\u{feff}'))
+            .unwrap_or_default()
+            .sanitized()
     }
-    let json = serde_json::to_string_pretty(settings).map_err(std::io::Error::other)?;
-    fs::write(path, json)
+
+    pub fn to_json(&self) -> Result<String, serde_json::Error> {
+        serde_json::to_string_pretty(self)
+    }
 }
 
-/// Loads settings from the default location.
-pub fn load() -> AppSettings {
-    settings_path().map_or_else(AppSettings::default, |p| load_from(&p))
+/// Where settings are kept between runs. The real one writes a file
+/// (`dockview-platform`); tests use [`MemoryStore`].
+pub trait SettingsStore {
+    /// The saved settings, or the defaults when there are none. Never fails.
+    fn load(&self) -> AppSettings;
+    /// Saves the settings. A failure is not fatal: they reset on the next run.
+    fn save(&self, settings: &AppSettings);
 }
 
-/// Saves settings to the default location. Failure is non-fatal: settings
-/// simply reset on next launch.
-pub fn save(settings: &AppSettings) {
-    if let Some(path) = settings_path() {
-        let _ = save_to(&path, settings);
+/// A store that keeps the settings in memory, for tests and previews.
+#[derive(Debug, Default)]
+pub struct MemoryStore {
+    saved: std::sync::Mutex<Option<AppSettings>>,
+}
+
+impl MemoryStore {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// How the settings were last saved, if they were.
+    pub fn last_saved(&self) -> Option<AppSettings> {
+        self.saved.lock().unwrap_or_else(|e| e.into_inner()).clone()
+    }
+}
+
+impl SettingsStore for MemoryStore {
+    fn load(&self) -> AppSettings {
+        self.last_saved().unwrap_or_default()
+    }
+
+    fn save(&self, settings: &AppSettings) {
+        *self.saved.lock().unwrap_or_else(|e| e.into_inner()) = Some(settings.clone());
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use dockview_domain::scene::SourceRef;
+    use crate::scene::SourceRef;
 
-    fn temp_file(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("dockview-test-{}-{name}", std::process::id()));
-        let _ = fs::remove_dir_all(&dir);
-        dir.join("settings.json")
+    #[test]
+    fn json_with_a_byte_order_mark_or_garbage_is_read_safely() {
+        assert_eq!(
+            AppSettings::from_json("\u{feff}{ \"volume\": 0.25 }").volume,
+            0.25
+        );
+        assert_eq!(AppSettings::from_json("{invalid}"), AppSettings::default());
+        assert_eq!(AppSettings::from_json(""), AppSettings::default());
+    }
+
+    #[test]
+    fn the_memory_store_keeps_what_was_saved() {
+        let store = MemoryStore::new();
+        assert_eq!(store.load(), AppSettings::default());
+        assert!(store.last_saved().is_none());
+        let settings = AppSettings {
+            volume: 0.5,
+            ..AppSettings::default()
+        };
+        store.save(&settings);
+        assert_eq!(store.load(), settings);
+        assert_eq!(
+            AppSettings::from_json(&settings.to_json().unwrap()),
+            settings
+        );
     }
 
     #[test]
@@ -574,46 +605,8 @@ mod tests {
     }
 
     #[test]
-    fn missing_file_returns_defaults() {
-        let path = temp_file("missing");
-        assert_eq!(load_from(&path), AppSettings::default());
-    }
-
-    #[test]
-    fn a_file_with_a_utf8_byte_order_mark_still_loads() {
-        let path = temp_file("bom");
-        fs::create_dir_all(path.parent().unwrap()).unwrap();
-        fs::write(&path, "\u{feff}{ \"volume\": 0.25 }").unwrap();
-        assert_eq!(load_from(&path).volume, 0.25);
-        let _ = fs::remove_dir_all(path.parent().unwrap());
-    }
-
-    #[test]
-    fn corrupt_file_returns_defaults() {
-        let path = temp_file("corrupt");
-        fs::create_dir_all(path.parent().unwrap()).unwrap();
-        fs::write(&path, "{invalid}").unwrap();
-        assert_eq!(load_from(&path), AppSettings::default());
-        let _ = fs::remove_dir_all(path.parent().unwrap());
-    }
-
-    #[test]
-    fn save_then_load_round_trips_and_creates_directories() {
-        let path = temp_file("roundtrip");
-        let settings = AppSettings {
-            audio_offset_ms: 120,
-            volume: 0.5,
-            render_preset: RenderPreset::Performance,
-            ..AppSettings::default()
-        };
-        save_to(&path, &settings).unwrap();
-        assert_eq!(load_from(&path), settings);
-        let _ = fs::remove_dir_all(path.parent().unwrap());
-    }
-
-    #[test]
     fn scenes_are_saved_and_an_old_file_without_them_still_loads() {
-        use dockview_domain::scene::{Scene, SourceRef};
+        use crate::scene::{Scene, SourceRef};
         let old = r#"{"volume":0.5}"#;
         let loaded: AppSettings = serde_json::from_str(old).unwrap();
         assert!(loaded.scenes.is_empty() && loaded.active_scene.is_none());
@@ -635,7 +628,7 @@ mod tests {
 
     #[test]
     fn sanitizing_drops_empty_scenes_and_a_dangling_active_one() {
-        use dockview_domain::scene::{Scene, SourceRef};
+        use crate::scene::{Scene, SourceRef};
         let mut s = AppSettings::default();
         s.scenes.push(Scene {
             name: "vacía".into(),

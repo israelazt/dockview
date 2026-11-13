@@ -6,7 +6,7 @@
 
 use std::collections::VecDeque;
 
-use crate::encode::EncodedFrame;
+use crate::encoded::EncodedFrame;
 
 /// 100 ns units per second.
 const TICKS_PER_SECOND: f64 = 10_000_000.0;

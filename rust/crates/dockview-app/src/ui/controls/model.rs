@@ -1,6 +1,6 @@
 //! What the controls display (`Model`) and what they ask for (`Action`).
 
-use dockview_platform::settings::{LangMode, RecordingQuality, RenderPreset, VideoModePref};
+use dockview_domain::settings::{LangMode, RecordingQuality, RenderPreset, VideoModePref};
 
 use crate::i18n::Lang;
 use crate::theme::{Theme, ThemeMode};

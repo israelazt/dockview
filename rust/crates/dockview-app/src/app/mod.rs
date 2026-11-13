@@ -27,6 +27,9 @@ use dockview_domain::device_names;
 use dockview_domain::diagnostics::{diagnose, Finding, Snapshot, VideoState};
 use dockview_domain::frame::FrameSlot;
 use dockview_domain::scene::SceneLayer;
+use dockview_domain::settings::{
+    self, AppSettings, LangMode, RenderPreset, SettingsStore, ThemeMode, VideoModePref,
+};
 use dockview_domain::stream::StreamInfo;
 use dockview_platform::audio::{
     default_capture_device, enumerate_audio_devices, AudioEngine, AudioStatus,
@@ -39,9 +42,7 @@ use dockview_platform::screen::{
     list_monitors, list_windows, CaptureTarget, MonitorInfo, ScreenCapture, ScreenOptions,
     ScreenStatus, WindowInfo,
 };
-use dockview_platform::settings::{
-    self, AppSettings, LangMode, RenderPreset, ThemeMode, VideoModePref,
-};
+use dockview_platform::settings_store::FileSettingsStore;
 use dockview_platform::tap_capture::{CaptureSource, TapCapture as MicCapture};
 use dockview_platform::testsrc::TestSource;
 use windows::Win32::Foundation::HWND;
@@ -127,6 +128,8 @@ struct App {
     audio_index: Option<usize>,
     audio: Option<AudioEngine>,
     settings: AppSettings,
+    /// Where the settings are saved (the real file, or a stand-in in tests).
+    store: Box<dyn SettingsStore>,
     window: Option<Window>,
     renderer: Option<Renderer>,
     rendered: u64,

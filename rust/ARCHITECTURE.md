@@ -53,7 +53,7 @@ Las flechas solo van hacia abajo. `app` y `ui` no se ven entre sí: se hablan po
 
 - [x] Desacoplar `App` en módulos y servicios con tests (D-1…D-8).
 - [x] Paso 1: crear `dockview-domain` con los módulos puros que ya están aislados (`audio_sync`, `device`, `device_names`, `diagnostics`, `frame`, `geometry`, `pcm`, `scene`, `stream`, `transition`). `dockview-core` los reexporta hasta el paso 5. Quedan para el paso 2 `settings` (tiene E/S de disco) y `replay` (usa un tipo del codificador).
-- [~] Paso 2: **hecho** el renombrado de `dockview-core` a `dockview-platform` y que todos importen `dockview_domain` directamente (sin reexports). **Falta** mover `settings` y `replay` a `domain` y definir los puertos del grabador, las fuentes, el audio y el guardado de ajustes.
+- [x] Paso 2: `dockview-core` es ahora `dockview-platform`, todos importan `dockview_domain` directamente (sin reexports), `settings` y `replay` viven en el dominio (con `EncodedFrame`), y el guardado de ajustes está detrás del primer puerto, `SettingsStore` (`FileSettingsStore` en `platform`, `MemoryStore` para tests). `run()` crea el almacén y se lo da a `App`. **Falta** definir los puertos del grabador, las fuentes y el audio (paso 3).
 - [ ] Paso 3: eventos de dominio (`AppEvent`) sin `ToastKind`, y servicios que usan puertos (`ReplayService` primero).
 - [ ] Paso 4: partir `dockview-app` en `app`, `ui` y el binario con el cableado.
 - [ ] Paso 5: las guardas automáticas (límite de líneas). Los reexports temporales ya se quitaron en el paso 2.

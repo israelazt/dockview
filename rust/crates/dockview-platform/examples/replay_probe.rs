@@ -7,8 +7,9 @@
 use std::path::PathBuf;
 use std::time::Instant;
 
+use dockview_domain::encoded::EncodedFrame;
 use dockview_platform::encode::{
-    frame_duration_100ns, sequence_header, EncodeSettings, EncodedFrame, H264Encoder, Mp4Remuxer,
+    frame_duration_100ns, sequence_header, EncodeSettings, H264Encoder, Mp4Remuxer,
 };
 use dockview_platform::mf::MfSession;
 use dockview_platform::testsrc::{nv12_bars, overlay_stripe};

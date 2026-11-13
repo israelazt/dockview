@@ -35,6 +35,8 @@ use windows::Win32::System::Variant::{
     VARIANT, VARIANT_0, VARIANT_0_0, VARIANT_0_0_0, VT_BOOL, VT_UI4,
 };
 
+use dockview_domain::encoded::EncodedFrame;
+
 use crate::mf::{get_string, MfSession};
 
 /// Length of one video frame in 100 ns units at `fps`.
@@ -196,18 +198,6 @@ impl Mp4Writer {
 // ===========================================================================
 // Direct control of the encoder: compressed samples out, no file involved.
 // ===========================================================================
-
-/// One compressed H.264 access unit (Annex B), ready to be stored or muxed.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct EncodedFrame {
-    pub data: Vec<u8>,
-    /// Presentation time in 100 ns units.
-    pub timestamp: i64,
-    /// Duration in 100 ns units.
-    pub duration: i64,
-    /// A clean point: decoding can start here.
-    pub keyframe: bool,
-}
 
 /// How long to wait for the encoder to ask for more input before giving up.
 const NEED_INPUT_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(500);
