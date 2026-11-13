@@ -11,7 +11,6 @@ mod app;
 mod auto_switch;
 mod cli;
 mod keys;
-mod render;
 mod replay_service;
 mod sources;
 mod stats_log;

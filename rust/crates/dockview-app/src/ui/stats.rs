@@ -5,8 +5,8 @@ use dockview_domain::diagnostics::Finding;
 
 use super::text::Weight;
 use super::{Rect, TextStyle, Ui};
-use crate::telemetry::Stats;
 use dockview_domain::i18n::{tr, Key, Lang};
+use dockview_domain::stats::Stats;
 use dockview_domain::theme::Theme;
 
 const WIDTH: f32 = 372.0;

@@ -2,29 +2,15 @@
 //! logical pixels and drawn by [`gpu::UiGpu`] on top of the video.
 
 pub mod controls;
-pub mod gpu;
 pub mod input;
 pub mod rec;
 pub mod stats;
 pub mod text;
 pub mod toast;
 
+use dockview_domain::draw::{DrawList, Vertex, ATLAS_SIZE};
 use dockview_domain::theme::Color;
 use text::{Face, TextSystem, Weight};
-
-/// One corner of a UI quad. Physical pixels.
-#[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Vertex {
-    pub pos: [f32; 2],
-    /// Rounded rects: position relative to the rect centre (px).
-    /// Glyphs: atlas texture coordinates (0..1).
-    pub uv: [f32; 2],
-    pub color: [f32; 4],
-    /// Rounded rects: `(half_w, half_h, radius, blur)`.
-    /// Glyphs: `z < 0`.
-    pub shape: [f32; 4],
-}
 
 /// A rectangle in logical pixels.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -137,6 +123,16 @@ impl Ui {
 
     pub fn viewport(&self) -> (u32, u32) {
         self.viewport
+    }
+
+    /// The frame drawn so far, as a draw list: the new glyphs (taken, so they
+    /// are uploaded once) and the triangles.
+    pub fn draw_list(&mut self) -> DrawList<'_> {
+        DrawList {
+            uploads: self.text.take_uploads(),
+            vertices: &self.vertices,
+            target_size: self.viewport,
+        }
     }
 
     pub fn vertices(&self) -> &[Vertex] {
@@ -255,7 +251,7 @@ impl Ui {
             ((x + self.offset.0) * scale).round(),
             ((y + self.offset.1) * scale).round(),
         );
-        let atlas = text::ATLAS_SIZE as f32;
+        let atlas = ATLAS_SIZE as f32;
         let rgba = self.tint(color);
 
         for glyph in &shaped.glyphs {

@@ -23,6 +23,8 @@ pub mod recorder;
 #[cfg(windows)]
 pub mod recording;
 #[cfg(windows)]
+pub mod render;
+#[cfg(windows)]
 pub mod replay_machine;
 #[cfg(windows)]
 pub mod screen;
@@ -34,6 +36,8 @@ pub mod tap_capture;
 #[cfg(windows)]
 pub mod targets;
 pub mod testsrc;
+#[cfg(windows)]
+pub mod ui_gpu;
 pub mod worker;
 
 pub fn version() -> &'static str {

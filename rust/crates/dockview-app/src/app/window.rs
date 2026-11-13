@@ -92,7 +92,7 @@ impl App {
                     );
                 }
                 toasts.frame(ui, &model.theme, dt, animations);
-                if let Err(e) = gpu.render(context, ui, size) {
+                if let Err(e) = gpu.render(context, &ui.draw_list()) {
                     eprintln!("ui draw failed: {e}");
                 }
             },

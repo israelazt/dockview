@@ -1,4 +1,4 @@
-//! Direct3D 11 side of the UI layer: pipeline state, glyph atlas texture and
+//! Direct3D 11 side of the interface layer: pipeline state, glyph atlas texture and
 //! the dynamic vertex buffer.
 
 use std::mem::size_of;
@@ -24,8 +24,8 @@ use windows::Win32::Graphics::Dxgi::Common::{
     DXGI_SAMPLE_DESC,
 };
 
-use super::text::ATLAS_SIZE;
-use super::{Ui, Vertex};
+use dockview_domain::draw::{DrawList, Vertex, ATLAS_SIZE};
+
 use crate::render::{blob_bytes, compile};
 
 const SHADER_SOURCE: &str = include_str!("ui.hlsl");
@@ -182,16 +182,12 @@ impl UiGpu {
     }
 
     /// Uploads any new glyphs and draws everything queued in `ui`.
-    pub fn render(
-        &mut self,
-        context: &ID3D11DeviceContext,
-        ui: &mut Ui,
-        target_size: (u32, u32),
-    ) -> Result<()> {
+    pub fn render(&mut self, context: &ID3D11DeviceContext, list: &DrawList<'_>) -> Result<()> {
+        let target_size = list.target_size;
         // SAFETY: all resources belong to the device of `context`; the vertex
         // data is plain-old-data and copied within the buffer's capacity.
         unsafe {
-            for upload in ui.text.take_uploads() {
+            for upload in &list.uploads {
                 let region = D3D11_BOX {
                     left: upload.x,
                     top: upload.y,
@@ -210,7 +206,7 @@ impl UiGpu {
                 );
             }
 
-            let vertices = ui.vertices();
+            let vertices = list.vertices;
             let count = vertices.len().min(MAX_VERTICES);
             if count == 0 {
                 return Ok(());

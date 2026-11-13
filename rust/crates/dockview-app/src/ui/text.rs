@@ -5,6 +5,8 @@
 
 use std::collections::HashMap;
 
+use dockview_domain::draw::{GlyphUpload, ATLAS_SIZE};
+
 use cosmic_text::{
     fontdb, Attrs, Buffer, CacheKey, Family, FeatureTag, FontFeatures, FontSystem, Metrics,
     Shaping, SwashCache, SwashContent, Weight as FontWeight,
@@ -18,8 +20,6 @@ const LUCIDE: &[u8] = include_bytes!("../../assets/fonts/lucide.ttf");
 const TEXT_FAMILY: &str = "Inter";
 const ICON_FAMILY: &str = "lucide";
 
-/// Atlas texture edge length in pixels.
-pub const ATLAS_SIZE: u32 = 2048;
 /// Line height as a multiple of the font size.
 const LINE_HEIGHT: f32 = 1.3;
 /// Entries kept in the shaping cache before it is flushed.
@@ -50,15 +50,6 @@ pub struct GlyphSlot {
     pub left: i32,
     /// Offset of the bitmap's top edge above the baseline.
     pub top: i32,
-}
-
-/// Pixels waiting to be copied into the atlas texture.
-pub struct Upload {
-    pub x: u32,
-    pub y: u32,
-    pub w: u32,
-    pub h: u32,
-    pub data: Vec<u8>,
 }
 
 #[derive(Clone, Copy)]
@@ -128,7 +119,7 @@ pub struct TextSystem {
     shaped: HashMap<ShapeKey, Shaped>,
     slots: HashMap<CacheKey, Option<GlyphSlot>>,
     packer: Packer,
-    uploads: Vec<Upload>,
+    uploads: Vec<GlyphUpload>,
 }
 
 impl TextSystem {
@@ -230,7 +221,7 @@ impl TextSystem {
         let (left, top) = (image.placement.left, image.placement.top);
         let data = image.data.clone();
         let (x, y) = self.packer.alloc(w, h)?;
-        self.uploads.push(Upload { x, y, w, h, data });
+        self.uploads.push(GlyphUpload { x, y, w, h, data });
         Some(GlyphSlot {
             x,
             y,
@@ -242,7 +233,7 @@ impl TextSystem {
     }
 
     /// Takes the bitmaps queued since the last call.
-    pub fn take_uploads(&mut self) -> Vec<Upload> {
+    pub fn take_uploads(&mut self) -> Vec<GlyphUpload> {
         std::mem::take(&mut self.uploads)
     }
 }

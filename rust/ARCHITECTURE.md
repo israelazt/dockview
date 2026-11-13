@@ -70,8 +70,8 @@ Las flechas solo van hacia abajo. `ui`, `app` y `platform` no se ven entre sí: 
 - [x] Paso 2: `dockview-core` → `dockview-platform`, importar el dominio directamente, `settings` y `replay` al dominio, `SettingsStore` como primer puerto.
 - [x] Paso 3a–3c: `clips`, `hotkey` y `perf` a `platform`; tipos de grabación al dominio; puertos y eventos del replay; `ReplayService` probado con dobles falsos.
 - [x] Paso 4: `Model`, `Action` y todas sus vistas (`domain::view`), `i18n` y `theme` están en el dominio; la búsqueda del idioma de Windows pasó a `platform::system_lang`. Los datos de dibujo (`Vertex`, `GlyphUpload`) se mueven con la interfaz en el paso 5.
-- [ ] Paso 5: crate `dockview-ui` (la interfaz sin Direct3D).
-- [ ] Paso 6: los renderizadores de Direct3D (vídeo e interfaz) a `platform`.
+- [x] Paso 5: los datos de dibujo (`Vertex`, `GlyphUpload`, `DrawList`) y `Stats` están en el dominio; `UiGpu` recibe una `DrawList` en lugar del `Ui` entero; y los renderizadores de Direct3D (`render`, `ui_gpu`) viven en `platform`.
+- [ ] Paso 6: crate `dockview-ui` (la interfaz, ya sin Direct3D).
 - [ ] Paso 7: puertos de las fuentes de vídeo y de audio, del compositor y de las escenas, y el puerto `Host`.
 - [ ] Paso 8: crate `dockview-app` como biblioteca (`Core`) y el binario `dockview` solo con la ventana y el cableado.
 - [ ] Paso 9: las guardas automáticas (límite de líneas y dependencias), partir lo que las incumpla.

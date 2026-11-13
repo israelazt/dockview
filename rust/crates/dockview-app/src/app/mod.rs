@@ -62,25 +62,26 @@ use winit::window::{CursorIcon, Fullscreen, Theme as WindowTheme, Window, Window
 use crate::auto_switch::{AutoSwitch, SwitchEvent};
 use crate::cli::Cli;
 use crate::keys::{self, KeyCommand};
-use crate::render::{self, Filter, Renderer};
 use crate::replay_service::{RecordToggle, ReplayService};
 use crate::sources::{
     find_window, monitor_label, pick_audio, pick_video, startup_scene, status_kind,
     video_state_of_capture, video_state_of_screen, AudioRoute, Reconnect, SourceKind, StartupScene,
 };
 use crate::stats_log;
-use crate::telemetry::{Rates, Stats, Telemetry};
+use crate::telemetry::{Rates, Telemetry};
 use crate::ui::controls::Controls;
-use crate::ui::gpu::UiGpu;
 use crate::ui::input::Pointer;
 use crate::ui::stats::StatsPanel;
 use crate::ui::toast::{ToastHost, ToastKind};
 use crate::ui::{self, Ui};
 use dockview_domain::i18n::{self, Lang, LangModeExt};
+use dockview_domain::stats::Stats;
 use dockview_domain::theme::{Appearance, Theme, ThemeModeExt};
 use dockview_domain::view::{
     Action, MicState, MicView, Model, RecState, RecView, ReplayState, SourcesView,
 };
+use dockview_platform::render::{self, Filter, Renderer};
+use dockview_platform::ui_gpu::UiGpu;
 use dockview_platform::{clips, hotkey, perf};
 use helpers::{
     appearance_of, filter_for, mic_device_id, mic_index_of, next_index, next_preset,
