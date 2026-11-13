@@ -136,7 +136,7 @@ impl App {
         let Some(folder) = clips::pick_folder(owner, &start) else {
             return; // cancelled
         };
-        if !clips::is_writable_folder(&folder) {
+        if !self.replay.is_writable_folder(&folder) {
             self.emit(AppEvent::FolderNotWritable);
             return;
         }
@@ -155,13 +155,14 @@ impl App {
         self.settings
             .replay_folder
             .as_deref()
-            .map_or_else(clips::default_folder, std::path::PathBuf::from)
+            .map_or_else(|| self.replay.default_folder(), std::path::PathBuf::from)
     }
 
     pub(super) fn replay_view(&self) -> dockview_domain::view::ReplayView {
         use dockview_domain::view::ReplayView;
-        let mut view = ReplayView::off(hotkey::LABEL);
-        view.record_hotkey = hotkey::RECORD_LABEL.to_owned();
+        let (save_label, record_label) = self.replay.hotkey_labels();
+        let mut view = ReplayView::off(&save_label);
+        view.record_hotkey = record_label;
         view.keep_seconds = self.settings.replay_seconds;
         view.bitrate_mbps = self.settings.replay_bitrate_mbps;
         view.memory_bytes = settings::replay_memory_bytes(

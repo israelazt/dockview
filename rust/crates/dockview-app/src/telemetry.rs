@@ -5,9 +5,11 @@
 //! It only counts. The window, the GPU and the source are asked by the app,
 //! which then builds the [`Stats`] it shows.
 
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use dockview_platform::perf::{ProcessSampler, ProcessUsage};
+use dockview_domain::ports::SystemProbe;
+use dockview_domain::stats::ProcessUsage;
 
 /// How often a new set of measurements is made.
 const WINDOW: Duration = Duration::from_secs(1);
@@ -21,7 +23,7 @@ pub struct Rates {
 }
 
 pub struct Telemetry {
-    sampler: ProcessSampler,
+    probe: Arc<dyn SystemProbe>,
     window_start: Instant,
     last_published: u64,
     last_dropped: u64,
@@ -33,9 +35,9 @@ pub struct Telemetry {
 }
 
 impl Telemetry {
-    pub fn new() -> Self {
+    pub fn new(probe: Arc<dyn SystemProbe>) -> Self {
         Self {
-            sampler: ProcessSampler::new(),
+            probe,
             window_start: Instant::now(),
             last_published: 0,
             last_dropped: 0,
@@ -96,7 +98,7 @@ impl Telemetry {
 
     /// CPU and memory of the process since the last call.
     pub fn usage(&mut self) -> ProcessUsage {
-        self.sampler.sample()
+        self.probe.sample_usage()
     }
 
     /// The average latency of the window, then starts a new one. With no
@@ -115,13 +117,24 @@ impl Telemetry {
 mod tests {
     use super::*;
 
+    struct NoProbe;
+
+    impl SystemProbe for NoProbe {
+        fn sample_usage(&self) -> ProcessUsage {
+            ProcessUsage::default()
+        }
+        fn total_ram_bytes(&self) -> u64 {
+            0
+        }
+    }
+
     fn at(telemetry: &Telemetry, secs: f32) -> Instant {
         telemetry.window_start + Duration::from_secs_f32(secs)
     }
 
     #[test]
     fn nothing_is_measured_before_a_second_has_passed() {
-        let mut t = Telemetry::new();
+        let mut t = Telemetry::new(Arc::new(NoProbe));
         let now = at(&t, 0.5);
         assert_eq!(t.close_window(now, 30, 0, 30), None);
         assert_eq!(t.windows(), 0);
@@ -129,7 +142,7 @@ mod tests {
 
     #[test]
     fn rates_are_the_change_in_the_totals_over_the_window() {
-        let mut t = Telemetry::new();
+        let mut t = Telemetry::new(Arc::new(NoProbe));
         let now = at(&t, 2.0);
         let rates = t.close_window(now, 120, 10, 100).expect("a window");
         assert_eq!(rates.received_fps, 60.0);
@@ -149,7 +162,7 @@ mod tests {
     #[test]
     fn totals_that_go_backwards_do_not_underflow() {
         // A new source starts counting from zero again.
-        let mut t = Telemetry::new();
+        let mut t = Telemetry::new(Arc::new(NoProbe));
         t.close_window(at(&t, 1.0), 500, 20, 500).expect("first");
         let rates = t
             .close_window(at(&t, 1.0), 10, 0, 10)
@@ -159,7 +172,7 @@ mod tests {
 
     #[test]
     fn latency_is_the_average_and_a_quiet_window_keeps_the_last_value() {
-        let mut t = Telemetry::new();
+        let mut t = Telemetry::new(Arc::new(NoProbe));
         t.note_latency(4.0);
         t.note_latency(8.0);
         assert_eq!(t.take_latency(Some(99.0)), Some(6.0));

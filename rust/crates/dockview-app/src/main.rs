@@ -13,7 +13,6 @@ mod cli;
 mod keys;
 mod replay_service;
 mod sources;
-mod stats_log;
 mod telemetry;
 
 fn main() {

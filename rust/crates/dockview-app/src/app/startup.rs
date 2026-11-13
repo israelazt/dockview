@@ -12,13 +12,10 @@ impl App {
         audio_devices: Vec<AudioDevice>,
         cli: Cli,
     ) -> Self {
+        let system = ports.system;
         let test_pattern = cli.test_pattern;
         let preview = cli.ui_preview;
         let show_stats = cli.show_stats;
-        let stats_log = cli
-            .log_stats
-            .as_deref()
-            .and_then(|path| stats_log::StatsLog::create(path).ok());
         // Screenshots must show the settled state, not a mid-transition frame.
         let animations = cli.screenshot.is_none() && system_animations_enabled();
         // The main source has a slot of its own that forwards to the output
@@ -62,12 +59,12 @@ impl App {
             stats_open: show_stats,
             stats_panel: StatsPanel::new(),
             stats: Stats::default(),
-            stats_log,
-            telemetry: Telemetry::new(),
+            stats_sink: ports.stats_sink,
+            telemetry: Telemetry::new(Arc::clone(&system)),
             auto: AutoSwitch::new(),
             replay: ReplayService::new(ports.replay),
             toasts: ToastHost::new(),
-            total_ram: perf::total_ram_bytes(),
+            total_ram: system.total_ram_bytes(),
             source_kind: SourceKind::Capture,
             loopback: None,
             machine: ports.sources,
@@ -232,6 +229,12 @@ pub fn run() {
             settings: Box::new(store),
             replay: Box::new(PlatformReplay),
             sources: Box::new(PlatformSources),
+            system: Arc::new(PlatformSystem::new()),
+            stats_sink: cli
+                .log_stats
+                .as_deref()
+                .and_then(|path| StatsLog::create(path).ok())
+                .map(|log| Box::new(log) as Box<dyn StatsSink>),
         },
         video_devices,
         audio_devices,

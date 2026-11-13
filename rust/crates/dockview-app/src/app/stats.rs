@@ -96,7 +96,7 @@ impl App {
             findings,
             measured: true,
         };
-        if let Some(log) = self.stats_log.as_mut() {
+        if let Some(log) = self.stats_sink.as_mut() {
             log.record(&self.stats);
         }
     }

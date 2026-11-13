@@ -30,7 +30,7 @@ use dockview_domain::events::AppEvent;
 use dockview_domain::frame::FrameSlot;
 use dockview_domain::ports::{
     AudioPlayback, CaptureHandle, Loopback, MicInput, ReplayMachine, SceneCompositor, ScreenHandle,
-    SourceMachine,
+    SourceMachine, StatsSink, SystemProbe,
 };
 use dockview_domain::recording::{RecorderStatus, RecordingInfo, RecordingState, ReplaySettings};
 use dockview_domain::scene::SceneLayer;
@@ -44,9 +44,11 @@ use dockview_domain::sources::{
 use dockview_domain::stream::StreamInfo;
 use dockview_platform::audio::enumerate_audio_devices;
 use dockview_platform::mf::{enumerate_video_devices, MfSession};
+use dockview_platform::perf::PlatformSystem;
 use dockview_platform::replay_machine::PlatformReplay;
 use dockview_platform::settings_store::FileSettingsStore;
 use dockview_platform::source_machine::PlatformSources;
+use dockview_platform::stats_log::StatsLog;
 use windows::Win32::Foundation::HWND;
 use windows::Win32::UI::WindowsAndMessaging::{
     SetWindowDisplayAffinity, WDA_EXCLUDEFROMCAPTURE, WDA_NONE,
@@ -67,7 +69,6 @@ use crate::sources::{
     find_window, monitor_label, pick_audio, pick_video, startup_scene, status_kind,
     video_state_of_capture, video_state_of_screen, AudioRoute, Reconnect, SourceKind, StartupScene,
 };
-use crate::stats_log;
 use crate::telemetry::{Rates, Telemetry};
 use dockview_domain::i18n::{self, Lang, LangModeExt};
 use dockview_domain::stats::Stats;
@@ -75,9 +76,9 @@ use dockview_domain::theme::{Appearance, Theme, ThemeModeExt};
 use dockview_domain::view::{
     Action, MicState, MicView, Model, RecState, RecView, ReplayState, SourcesView,
 };
+use dockview_platform::clips;
 use dockview_platform::render::{self, Filter, Renderer};
 use dockview_platform::ui_gpu::UiGpu;
-use dockview_platform::{clips, hotkey, perf};
 use dockview_ui::controls::Controls;
 use dockview_ui::input::Pointer;
 use dockview_ui::stats::StatsPanel;
@@ -122,6 +123,10 @@ pub(crate) struct Ports {
     pub replay: Box<dyn ReplayMachine>,
     /// The capture cards, screens, audio and the scene compositor.
     pub sources: Box<dyn SourceMachine>,
+    /// CPU, memory and installed RAM.
+    pub system: Arc<dyn SystemProbe>,
+    /// Where the measurements are logged, when asked for.
+    pub stats_sink: Option<Box<dyn StatsSink>>,
 }
 
 struct App {
@@ -170,7 +175,7 @@ struct App {
     stats_open: bool,
     stats_panel: StatsPanel,
     stats: Stats,
-    stats_log: Option<stats_log::StatsLog>,
+    stats_sink: Option<Box<dyn StatsSink>>,
     /// The once-a-second counters (see `telemetry`).
     telemetry: Telemetry,
     /// The automatic move to a compressed mode (see `auto_switch`).

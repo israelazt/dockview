@@ -137,6 +137,23 @@ impl ReplayService {
         self.events.push(event);
     }
 
+    // -- folders and labels, which come from the machine ---------------------
+
+    /// Where clips go unless the user chose another folder.
+    pub fn default_folder(&self) -> PathBuf {
+        self.machine.default_folder()
+    }
+
+    /// Whether files can be written to `folder`.
+    pub fn is_writable_folder(&self, folder: &Path) -> bool {
+        self.machine.is_writable_folder(folder)
+    }
+
+    /// How the hotkeys are written for the user: (save a clip, record).
+    pub fn hotkey_labels(&self) -> (String, String) {
+        self.machine.hotkey_labels()
+    }
+
     // -- hotkeys --------------------------------------------------------
 
     /// Registers the global hotkeys.

@@ -1,6 +1,10 @@
 //! Process-level performance measurements (CPU and memory).
 
+use std::sync::Mutex;
 use std::time::Instant;
+
+use dockview_domain::ports::SystemProbe;
+use dockview_domain::stats::ProcessUsage;
 
 use windows::Win32::Foundation::FILETIME;
 use windows::Win32::System::ProcessStatus::{GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS};
@@ -21,16 +25,6 @@ pub fn cpu_core_percent(cpu_100ns: u64, wall_secs: f64) -> f32 {
 
 fn filetime_100ns(ft: FILETIME) -> u64 {
     (u64::from(ft.dwHighDateTime) << 32) | u64::from(ft.dwLowDateTime)
-}
-
-/// What the app is costing the machine right now.
-#[derive(Debug, Clone, Copy, Default, PartialEq)]
-pub struct ProcessUsage {
-    /// Percent of one core.
-    pub cpu_core_percent: f32,
-    /// Percent of the whole CPU (all logical cores).
-    pub cpu_total_percent: f32,
-    pub memory_mb: f32,
 }
 
 /// Samples this process's CPU time between calls.
@@ -110,6 +104,38 @@ pub fn total_ram_bytes() -> u64 {
     match unsafe { GlobalMemoryStatusEx(&mut status) } {
         Ok(()) => status.ullTotalPhys,
         Err(_) => 0,
+    }
+}
+
+/// The machine's counters: this process's CPU and memory, and the installed RAM.
+pub struct PlatformSystem {
+    sampler: Mutex<ProcessSampler>,
+}
+
+impl PlatformSystem {
+    pub fn new() -> Self {
+        Self {
+            sampler: Mutex::new(ProcessSampler::new()),
+        }
+    }
+}
+
+impl Default for PlatformSystem {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl SystemProbe for PlatformSystem {
+    fn sample_usage(&self) -> ProcessUsage {
+        self.sampler
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .sample()
+    }
+
+    fn total_ram_bytes(&self) -> u64 {
+        total_ram_bytes()
     }
 }
 

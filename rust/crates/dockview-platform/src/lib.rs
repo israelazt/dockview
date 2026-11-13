@@ -31,6 +31,7 @@ pub mod screen;
 pub mod settings_store;
 #[cfg(windows)]
 pub mod source_machine;
+pub mod stats_log;
 #[cfg(windows)]
 pub mod system_lang;
 #[cfg(windows)]

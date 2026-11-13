@@ -71,6 +71,18 @@ impl ReplayMachine for PlatformReplay {
         std::fs::create_dir_all(folder).is_ok()
     }
 
+    fn default_folder(&self) -> PathBuf {
+        clips::default_folder()
+    }
+
+    fn is_writable_folder(&self, folder: &Path) -> bool {
+        clips::is_writable_folder(folder)
+    }
+
+    fn hotkey_labels(&self) -> (String, String) {
+        (hotkey::LABEL.to_owned(), hotkey::RECORD_LABEL.to_owned())
+    }
+
     fn show_saved(&self, newest: Option<&Path>, folder: &Path) {
         match newest {
             Some(file) if file.exists() => clips::reveal_file(file),

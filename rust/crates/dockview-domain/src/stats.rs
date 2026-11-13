@@ -27,3 +27,13 @@ pub struct Stats {
     /// `false` until the first full second of measurements exists.
     pub measured: bool,
 }
+
+/// What the app is costing the machine right now.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct ProcessUsage {
+    /// Percent of one core.
+    pub cpu_core_percent: f32,
+    /// Percent of the whole CPU (all logical cores).
+    pub cpu_total_percent: f32,
+    pub memory_mb: f32,
+}

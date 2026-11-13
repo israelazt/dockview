@@ -79,6 +79,15 @@ impl ReplayMachine for FakeMachine {
     fn create_folder(&self, _: &Path) -> bool {
         self.0.lock().unwrap().folder_ok
     }
+    fn default_folder(&self) -> PathBuf {
+        PathBuf::from("default-clips")
+    }
+    fn is_writable_folder(&self, folder: &Path) -> bool {
+        folder != Path::new("read-only")
+    }
+    fn hotkey_labels(&self) -> (String, String) {
+        ("Ctrl+S".into(), "Ctrl+R".into())
+    }
     fn show_saved(&self, newest: Option<&Path>, folder: &Path) {
         self.0
             .lock()

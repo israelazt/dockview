@@ -19,6 +19,7 @@ use crate::sources::{
     CaptureOptions, CaptureStatus, CaptureTarget, Layer, MonitorInfo, ScreenOptions, ScreenStatus,
     WindowInfo,
 };
+use crate::stats::{ProcessUsage, Stats};
 
 /// The replay buffer while it runs, and the recording that rides on it.
 pub trait ReplayBuffer {
@@ -81,6 +82,25 @@ pub trait ReplayMachine {
     fn create_folder(&self, folder: &Path) -> bool;
     /// Shows the newest saved file (if it still exists), else opens `folder`.
     fn show_saved(&self, newest: Option<&Path>, folder: &Path);
+    /// Where clips go unless the user chose another folder.
+    fn default_folder(&self) -> PathBuf;
+    /// Whether files can be written to `folder`.
+    fn is_writable_folder(&self, folder: &Path) -> bool;
+    /// How the hotkeys are written for the user: (save a clip, record).
+    fn hotkey_labels(&self) -> (String, String);
+}
+
+/// What the PC says about itself.
+pub trait SystemProbe {
+    /// CPU and memory this process used since the last call.
+    fn sample_usage(&self) -> ProcessUsage;
+    /// Installed RAM, in bytes.
+    fn total_ram_bytes(&self) -> u64;
+}
+
+/// Where the once-a-second measurements are written to (a diagnostics log).
+pub trait StatsSink {
+    fn record(&mut self, stats: &Stats);
 }
 
 // ---------------------------------------------------------------------------

@@ -9,6 +9,7 @@ use std::io::{self, BufWriter, Write};
 use std::path::Path;
 use std::time::Instant;
 
+use dockview_domain::ports::StatsSink;
 use dockview_domain::stats::Stats;
 
 const HEADER: &str = "seconds,received_fps,shown_fps,skipped_per_s,latency_ms,cpu_core_percent,gpu_ms,memory_mb,audio_buffer_ms,mode\n";
@@ -31,10 +32,16 @@ impl StatsLog {
     }
 
     /// Appends one line. Errors are ignored: logging must never disturb video.
-    pub fn record(&mut self, stats: &Stats) {
+    fn record_row(&mut self, stats: &Stats) {
         let line = format_row(self.started.elapsed().as_secs_f32(), stats);
         let _ = self.out.write_all(line.as_bytes());
         let _ = self.out.flush();
+    }
+}
+
+impl StatsSink for StatsLog {
+    fn record(&mut self, stats: &Stats) {
+        self.record_row(stats);
     }
 }
 
