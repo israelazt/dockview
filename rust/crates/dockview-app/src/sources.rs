@@ -166,17 +166,22 @@ pub fn pick_video(
         .or_else(|| (!devices.is_empty()).then_some(0))
 }
 
-/// Which audio device to start with: the one used last time, else the one that
-/// belongs to the video device (`matched`), else the first.
+/// Which audio device to start with: the one that belongs to the video device
+/// (`matched`), else the one used last time, else the first. The card's own
+/// sound goes first so that choosing another video device (or a pair saved
+/// out of step) never leaves the picture with another device's microphone.
 pub fn pick_audio(
     devices: &[AudioDevice],
     last_id: Option<&str>,
     matched: Option<usize>,
 ) -> Option<usize> {
-    devices
-        .iter()
-        .position(|d| last_id == Some(d.device_id.as_str()))
-        .or(matched.filter(|&i| i < devices.len()))
+    matched
+        .filter(|&i| i < devices.len())
+        .or_else(|| {
+            devices
+                .iter()
+                .position(|d| last_id == Some(d.device_id.as_str()))
+        })
         .or_else(|| (!devices.is_empty()).then_some(0))
 }
 
@@ -397,9 +402,12 @@ mod tests {
     }
 
     #[test]
-    fn the_audio_device_is_last_used_then_the_one_matching_the_video_then_first() {
+    fn the_audio_device_is_the_one_matching_the_video_then_last_used_then_first() {
         let devices = [audio("a"), audio("b"), audio("c")];
-        assert_eq!(pick_audio(&devices, Some("c"), Some(1)), Some(2));
+        // The card's own sound wins over the last device used.
+        assert_eq!(pick_audio(&devices, Some("c"), Some(1)), Some(1));
+        // Without a match, the last device used comes back.
+        assert_eq!(pick_audio(&devices, Some("c"), None), Some(2));
         assert_eq!(pick_audio(&devices, Some("gone"), Some(1)), Some(1));
         assert_eq!(pick_audio(&devices, None, None), Some(0));
         assert_eq!(pick_audio(&[], Some("a"), Some(0)), None);
