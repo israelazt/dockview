@@ -186,6 +186,8 @@ struct App {
     loopback: Option<Box<dyn MicInput>>,
     /// What the sources are started on (the real machine, or a fake in tests).
     machine: Box<dyn SourceMachine>,
+    /// What happened since the last tick, to be shown (see `toast_for`).
+    events: Vec<AppEvent>,
     /// What can be captured, refreshed while the source popover is open.
     monitors: Vec<MonitorInfo>,
     windows: Vec<WindowInfo>,

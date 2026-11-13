@@ -71,6 +71,7 @@ impl App {
             source_kind: SourceKind::Capture,
             loopback: None,
             machine: ports.sources,
+            events: Vec::new(),
             monitors: Vec::new(),
             windows: Vec::new(),
             sources_refreshed: Instant::now(),

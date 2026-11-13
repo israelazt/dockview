@@ -236,15 +236,15 @@ impl App {
         if let Source::Screen(capture) = &self.source {
             // The window went away or cannot be captured: back to the card.
             let lost = match capture.status() {
-                ScreenStatus::Ended(_) => Some(i18n::Key::ToastSourceLost),
+                ScreenStatus::Ended(_) => Some(AppEvent::SourceLost),
                 ScreenStatus::Failed(e) => {
                     eprintln!("screen capture failed: {e}");
-                    Some(i18n::Key::ToastSourceFailed)
+                    Some(AppEvent::SourceFailed)
                 }
                 _ => None,
             };
-            if let Some(key) = lost {
-                self.toast(key, ToastKind::Error);
+            if let Some(event) = lost {
+                self.emit(event);
                 self.select_video(self.video_index);
             }
             return;

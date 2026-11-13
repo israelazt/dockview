@@ -23,6 +23,24 @@ pub enum AppEvent {
     RecordingNoSignal,
     /// The disk is running low while recording.
     LowDisk,
+    /// Something cannot be changed while a recording is running.
+    StopRecordingFirst,
+    ReplayOn,
+    ReplayOff,
+    MicOn,
+    MicOff,
+    /// The recording quality changed and the buffer was restarted.
+    QualityChanged,
+    /// The chosen folder cannot be written to.
+    FolderNotWritable,
+    /// A source of the scene could not be started.
+    SceneMissing,
+    /// The picture in the corner went away.
+    PipLost,
+    /// The window or screen being captured is gone.
+    SourceLost,
+    /// The screen or window could not be captured.
+    SourceFailed,
 }
 
 /// What to tell the user when a recording (or one of its files) ends, if

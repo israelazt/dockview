@@ -9,13 +9,11 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use dockview_domain::events::AppEvent;
 use dockview_domain::frame::FrameSlot;
 use dockview_domain::scene::{Scene, SceneLayer};
 use dockview_domain::sources::Layer;
 use dockview_domain::transition::{Easing, Transition, DEFAULT_DURATION};
-
-use dockview_domain::i18n;
-use dockview_ui::toast::ToastKind;
 
 use super::scene_runtime::{Overlay, SCENE_HEIGHT, SCENE_WIDTH};
 use super::App;
@@ -82,7 +80,7 @@ impl App {
         }
         if missing > 0 {
             eprintln!("{missing} source(s) of the scene could not be started");
-            self.toast(i18n::Key::ToastSceneMissing, ToastKind::Error);
+            self.emit(AppEvent::SceneMissing);
         }
         self.scene_base = Some(base);
 

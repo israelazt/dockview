@@ -73,7 +73,7 @@ impl App {
             return;
         }
         if !self.replay.is_on() {
-            self.toast(i18n::Key::ToastTurnOnFirst, ToastKind::Info);
+            self.emit(AppEvent::ReplayIsOff);
             return;
         }
         let device = self
@@ -137,7 +137,7 @@ impl App {
             return; // cancelled
         };
         if !clips::is_writable_folder(&folder) {
-            self.toast(i18n::Key::ToastFolderNotWritable, ToastKind::Error);
+            self.emit(AppEvent::FolderNotWritable);
             return;
         }
         self.settings.replay_folder = Some(folder.display().to_string());
@@ -209,7 +209,9 @@ impl App {
         }
         let folder = self.clips_folder();
         self.replay.poll(&folder);
-        for event in self.replay.take_events() {
+        let replay_events = self.replay.take_events();
+        self.events.extend(replay_events);
+        for event in std::mem::take(&mut self.events) {
             let (key, kind) = toast_for(event);
             self.toast(key, kind);
         }
@@ -273,6 +275,17 @@ fn toast_for(event: AppEvent) -> (i18n::Key, ToastKind) {
         AppEvent::RecordingDiskFull => (Key::ToastRecDiskFull, ToastKind::Error),
         AppEvent::RecordingNoSignal => (Key::ToastRecNoSignal, ToastKind::Error),
         AppEvent::LowDisk => (Key::ToastLowDisk, ToastKind::Error),
+        AppEvent::StopRecordingFirst => (Key::ToastStopRecordingFirst, ToastKind::Info),
+        AppEvent::ReplayOn => (Key::ToastReplayOn, ToastKind::Info),
+        AppEvent::ReplayOff => (Key::ToastReplayOff, ToastKind::Info),
+        AppEvent::MicOn => (Key::ToastMicOn, ToastKind::Info),
+        AppEvent::MicOff => (Key::ToastMicOff, ToastKind::Info),
+        AppEvent::QualityChanged => (Key::ToastQualityChanged, ToastKind::Info),
+        AppEvent::FolderNotWritable => (Key::ToastFolderNotWritable, ToastKind::Error),
+        AppEvent::SceneMissing => (Key::ToastSceneMissing, ToastKind::Error),
+        AppEvent::PipLost => (Key::ToastPipLost, ToastKind::Error),
+        AppEvent::SourceLost => (Key::ToastSourceLost, ToastKind::Error),
+        AppEvent::SourceFailed => (Key::ToastSourceFailed, ToastKind::Error),
     }
 }
 
@@ -350,6 +363,17 @@ mod tests {
             RecordingDiskFull,
             RecordingNoSignal,
             LowDisk,
+            StopRecordingFirst,
+            ReplayOn,
+            ReplayOff,
+            MicOn,
+            MicOff,
+            QualityChanged,
+            FolderNotWritable,
+            SceneMissing,
+            PipLost,
+            SourceLost,
+            SourceFailed,
         ] {
             let (key, _) = toast_for(event);
             assert!(!i18n::tr(i18n::Lang::En, key).is_empty(), "{event:?}");

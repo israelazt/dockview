@@ -3,6 +3,11 @@
 use super::*;
 
 impl App {
+    /// Tells the user something happened; it is shown on the next tick.
+    pub(super) fn emit(&mut self, event: AppEvent) {
+        self.events.push(event);
+    }
+
     pub(super) fn toast(&mut self, key: i18n::Key, kind: ToastKind) {
         let lang = self.lang_mode().resolve(self.system_lang);
         self.toasts.show(i18n::tr(lang, key), kind);
@@ -135,18 +140,17 @@ impl App {
             Action::SelectAudio(index) => self.select_audio(Some(index)),
             Action::ToggleReplay if self.replay.recording_active() => {
                 // Turning the buffer off would cut the recording short.
-                self.toast(i18n::Key::ToastStopRecordingFirst, ToastKind::Info);
+                self.emit(AppEvent::StopRecordingFirst);
                 return;
             }
             Action::ToggleReplay => {
                 self.settings.replay_enabled = !self.settings.replay_enabled;
                 self.sync_replay();
-                let key = if self.settings.replay_enabled {
-                    i18n::Key::ToastReplayOn
+                self.emit(if self.settings.replay_enabled {
+                    AppEvent::ReplayOn
                 } else {
-                    i18n::Key::ToastReplayOff
-                };
-                self.toast(key, ToastKind::Info);
+                    AppEvent::ReplayOff
+                });
             }
             Action::SelectMonitor(index) => {
                 if let Some(monitor) = self.monitors.get(index) {
@@ -175,12 +179,11 @@ impl App {
                 let on = !self.replay.mic_on();
                 self.set_mic(on);
                 if self.replay.mic_on() == on {
-                    let key = if on {
-                        i18n::Key::ToastMicOn
+                    self.emit(if on {
+                        AppEvent::MicOn
                     } else {
-                        i18n::Key::ToastMicOff
-                    };
-                    self.toast(key, ToastKind::Info);
+                        AppEvent::MicOff
+                    });
                 }
                 return; // the microphone always starts off; nothing to save
             }
@@ -212,7 +215,7 @@ impl App {
             Action::SetQuality(quality) => {
                 if self.replay.recording_active() {
                     // A new encoder would cut the recording short.
-                    self.toast(i18n::Key::ToastStopRecordingFirst, ToastKind::Info);
+                    self.emit(AppEvent::StopRecordingFirst);
                     return;
                 }
                 if self.settings.replay_bitrate_mbps != quality.mbps() {
@@ -220,7 +223,7 @@ impl App {
                     self.clamp_replay_length();
                     if self.replay.is_on() {
                         self.restart_recorder();
-                        self.toast(i18n::Key::ToastQualityChanged, ToastKind::Info);
+                        self.emit(AppEvent::QualityChanged);
                     }
                 }
             }

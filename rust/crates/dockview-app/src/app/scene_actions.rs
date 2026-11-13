@@ -5,13 +5,13 @@
 use std::sync::Arc;
 
 use dockview_domain::device_names;
+use dockview_domain::events::AppEvent;
 use dockview_domain::frame::FrameSlot;
 use dockview_domain::scene::{Scene, SourceRef, MAX_SCENE_LAYERS};
 
 use dockview_domain::i18n;
 use dockview_domain::i18n::LangModeExt;
 use dockview_domain::view::{LayerView, SceneAction, ScenesView};
-use dockview_ui::toast::ToastKind;
 
 use super::scene_runtime::Overlay;
 use super::App;
@@ -109,7 +109,7 @@ impl App {
     fn new_scene(&mut self) {
         let count = self.settings.scenes.len();
         let Some(base) = self.main_source_ref() else {
-            self.toast(i18n::Key::ToastSceneMissing, ToastKind::Error);
+            self.emit(AppEvent::SceneMissing);
             return;
         };
         if count >= MAX_SCENES {
@@ -198,7 +198,7 @@ impl App {
                 index,
             }),
             // Kept in the scene, so it comes back when the source does.
-            None => self.toast(i18n::Key::ToastSceneMissing, ToastKind::Error),
+            None => self.emit(AppEvent::SceneMissing),
         }
         self.sync_compositor();
         self.set_capture_exclusion(self.wants_exclusion());

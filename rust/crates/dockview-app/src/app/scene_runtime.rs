@@ -13,6 +13,7 @@
 use std::sync::Arc;
 use std::time::Instant;
 
+use dockview_domain::events::AppEvent;
 use dockview_domain::frame::FrameSlot;
 use dockview_domain::ports::{CaptureHandle, ScreenHandle};
 use dockview_domain::scene::{NormRect, Scene, SceneLayer, SourceRef};
@@ -21,8 +22,6 @@ use dockview_domain::sources::{CaptureOptions, CaptureStatus};
 use dockview_domain::sources::{CaptureTarget, ScreenOptions, ScreenStatus};
 
 use crate::cli::PipSpec;
-use dockview_domain::i18n;
-use dockview_ui::toast::ToastKind;
 
 use super::{App, SourceKind};
 use crate::sources::{find_window, Reconnect};
@@ -246,7 +245,7 @@ impl App {
         }
         if missing > 0 {
             eprintln!("{missing} source(s) of the scene could not be started");
-            self.toast(i18n::Key::ToastSceneMissing, ToastKind::Error);
+            self.emit(AppEvent::SceneMissing);
         }
         self.scene_base = Some(base);
         self.sync_compositor();
@@ -300,7 +299,7 @@ impl App {
         };
         if let Some(base) = scene.base() {
             if !self.make_main(base) {
-                self.toast(i18n::Key::ToastSceneMissing, ToastKind::Error);
+                self.emit(AppEvent::SceneMissing);
             }
         }
         self.morph_to(&scene, old);
@@ -413,7 +412,7 @@ impl App {
         }
         self.sync_compositor();
         self.set_capture_exclusion(self.wants_exclusion());
-        self.toast(i18n::Key::ToastPipLost, ToastKind::Error);
+        self.emit(AppEvent::PipLost);
     }
 
     /// Whether Dockview's own window must stay out of the captured picture:
