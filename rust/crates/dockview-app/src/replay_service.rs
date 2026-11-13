@@ -23,7 +23,7 @@ use dockview_platform::tap_capture::{CaptureSource, TapCapture as MicCapture};
 use crate::i18n::Key;
 use crate::ui::controls::{MicState, MicView, RecState, RecView, ReplayState, ReplayView};
 use crate::ui::toast::ToastKind;
-use crate::{clips, hotkey};
+use dockview_platform::{clips, hotkey};
 
 /// Something the user should be told.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

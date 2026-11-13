@@ -67,6 +67,7 @@ use crate::sources::{
     find_window, monitor_label, pick_audio, pick_video, startup_scene, status_kind,
     video_state_of_capture, video_state_of_screen, AudioRoute, Reconnect, SourceKind, StartupScene,
 };
+use crate::stats_log;
 use crate::telemetry::{Rates, Stats, Telemetry};
 use crate::theme::{Appearance, Theme, ThemeModeExt};
 use crate::ui::controls::{Action, Controls, Model, RecState, SourcesView};
@@ -75,7 +76,7 @@ use crate::ui::input::Pointer;
 use crate::ui::stats::StatsPanel;
 use crate::ui::toast::{ToastHost, ToastKind};
 use crate::ui::{self, Ui};
-use crate::{clips, hotkey, perf, stats_log};
+use dockview_platform::{clips, hotkey, perf};
 use helpers::{
     appearance_of, filter_for, mic_device_id, mic_index_of, next_index, next_preset,
     on_helper_thread, resolution_label, system_animations_enabled,

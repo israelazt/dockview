@@ -6,12 +6,18 @@
 pub mod audio;
 #[cfg(windows)]
 pub mod capture;
+#[cfg(windows)]
+pub mod clips;
 pub mod compose;
 #[cfg(windows)]
 pub mod encode;
 pub mod gpu;
 #[cfg(windows)]
+pub mod hotkey;
+#[cfg(windows)]
 pub mod mf;
+#[cfg(windows)]
+pub mod perf;
 #[cfg(windows)]
 pub mod recorder;
 #[cfg(windows)]

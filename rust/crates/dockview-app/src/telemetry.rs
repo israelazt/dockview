@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 
 use dockview_domain::diagnostics::Finding;
 
-use crate::perf::{ProcessSampler, ProcessUsage};
+use dockview_platform::perf::{ProcessSampler, ProcessUsage};
 
 /// How often a new set of measurements is made.
 const WINDOW: Duration = Duration::from_secs(1);

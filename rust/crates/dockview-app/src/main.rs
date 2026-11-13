@@ -10,12 +10,9 @@ compile_error!("Dockview only supports Windows.");
 mod app;
 mod auto_switch;
 mod cli;
-mod clips;
-mod hotkey;
 #[allow(dead_code)] // some strings are used by the upcoming live controls
 mod i18n;
 mod keys;
-mod perf;
 mod render;
 mod replay_service;
 mod sources;
