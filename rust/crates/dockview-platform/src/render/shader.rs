@@ -59,3 +59,24 @@ pub(super) unsafe fn create_sampler(
     device.CreateSamplerState(&desc, Some(&mut sampler))?;
     sampler.ok_or_else(missing)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Every shader of the renderer compiles. It needs the D3D compiler only,
+    /// no GPU, so it runs everywhere.
+    #[test]
+    fn every_shader_entry_point_compiles() {
+        for (entry, target) in [
+            ("vs_main", s!("vs_5_0")),
+            ("ps_nv12", s!("ps_5_0")),
+            ("ps_nv12_bicubic", s!("ps_5_0")),
+            ("ps_yuy2", s!("ps_5_0")),
+        ] {
+            // SAFETY: a valid source buffer and entry name.
+            let result = unsafe { compile(SHADER_SOURCE, entry, target) };
+            assert!(result.is_ok(), "{entry}: {:?}", result.err());
+        }
+    }
+}

@@ -25,6 +25,44 @@ impl PixelFormat {
     }
 }
 
+/// The colour matrix that turns a frame's YUV into RGB.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ColorMatrix {
+    /// The device did not say: BT.709 for HD pictures, BT.601 below that.
+    #[default]
+    Auto,
+    Bt601,
+    Bt709,
+}
+
+impl ColorMatrix {
+    /// The matrix to use for a picture `height` lines tall (never `Auto`).
+    pub fn resolve(self, height: u32) -> ColorMatrix {
+        match self {
+            Self::Auto if height >= 720 => Self::Bt709,
+            Self::Auto => Self::Bt601,
+            fixed => fixed,
+        }
+    }
+}
+
+/// Whether the luma and chroma use the whole 0-255 range or the video range
+/// (16-235 and 16-240).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ColorRange {
+    #[default]
+    Limited,
+    Full,
+}
+
+/// How the colours of a frame are coded. What the device does not say is left
+/// at the usual defaults (see [`ColorMatrix::resolve`] and limited range).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct ColorInfo {
+    pub matrix: ColorMatrix,
+    pub range: ColorRange,
+}
+
 /// One decoded video frame. `stride` is the number of bytes per row of the
 /// first plane, which can exceed the visible width.
 #[derive(Debug, Clone)]
@@ -33,6 +71,8 @@ pub struct Frame {
     pub height: u32,
     pub stride: u32,
     pub format: PixelFormat,
+    /// How the colours are coded.
+    pub color: ColorInfo,
     pub data: Vec<u8>,
     /// Presentation time in 100 ns units, as reported by Media Foundation.
     pub timestamp: i64,
@@ -133,6 +173,7 @@ impl Frame {
             height: self.height,
             stride: self.stride,
             format: self.format,
+            color: self.color,
             data: Vec::new(),
             timestamp: self.timestamp,
             arrived: self.arrived,
@@ -257,10 +298,21 @@ mod tests {
             height: 2,
             stride: 4,
             format: PixelFormat::Nv12,
+            color: ColorInfo::default(),
             data: vec![0; 12],
             timestamp,
             arrived: Instant::now(),
         }
+    }
+
+    #[test]
+    fn an_unspecified_matrix_follows_the_height_and_a_stated_one_wins() {
+        assert_eq!(ColorMatrix::Auto.resolve(1080), ColorMatrix::Bt709);
+        assert_eq!(ColorMatrix::Auto.resolve(720), ColorMatrix::Bt709);
+        assert_eq!(ColorMatrix::Auto.resolve(480), ColorMatrix::Bt601);
+        assert_eq!(ColorMatrix::Bt601.resolve(1080), ColorMatrix::Bt601);
+        assert_eq!(ColorMatrix::Bt709.resolve(480), ColorMatrix::Bt709);
+        assert_eq!(ColorInfo::default().range, ColorRange::Limited);
     }
 
     #[test]

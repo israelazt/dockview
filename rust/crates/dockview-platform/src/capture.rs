@@ -16,13 +16,13 @@ use windows::Win32::Media::MediaFoundation::{
     IMFAttributes, IMFSample, IMFSourceReader, MFCreateAttributes, MFCreateMediaType,
     MFCreateSourceReaderFromMediaSource, MFMediaType_Video, MFVideoFormat_NV12, MFVideoFormat_YUY2,
     MF_LOW_LATENCY, MF_MT_DEFAULT_STRIDE, MF_MT_FRAME_SIZE, MF_MT_MAJOR_TYPE, MF_MT_SUBTYPE,
-    MF_SOURCE_READERF_CURRENTMEDIATYPECHANGED, MF_SOURCE_READERF_ENDOFSTREAM,
-    MF_SOURCE_READER_ENABLE_VIDEO_PROCESSING,
+    MF_MT_VIDEO_NOMINAL_RANGE, MF_MT_YUV_MATRIX, MF_SOURCE_READERF_CURRENTMEDIATYPECHANGED,
+    MF_SOURCE_READERF_ENDOFSTREAM, MF_SOURCE_READER_ENABLE_VIDEO_PROCESSING,
 };
 
 use crate::mf::{first_video_stream, open_source, read_native_types, unpack_pair, MfSession};
 use crate::worker::{StatusCell, Worker};
-use dockview_domain::frame::{Frame, FrameSlot, PixelFormat};
+use dockview_domain::frame::{ColorInfo, ColorMatrix, ColorRange, Frame, FrameSlot, PixelFormat};
 use dockview_domain::sources::{CaptureOptions, CaptureStatus};
 use dockview_domain::stream::{select_best, select_best_compressed, StreamInfo};
 
@@ -250,6 +250,7 @@ fn publish_frame(
         height: 0,
         stride: 0,
         format,
+        color: layout.color,
         data: Vec::with_capacity(expected),
         timestamp: 0,
         arrived: std::time::Instant::now(),
@@ -258,6 +259,7 @@ fn publish_frame(
     frame.height = layout.height;
     frame.stride = layout.stride;
     frame.format = format;
+    frame.color = layout.color;
     frame.timestamp = timestamp;
     frame.data.clear();
     frame.data.extend_from_slice(&bytes[..expected]);
@@ -270,6 +272,24 @@ struct Layout {
     width: u32,
     height: u32,
     stride: u32,
+    color: ColorInfo,
+}
+
+/// The colour coding a device states, from its Media Foundation attributes
+/// (`MF_MT_YUV_MATRIX` and `MF_MT_VIDEO_NOMINAL_RANGE`). Anything it leaves
+/// out, or says in a way this renderer does not handle, stays at the default.
+fn color_from_attributes(matrix: Option<u32>, range: Option<u32>) -> ColorInfo {
+    ColorInfo {
+        matrix: match matrix {
+            Some(1) => ColorMatrix::Bt709, // MFVideoTransferMatrix_BT709
+            Some(2) => ColorMatrix::Bt601, // MFVideoTransferMatrix_BT601
+            _ => ColorMatrix::Auto,
+        },
+        range: match range {
+            Some(1) => ColorRange::Full, // MFNominalRange_0_255
+            _ => ColorRange::Limited,    // 16_235, or not stated
+        },
+    }
 }
 
 /// # Safety
@@ -282,10 +302,15 @@ unsafe fn current_layout(
     let media_type = reader.GetCurrentMediaType(stream)?;
     let (width, height) = unpack_pair(media_type.GetUINT64(&MF_MT_FRAME_SIZE)?);
     let reported = media_type.GetUINT32(&MF_MT_DEFAULT_STRIDE).ok();
+    let color = color_from_attributes(
+        media_type.GetUINT32(&MF_MT_YUV_MATRIX).ok(),
+        media_type.GetUINT32(&MF_MT_VIDEO_NOMINAL_RANGE).ok(),
+    );
     Ok(Layout {
         width,
         height,
         stride: resolve_stride(reported, format, width),
+        color,
     })
 }
 
@@ -337,6 +362,25 @@ mod tests {
     }
 
     #[test]
+    fn the_colour_a_device_states_is_read_and_the_rest_stays_default() {
+        let unstated = color_from_attributes(None, None);
+        assert_eq!(unstated, ColorInfo::default());
+        let full_709 = color_from_attributes(Some(1), Some(1));
+        assert_eq!(
+            (full_709.matrix, full_709.range),
+            (ColorMatrix::Bt709, ColorRange::Full)
+        );
+        let video_601 = color_from_attributes(Some(2), Some(2));
+        assert_eq!(
+            (video_601.matrix, video_601.range),
+            (ColorMatrix::Bt601, ColorRange::Limited)
+        );
+        // Matrices and ranges this renderer does not handle fall back.
+        let odd = color_from_attributes(Some(4), Some(3));
+        assert_eq!(odd, ColorInfo::default());
+    }
+
+    #[test]
     fn stride_uses_reported_magnitude() {
         assert_eq!(resolve_stride(Some(2048), PixelFormat::Nv12, 1920), 2048);
         assert_eq!(
@@ -358,6 +402,7 @@ mod tests {
             width: 4,
             height: 2,
             stride: 4,
+            color: ColorInfo::default(),
         };
         publish_frame(&slot, &layout, PixelFormat::Nv12, &[0; 11], 0);
         assert_eq!(slot.published(), 0);
@@ -370,6 +415,7 @@ mod tests {
             width: 4,
             height: 2,
             stride: 4,
+            color: ColorInfo::default(),
         };
         publish_frame(&slot, &layout, PixelFormat::Nv12, &[7; 20], 42);
         let frame = slot.take_latest().unwrap();

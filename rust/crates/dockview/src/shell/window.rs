@@ -1,7 +1,8 @@
 //! The window: drawing a frame, the cursor and screenshots.
 
+use dockview_domain::render_plan::{render_plan, video_frame_due};
 use dockview_domain::view::RecState;
-use dockview_platform::render::Screenshot;
+use dockview_platform::render::{is_device_lost, Renderer, Screenshot};
 use winit::window::CursorIcon;
 
 use super::*;
@@ -29,6 +30,40 @@ impl Shell {
         }
     }
 
+    /// Builds the renderer and the interface renderer again after the graphics
+    /// device was lost (a driver update or reset). If it cannot be done yet, the
+    /// idle loop tries again.
+    pub(super) fn recreate_graphics(&mut self) {
+        let hwnd = self.host.borrow().hwnd;
+        let (Some(window), Some(hwnd)) = (&self.window, hwnd) else {
+            return;
+        };
+        let size = window.inner_size();
+        eprintln!("the graphics device was lost: building the renderer again");
+        // The old swap chain has to go before a new one can use the window.
+        self.ui_gpu = None;
+        self.renderer = None;
+        self.last_graphics_try = Instant::now();
+        match Renderer::new(hwnd, size.width, size.height) {
+            Ok(mut renderer) => {
+                renderer.set_filter(filter_for(self.core.render_preset()));
+                self.ui_gpu = UiGpu::new(renderer.device()).ok();
+                // The glyphs lived in a texture of the lost device.
+                self.ui.text.reset_atlas();
+                self.renderer = Some(renderer);
+            }
+            Err(e) => eprintln!("could not build the renderer yet: {e}"),
+        }
+        self.needs_redraw = true;
+    }
+
+    /// Whether a picture that just arrived should be drawn, under the rate cap
+    /// of the render preset.
+    pub(super) fn video_frame_due(&self) -> bool {
+        let cap = render_plan(self.core.render_preset()).max_video_fps;
+        video_frame_due(self.last_video_shown.elapsed(), cap)
+    }
+
     pub(super) fn render(&mut self) {
         self.refresh_host_info();
         let model = self.core.model();
@@ -51,14 +86,17 @@ impl Shell {
         // show the freshest one.
         renderer.wait_for_present_slot(100);
         let mut arrived = None;
+        let mut graphics_lost = false;
         let slot = Arc::clone(self.core.output_slot());
         if let Some(frame) = slot.take_latest() {
             arrived = Some(frame.arrived);
             if let Err(e) = renderer.upload(&frame) {
                 eprintln!("upload failed: {e}");
+                graphics_lost |= is_device_lost(&e);
             }
             self.core.frame_uploaded((frame.width, frame.height));
             slot.recycle(frame);
+            self.last_video_shown = now;
         }
 
         let (ui, ui_gpu, controls) = (&mut self.ui, &mut self.ui_gpu, &mut self.controls);
@@ -101,7 +139,14 @@ impl Shell {
         match result {
             Ok(Some(shot)) => self.save_screenshot(&shot),
             Ok(None) => {}
-            Err(e) => eprintln!("present failed: {e}"),
+            Err(e) => {
+                eprintln!("present failed: {e}");
+                graphics_lost |= is_device_lost(&e);
+            }
+        }
+        graphics_lost |= self.renderer.as_ref().is_some_and(Renderer::device_lost);
+        if graphics_lost {
+            self.recreate_graphics();
         }
         if let Some(arrived) = arrived {
             self.core

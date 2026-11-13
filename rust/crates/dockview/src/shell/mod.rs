@@ -32,6 +32,8 @@ use present::toast_for;
 
 /// How long the event loop waits for a new frame before checking events.
 const FRAME_WAIT: Duration = Duration::from_millis(4);
+/// How long to wait before trying to rebuild a renderer that could not be built.
+const GRAPHICS_RETRY: Duration = Duration::from_secs(1);
 /// Frames to render before a `--screenshot` is taken.
 const SCREENSHOT_AFTER_FRAMES: u64 = 8;
 
@@ -48,6 +50,10 @@ pub struct Shell {
     controls: Controls,
     pointer: Pointer,
     last_frame: Instant,
+    /// When a picture of the video was last drawn (for the preset's rate cap).
+    last_video_shown: Instant,
+    /// When the renderer was last rebuilt after losing the device.
+    last_graphics_try: Instant,
     needs_redraw: bool,
     cursor_pointer: bool,
     cursor_hidden: bool,
@@ -76,6 +82,8 @@ impl Shell {
             controls,
             pointer: Pointer::default(),
             last_frame: Instant::now(),
+            last_video_shown: Instant::now(),
+            last_graphics_try: Instant::now(),
             needs_redraw: true,
             cursor_pointer: false,
             cursor_hidden: false,

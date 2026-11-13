@@ -1,6 +1,7 @@
 //! Small functions of the window side: what Windows says about animations and
 //! the theme, how the video is filtered, and the helper thread.
 
+use dockview_domain::render_plan::{render_plan, ScaleFilter};
 use dockview_domain::settings::RenderPreset;
 use dockview_domain::theme::Appearance;
 use dockview_platform::render::Filter;
@@ -25,10 +26,12 @@ pub fn system_animations_enabled() -> bool {
     result.map_or(true, |()| enabled.as_bool())
 }
 
+/// The renderer's filter for a preset.
 pub fn filter_for(preset: RenderPreset) -> Filter {
-    match preset {
-        RenderPreset::Performance => Filter::Nearest,
-        RenderPreset::Balanced | RenderPreset::Quality => Filter::Linear,
+    match render_plan(preset).filter {
+        ScaleFilter::Nearest => Filter::Nearest,
+        ScaleFilter::Linear => Filter::Linear,
+        ScaleFilter::Bicubic => Filter::Bicubic,
     }
 }
 
@@ -44,9 +47,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn only_performance_uses_nearest_filtering() {
+    fn each_preset_scales_the_video_its_own_way() {
         assert_eq!(filter_for(RenderPreset::Performance), Filter::Nearest);
         assert_eq!(filter_for(RenderPreset::Balanced), Filter::Linear);
-        assert_eq!(filter_for(RenderPreset::Quality), Filter::Linear);
+        assert_eq!(filter_for(RenderPreset::Quality), Filter::Bicubic);
     }
 }

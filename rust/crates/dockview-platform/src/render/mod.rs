@@ -3,7 +3,7 @@
 
 use std::ffi::c_void;
 
-use dockview_domain::frame::{Frame, PixelFormat};
+use dockview_domain::frame::{ColorInfo, Frame, PixelFormat};
 use dockview_domain::layout::Rect;
 use windows::core::{s, Error, Interface, Result};
 use windows::Win32::Foundation::{E_FAIL, HANDLE, HMODULE, HWND};
@@ -29,7 +29,8 @@ use windows::Win32::Graphics::Dxgi::Common::{
     DXGI_FORMAT_R8G8_UNORM, DXGI_FORMAT_R8_UNORM, DXGI_FORMAT_UNKNOWN, DXGI_SAMPLE_DESC,
 };
 use windows::Win32::Graphics::Dxgi::{
-    IDXGIDevice, IDXGIFactory2, IDXGISwapChain2, DXGI_PRESENT, DXGI_SCALING_STRETCH,
+    IDXGIDevice, IDXGIFactory2, IDXGISwapChain2, DXGI_ERROR_DEVICE_HUNG, DXGI_ERROR_DEVICE_REMOVED,
+    DXGI_ERROR_DEVICE_RESET, DXGI_ERROR_DRIVER_INTERNAL_ERROR, DXGI_PRESENT, DXGI_SCALING_STRETCH,
     DXGI_SWAP_CHAIN_DESC1, DXGI_SWAP_CHAIN_FLAG,
     DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT, DXGI_SWAP_EFFECT_FLIP_DISCARD,
     DXGI_USAGE_RENDER_TARGET_OUTPUT,
@@ -54,11 +55,16 @@ const SWAP_CHAIN_FLAGS: i32 = DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT
 pub enum Filter {
     Nearest,
     Linear,
+    /// Catmull-Rom. Only the NV12 path has it; packed YUY2 cannot be
+    /// interpolated across its pixel pairs, so it stays on nearest.
+    Bicubic,
 }
 
 /// Textures holding the most recently uploaded frame.
 struct VideoTextures {
     format: PixelFormat,
+    /// How the colours of the last frame are coded.
+    color: ColorInfo,
     width: u32,
     height: u32,
     stride: u32,
@@ -87,6 +93,7 @@ pub struct Renderer {
     waitable: HANDLE,
     vertex_shader: ID3D11VertexShader,
     ps_nv12: ID3D11PixelShader,
+    ps_nv12_bicubic: ID3D11PixelShader,
     ps_yuy2: ID3D11PixelShader,
     params: ID3D11Buffer,
     sampler_linear: ID3D11SamplerState,
@@ -146,16 +153,23 @@ impl Renderer {
 
             let vs_blob = compile(SHADER_SOURCE, "vs_main", s!("vs_5_0"))?;
             let nv12_blob = compile(SHADER_SOURCE, "ps_nv12", s!("ps_5_0"))?;
+            let bicubic_blob = compile(SHADER_SOURCE, "ps_nv12_bicubic", s!("ps_5_0"))?;
             let yuy2_blob = compile(SHADER_SOURCE, "ps_yuy2", s!("ps_5_0"))?;
             let mut vertex_shader = None;
             device.CreateVertexShader(blob_bytes(&vs_blob), None, Some(&mut vertex_shader))?;
             let mut ps_nv12 = None;
             device.CreatePixelShader(blob_bytes(&nv12_blob), None, Some(&mut ps_nv12))?;
+            let mut ps_nv12_bicubic = None;
+            device.CreatePixelShader(
+                blob_bytes(&bicubic_blob),
+                None,
+                Some(&mut ps_nv12_bicubic),
+            )?;
             let mut ps_yuy2 = None;
             device.CreatePixelShader(blob_bytes(&yuy2_blob), None, Some(&mut ps_yuy2))?;
 
             let buffer_desc = D3D11_BUFFER_DESC {
-                ByteWidth: 16,
+                ByteWidth: 32, // two rows of four floats: see `shader_params`
                 Usage: D3D11_USAGE_DEFAULT,
                 BindFlags: D3D11_BIND_CONSTANT_BUFFER.0 as u32,
                 ..Default::default()
@@ -173,6 +187,7 @@ impl Renderer {
                 waitable,
                 vertex_shader: vertex_shader.ok_or_else(missing)?,
                 ps_nv12: ps_nv12.ok_or_else(missing)?,
+                ps_nv12_bicubic: ps_nv12_bicubic.ok_or_else(missing)?,
                 ps_yuy2: ps_yuy2.ok_or_else(missing)?,
                 params: params.ok_or_else(missing)?,
                 filter: Filter::Linear,
@@ -237,9 +252,10 @@ impl Renderer {
         if needs_new {
             self.video = Some(self.create_video_textures(frame)?);
         }
-        let Some(video) = &self.video else {
+        let Some(video) = self.video.as_mut() else {
             return Ok(());
         };
+        video.color = frame.color;
 
         // SAFETY: `frame.data` is large enough for the declared layout (the
         // capture path only publishes complete buffers) and outlives the call.
@@ -261,10 +277,35 @@ impl Renderer {
         &self.device
     }
 
+    /// Whether the graphics device was removed or reset (see
+    /// [`is_device_lost`]); the renderer must then be built again.
+    pub fn device_lost(&self) -> bool {
+        // SAFETY: a plain query on a live device.
+        unsafe { self.device.GetDeviceRemovedReason().is_err() }
+    }
+
     /// Smoothed GPU time per frame in milliseconds, once measured.
     pub fn gpu_ms(&self) -> Option<f32> {
         self.gpu_timer.as_ref().and_then(|t| t.smoothed_ms)
     }
+}
+
+/// Whether `code` says the graphics device is gone for good: a driver update
+/// or crash, the GPU unplugged, a reset after a hang. Nothing drawn on it
+/// works any more and everything made from it has to be created again.
+pub fn is_device_lost_code(code: windows::core::HRESULT) -> bool {
+    [
+        DXGI_ERROR_DEVICE_REMOVED,
+        DXGI_ERROR_DEVICE_RESET,
+        DXGI_ERROR_DEVICE_HUNG,
+        DXGI_ERROR_DRIVER_INTERNAL_ERROR,
+    ]
+    .contains(&code)
+}
+
+/// [`is_device_lost_code`] for an error a draw or a present returned.
+pub fn is_device_lost(error: &Error) -> bool {
+    is_device_lost_code(error.code())
 }
 
 fn missing() -> Error {
@@ -299,6 +340,28 @@ pub fn letterbox_in(area: Rect, video: (u32, u32)) -> (f32, f32, f32, f32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_a_removed_or_reset_device_counts_as_lost() {
+        use windows::core::HRESULT;
+        for lost in [
+            DXGI_ERROR_DEVICE_REMOVED,
+            DXGI_ERROR_DEVICE_RESET,
+            DXGI_ERROR_DEVICE_HUNG,
+            DXGI_ERROR_DRIVER_INTERNAL_ERROR,
+        ] {
+            assert!(is_device_lost_code(lost), "{lost:?}");
+        }
+        for fine in [
+            HRESULT(0),
+            E_FAIL,
+            windows::Win32::Foundation::E_OUTOFMEMORY,
+        ] {
+            assert!(!is_device_lost_code(fine), "{fine:?}");
+        }
+        assert!(is_device_lost(&Error::from(DXGI_ERROR_DEVICE_REMOVED)));
+        assert!(!is_device_lost(&Error::new(E_FAIL, "something else")));
+    }
 
     #[test]
     fn same_aspect_fills_the_window() {

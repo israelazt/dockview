@@ -19,6 +19,7 @@ pub mod layout;
 pub mod pcm;
 pub mod ports;
 pub mod recording;
+pub mod render_plan;
 pub mod replay;
 pub mod scene;
 pub mod settings;

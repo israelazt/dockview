@@ -209,6 +209,7 @@ impl Nv12Target {
                     height: self.height,
                     stride: self.width,
                     format: PixelFormat::Nv12,
+                    color: Default::default(),
                     data: vec![0; expected],
                     timestamp: 0,
                     arrived: Instant::now(),

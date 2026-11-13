@@ -153,13 +153,28 @@ impl ApplicationHandler for Shell {
             event_loop.exit();
             return;
         }
+        if self.renderer.is_none()
+            && self.window.is_some()
+            && self.last_graphics_try.elapsed() >= GRAPHICS_RETRY
+        {
+            self.recreate_graphics();
+        }
         self.refresh_host_info();
         self.core.tick(self.controls.sources_open());
         self.show_events();
         self.apply_host_requests();
         // Redraw for new video, for input, and while the controls are on
         // screen (hover, drag and fade animations need steady frames).
-        let new_frame = self.core.output_slot().wait_for_frame(FRAME_WAIT);
+        let mut new_frame = self.core.output_slot().wait_for_frame(FRAME_WAIT);
+        if new_frame && !self.video_frame_due() {
+            // The preset shows fewer pictures than arrive: this one is skipped
+            // here (taken, not dropped), so it is not counted as lost.
+            let slot = self.core.output_slot();
+            if let Some(frame) = slot.take_latest() {
+                slot.recycle(frame);
+            }
+            new_frame = false;
+        }
         let animating =
             self.controls.is_visible() || self.toasts.is_visible() || self.core.rec_is_on();
         if new_frame || animating || std::mem::take(&mut self.needs_redraw) {

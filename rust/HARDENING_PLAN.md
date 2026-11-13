@@ -138,14 +138,27 @@ Pruebas manuales pendientes de 2-9 (anotar el resultado en `CAPTURE_PLAN.md`):
 
 | Tarea | Qué | Listo cuando |
 |---|---|---|
-| 5-1 | `domain`: `render_plan(preset) -> { filtro, fps_max }` sustituye a `filter_for` de `shell/helpers.rs`. Propuesta: Performance = vecino más cercano + tope de 30 fps; Balanced = bilineal; Quality = bicúbico | Tests de los tres presets |
-| 5-2 | `shell`: aplicar el tope de fps de Performance (saltarse redibujados de vídeo, nunca los de la interfaz) | `--show-stats` marca ~30 fps mostrados en Performance |
-| 5-3 | `platform`: sombreador bicúbico (Catmull-Rom) para NV12 y su `Filter::Bicubic` | Capturas: Balanced idéntico a hoy; Quality más nítido al escalar |
-| 5-4 | `platform/render`: `draw`, `upload` y `resize` devuelven un error tipado que distingue `DeviceLost` (`DXGI_ERROR_DEVICE_REMOVED` / `RESET`) del resto | Test de la clasificación del código de error |
-| 5-5 | `shell`: ante `DeviceLost`, recrear `Renderer` y `UiGpu` y volver a aplicar filtro y área de vídeo | Prueba real: `dxcap -forcetdr` (o reiniciar el driver con Win+Ctrl+Mayús+B); la imagen vuelve sola |
-| 5-6 | `domain`: `ColorInfo { matriz, rango }` en `Frame` y regla pura para el valor por defecto (la de hoy: BT.709 desde 720 líneas, rango limitado) | Tests de la regla |
-| 5-7 | `platform/capture.rs`: leer `MF_MT_YUV_MATRIX` y `MF_MT_VIDEO_NOMINAL_RANGE` del tipo negociado; si faltan, la regla por defecto | Test de la conversión de atributos |
-| 5-8 | `render.hlsl`: usar matriz y rango del fotograma en vez de decidir por altura | Capturas del patrón de prueba idénticas; negros y blancos correctos con la capturadora real |
+| 5-1 ✅ | `domain`: `render_plan(preset) -> { filtro, fps_max }` sustituye a `filter_for` de `shell/helpers.rs`. Propuesta: Performance = vecino más cercano + tope de 30 fps; Balanced = bilineal; Quality = bicúbico | Tests de los tres presets |
+| 5-2 ✅ | `shell`: aplicar el tope de fps de Performance (saltarse redibujados de vídeo, nunca los de la interfaz) | `--show-stats` marca ~30 fps mostrados en Performance |
+| 5-3 ✅ | `platform`: sombreador bicúbico (Catmull-Rom) para NV12 y su `Filter::Bicubic` | Capturas: Balanced idéntico a hoy; Quality más nítido al escalar |
+| 5-4 ✅ | `platform/render`: `draw`, `upload` y `resize` devuelven un error tipado que distingue `DeviceLost` (`DXGI_ERROR_DEVICE_REMOVED` / `RESET`) del resto | Test de la clasificación del código de error |
+| 5-5 ✅ | `shell`: ante `DeviceLost`, recrear `Renderer` y `UiGpu` y volver a aplicar filtro y área de vídeo | Prueba real: `dxcap -forcetdr` (o reiniciar el driver con Win+Ctrl+Mayús+B); la imagen vuelve sola |
+| 5-6 ✅ | `domain`: `ColorInfo { matriz, rango }` en `Frame` y regla pura para el valor por defecto (la de hoy: BT.709 desde 720 líneas, rango limitado) | Tests de la regla |
+| 5-7 ✅ | `platform/capture.rs`: leer `MF_MT_YUV_MATRIX` y `MF_MT_VIDEO_NOMINAL_RANGE` del tipo negociado; si faltan, la regla por defecto | Test de la conversión de atributos |
+| 5-8 ✅ | `render.hlsl`: usar matriz y rango del fotograma en vez de decidir por altura | Capturas del patrón de prueba idénticas; negros y blancos correctos con la capturadora real |
+
+**Hecho (2026-11-13), con las comprobaciones en la app real pendientes** (se hizo sin abrirla: el autor estaba jugando). Diferencias con lo previsto:
+- 5-1: se tomó la propuesta tal cual (Performance = vecino más cercano y 30 fps; Balanced = bilineal; Quality = bicúbico). Sigue abierta a cambio en la pausa.
+- 5-2: el tope no descarta con el fotograma ya pedido al dibujar: el bucle de la ventana **toma y recicla** el fotograma que sobra, así no cuenta como «saltado» ni dispara el diagnóstico de fotogramas perdidos. Se muestra un fotograma cuando ha pasado el 75 % del intervalo, para no recortar una cámara de 30 fps con algo de jitter. La grabación y el replay siguen recibiendo todos.
+- 5-3: Catmull-Rom de 9 muestras, solo para NV12; YUY2 sigue en vecino más cercano (sus texels empaquetados no se pueden interpolar). Hay un test que compila todos los sombreadores (sin GPU) y los pesos tienen referencia en `domain`.
+- 5-4/5-5: `is_device_lost` clasifica `DEVICE_REMOVED/RESET/HUNG/DRIVER_INTERNAL_ERROR`; la ventana reconstruye `Renderer` y `UiGpu` (y vuelve a subir los glifos del atlas de texto) y reintenta cada segundo si no pudo. **Al añadir el área de vídeo del modo Estudio (B-5) hay que reaplicarla en `recreate_graphics`.** Las GPU propias de las pantallas y escenas (`compose`, `screen`) no se reconstruyen.
+- 5-6 a 5-8: `Frame.color` (`ColorMatrix` Auto/BT.601/BT.709 y `ColorRange` limitado/completo). La captura lee `MF_MT_YUV_MATRIX` y `MF_MT_VIDEO_NOMINAL_RANGE`; lo que el dispositivo no diga sigue como hasta ahora (BT.709 desde 720 líneas, rango limitado). BT.2020 no se contempla.
+
+Comprobaciones pendientes con la app real (sin tocarla mientras se juega):
+1. Performance con una fuente de 60 fps: `--stats` marca ~30 «frames mostrados» y 0 «saltados».
+2. Quality frente a Balanced con la misma imagen (captura píxel a píxel con `ui_compare.py`): Balanced idéntico a antes, Quality más nítido al escalar. Con la ventana a 1:1 tendrían que ser iguales.
+3. Pérdida de GPU: con la app abierta, reiniciar el driver gráfico (Win+Ctrl+Mayús+B): la imagen y el texto vuelven solos.
+4. Colores con la UGREEN y la Pacoxi: negros y blancos como antes (si una tarjeta declarara rango completo sin serlo, se vería lavada o aplastada).
 
 **Decisión para la pausa 5:** confirmar la propuesta de 5-1 o dejar solo dos presets.
 

@@ -1,6 +1,28 @@
 //! Drawing a frame: the video, then the interface on top, then presenting.
 
 use super::*;
+use dockview_domain::frame::{ColorMatrix, ColorRange};
+
+/// What the pixel shader reads (`Params` in `render.hlsl`): two rows of four
+/// floats. The matrix is decided here, so the shader only follows it.
+pub(super) fn shader_params(
+    uv_scale_x: f32,
+    visible_w: f32,
+    height: u32,
+    color: ColorInfo,
+) -> [f32; 8] {
+    let bt709 = color.matrix.resolve(height) == ColorMatrix::Bt709;
+    [
+        uv_scale_x,
+        1.0,
+        f32::from(bt709),
+        visible_w,
+        f32::from(color.range == ColorRange::Full),
+        0.0,
+        0.0,
+        0.0,
+    ]
+}
 
 impl Renderer {
     /// Draws the current video (letterboxed), then lets `overlay` draw on top
@@ -41,16 +63,14 @@ impl Renderer {
                         video.width as f32 / 2.0,
                     ),
                 };
-                let params = [
-                    uv_scale_x,
-                    1.0,
-                    if video.height >= 720 { 1.0 } else { 0.0 },
-                    visible_w,
-                ];
+                let params = shader_params(uv_scale_x, visible_w, video.height, video.color);
                 self.context
                     .UpdateSubresource(&self.params, 0, None, params.as_ptr().cast(), 0, 0);
 
                 let (shader, sampler) = match video.format {
+                    PixelFormat::Nv12 if self.filter == Filter::Bicubic => {
+                        (&self.ps_nv12_bicubic, &self.sampler_linear)
+                    }
                     PixelFormat::Nv12 => (&self.ps_nv12, self.sampler_for_filter()),
                     // Packed texels cannot be interpolated across pixel pairs.
                     PixelFormat::Yuy2 => (&self.ps_yuy2, &self.sampler_point),
@@ -139,7 +159,7 @@ impl Renderer {
     pub(super) fn sampler_for_filter(&self) -> &ID3D11SamplerState {
         match self.filter {
             Filter::Nearest => &self.sampler_point,
-            Filter::Linear => &self.sampler_linear,
+            Filter::Linear | Filter::Bicubic => &self.sampler_linear,
         }
     }
 
@@ -173,6 +193,7 @@ impl Renderer {
         };
         Ok(VideoTextures {
             format: frame.format,
+            color: frame.color,
             width: frame.width,
             height: frame.height,
             stride: frame.stride,
@@ -213,5 +234,37 @@ impl Renderer {
                 .CreateShaderResourceView(&texture, None, Some(&mut view))?;
             Ok((texture, view.ok_or_else(missing)?))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn params(height: u32, color: ColorInfo) -> [f32; 8] {
+        shader_params(1.0, 0.0, height, color)
+    }
+
+    #[test]
+    fn a_device_that_says_nothing_gets_the_usual_defaults() {
+        let unstated = ColorInfo::default();
+        assert_eq!(params(1080, unstated)[2], 1.0, "HD is BT.709");
+        assert_eq!(params(480, unstated)[2], 0.0, "SD is BT.601");
+        assert_eq!(params(1080, unstated)[4], 0.0, "video levels");
+    }
+
+    #[test]
+    fn what_the_device_states_wins_over_the_height() {
+        let bt601_hd = ColorInfo {
+            matrix: ColorMatrix::Bt601,
+            range: ColorRange::Full,
+        };
+        let p = params(1080, bt601_hd);
+        assert_eq!((p[2], p[4]), (0.0, 1.0));
+    }
+
+    #[test]
+    fn the_buffer_is_two_full_rows() {
+        assert_eq!(std::mem::size_of::<[f32; 8]>(), 32);
     }
 }

@@ -60,7 +60,7 @@ Verificación estándar de cada bloque: `ui_shots.ps1` + `ui_compare.py` contra 
 | B-2 | `ui`: animación de abrir/cerrar (ancho + fundido), instantánea sin animaciones | Tests de la curva y del caso sin animaciones |
 | B-3 | `ui`: botón Estudio en la píldora (icono + tooltip) y textos i18n en/es | Captura de la píldora; guarda de i18n verde |
 | B-4 | `shell`: Tab alterna el modo; Esc cierra el panel; se guarda en ajustes | Prueba con ventana real (Tab abre y cierra) |
-| B-5 | `shell`: calcula `studio_layout` cada fotograma y llama a `set_video_rect` | El video se reduce sin deformarse; captura con el panel abierto |
+| B-5 | `shell`: calcula `studio_layout` cada fotograma y llama a `set_video_rect` | El video se reduce sin deformarse; captura con el panel abierto. El área también se reaplica cuando la ventana reconstruye el renderer tras perder la GPU (`recreate_graphics`) |
 | B-6 | `ui`: el puntero sobre el panel no cuenta como puntero sobre el video; el cursor y el auto-ocultado de la píldora lo respetan | Tests de ruteo del puntero |
 
 **Pausa B:** abrir y cerrar el panel en la app real, medir latencia, revisar el aspecto.

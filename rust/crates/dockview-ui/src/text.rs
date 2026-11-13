@@ -236,6 +236,15 @@ impl TextSystem {
     pub fn take_uploads(&mut self) -> Vec<GlyphUpload> {
         std::mem::take(&mut self.uploads)
     }
+
+    /// Forgets where every glyph is in the atlas, so each one is drawn and
+    /// uploaded again the next time it is used. Needed when the GPU texture
+    /// that held them is gone (the graphics device was lost and rebuilt).
+    pub fn reset_atlas(&mut self) {
+        self.slots.clear();
+        self.packer = Packer::new();
+        self.uploads.clear();
+    }
 }
 
 impl Default for TextSystem {
@@ -247,6 +256,24 @@ impl Default for TextSystem {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn after_a_reset_every_glyph_is_uploaded_again() {
+        let mut text = TextSystem::new();
+        let shaped = text.shape("Live", 13.0, Face::Text(Weight::Regular), false);
+        for glyph in &shaped.glyphs {
+            text.slot(glyph.key);
+        }
+        let first = text.take_uploads().len();
+        assert!(first > 0);
+        assert!(text.take_uploads().is_empty(), "uploaded once, not again");
+
+        text.reset_atlas();
+        for glyph in &shaped.glyphs {
+            assert!(text.slot(glyph.key).is_some());
+        }
+        assert_eq!(text.take_uploads().len(), first);
+    }
 
     #[test]
     fn bundled_fonts_provide_the_expected_families() {
