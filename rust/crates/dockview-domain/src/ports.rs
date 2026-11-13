@@ -9,10 +9,15 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use crate::audio_status::AudioStatus;
+use crate::device::AudioDevice;
 use crate::frame::FrameSlot;
 use crate::pcm::AudioTap;
 use crate::recording::{
     RecorderStatus, RecordingInfo, RecordingOutcome, ReplaySettings, SaveHandle,
+};
+use crate::sources::{
+    CaptureOptions, CaptureStatus, CaptureTarget, Layer, MonitorInfo, ScreenOptions, ScreenStatus,
+    WindowInfo,
 };
 
 /// The replay buffer while it runs, and the recording that rides on it.
@@ -76,4 +81,90 @@ pub trait ReplayMachine {
     fn create_folder(&self, folder: &Path) -> bool;
     /// Shows the newest saved file (if it still exists), else opens `folder`.
     fn show_saved(&self, newest: Option<&Path>, folder: &Path);
+}
+
+// ---------------------------------------------------------------------------
+// The video and audio sources
+// ---------------------------------------------------------------------------
+
+/// A capture card (or camera) that is open. Dropping it closes the device.
+pub trait CaptureHandle {
+    fn status(&self) -> CaptureStatus;
+}
+
+/// A monitor or window being captured. Dropping it stops the capture.
+pub trait ScreenHandle {
+    fn status(&self) -> ScreenStatus;
+}
+
+/// The capture card's sound being played to the speakers. Dropping it stops it.
+pub trait AudioPlayback {
+    fn status(&self) -> AudioStatus;
+    fn set_volume(&self, volume: f32);
+    fn set_offset_ms(&self, offset_ms: i32);
+    /// Starts (or with `None`, stops) feeding every block to the recorder.
+    fn set_tap(&self, tap: Option<Arc<AudioTap>>);
+    /// Audio buffered for the sync offset, in milliseconds.
+    fn buffered_ms(&self) -> u32;
+}
+
+/// The drawing of several sources into one picture. Dropping it stops it.
+pub trait SceneCompositor {
+    /// Replaces the layers (a scene change or an edit).
+    fn set_layers(&self, layers: Vec<Layer>);
+}
+
+/// Which sound to listen to when a screen is captured.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Loopback {
+    /// Everything the PC plays.
+    System,
+    /// What one program (and the programs it started) plays.
+    Process(u32),
+}
+
+/// Everything the application needs to get pictures and sound from the machine.
+pub trait SourceMachine {
+    /// Opens the capture card with this device link, publishing to `slot`.
+    fn start_capture(
+        &self,
+        symbolic_link: String,
+        options: CaptureOptions,
+        slot: Arc<FrameSlot>,
+    ) -> Box<dyn CaptureHandle>;
+    /// Captures a monitor or a window, publishing to `slot`.
+    fn start_screen(
+        &self,
+        target: CaptureTarget,
+        options: ScreenOptions,
+        slot: Arc<FrameSlot>,
+    ) -> Box<dyn ScreenHandle>;
+    /// A synthetic picture (colour bars), for tests and previews. The handle
+    /// only keeps it alive.
+    fn start_test_pattern(&self, slot: Arc<FrameSlot>, fps: u32) -> Box<dyn std::any::Any>;
+
+    fn list_monitors(&self) -> Vec<MonitorInfo>;
+    fn list_windows(&self) -> Vec<WindowInfo>;
+
+    /// Plays the sound of the audio device `device_id` to the speakers.
+    fn start_playback(
+        &self,
+        device_id: String,
+        volume: f32,
+        offset_ms: i32,
+    ) -> Box<dyn AudioPlayback>;
+    /// Listens to what the PC (or one program) plays, feeding `tap`; it is not
+    /// played back.
+    fn start_loopback(&self, source: Loopback, tap: Arc<AudioTap>) -> Box<dyn MicInput>;
+    /// The audio input Windows treats as the default, if there is one.
+    fn default_capture_device(&self) -> Option<AudioDevice>;
+
+    /// Draws `layers` into one picture of `width` x `height`, published to `out`.
+    fn start_compositor(
+        &self,
+        layers: Vec<Layer>,
+        out: Arc<FrameSlot>,
+        width: u32,
+        height: u32,
+    ) -> Box<dyn SceneCompositor>;
 }

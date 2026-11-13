@@ -90,7 +90,7 @@ impl App {
             cpu_total_percent: usage.cpu_total_percent,
             gpu_ms,
             memory_mb: usage.memory_mb,
-            audio_buffer_ms: self.audio.as_ref().map(AudioEngine::buffered_ms),
+            audio_buffer_ms: self.audio.as_ref().map(|a| a.buffered_ms()),
             monitor_hz,
             window: size,
             findings,

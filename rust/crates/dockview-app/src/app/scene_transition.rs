@@ -13,7 +13,6 @@ use dockview_domain::frame::FrameSlot;
 use dockview_domain::scene::{Scene, SceneLayer};
 use dockview_domain::sources::Layer;
 use dockview_domain::transition::{Easing, Transition, DEFAULT_DURATION};
-use dockview_platform::compose::SceneCompositor;
 
 use dockview_domain::i18n;
 use dockview_ui::toast::ToastKind;
@@ -175,7 +174,7 @@ impl App {
             Some(scene) => scene.set_layers(layers),
             None => {
                 self.input_slot.set_forward(None);
-                self.scene = Some(SceneCompositor::start(
+                self.scene = Some(self.machine.start_compositor(
                     layers,
                     Arc::clone(&self.slot),
                     SCENE_WIDTH,

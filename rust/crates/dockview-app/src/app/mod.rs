@@ -28,7 +28,10 @@ use dockview_domain::device_names;
 use dockview_domain::diagnostics::{diagnose, Finding, Snapshot, VideoState};
 use dockview_domain::events::AppEvent;
 use dockview_domain::frame::FrameSlot;
-use dockview_domain::ports::ReplayMachine;
+use dockview_domain::ports::{
+    AudioPlayback, CaptureHandle, Loopback, MicInput, ReplayMachine, SceneCompositor, ScreenHandle,
+    SourceMachine,
+};
 use dockview_domain::recording::{RecorderStatus, RecordingInfo, RecordingState, ReplaySettings};
 use dockview_domain::scene::SceneLayer;
 use dockview_domain::settings::{
@@ -39,15 +42,11 @@ use dockview_domain::sources::{
     CaptureTarget, MonitorInfo, ScreenOptions, ScreenStatus, WindowInfo,
 };
 use dockview_domain::stream::StreamInfo;
-use dockview_platform::audio::{default_capture_device, enumerate_audio_devices, AudioEngine};
-use dockview_platform::capture::VideoCapture;
-use dockview_platform::compose::SceneCompositor;
+use dockview_platform::audio::enumerate_audio_devices;
 use dockview_platform::mf::{enumerate_video_devices, MfSession};
 use dockview_platform::replay_machine::PlatformReplay;
-use dockview_platform::screen::{list_monitors, list_windows, ScreenCapture};
 use dockview_platform::settings_store::FileSettingsStore;
-use dockview_platform::tap_capture::{CaptureSource, TapCapture as MicCapture};
-use dockview_platform::testsrc::TestSource;
+use dockview_platform::source_machine::PlatformSources;
 use windows::Win32::Foundation::HWND;
 use windows::Win32::UI::WindowsAndMessaging::{
     SetWindowDisplayAffinity, WDA_EXCLUDEFROMCAPTURE, WDA_NONE,
@@ -104,14 +103,25 @@ const OFFSET_STEP_MS: i32 = 10;
 
 enum Source {
     /// The handle only keeps the generator thread alive.
-    Test(#[allow(dead_code)] TestSource),
+    Test(#[allow(dead_code)] Box<dyn std::any::Any>),
     Capture {
-        capture: VideoCapture,
+        capture: Box<dyn CaptureHandle>,
         reconnect: Reconnect,
     },
     /// A monitor or a window, captured by Windows Graphics Capture.
-    Screen(ScreenCapture),
+    Screen(Box<dyn ScreenHandle>),
     None,
+}
+
+/// Everything the app needs from the machine, behind ports. The real ones are
+/// made in `run()`; tests pass fakes.
+pub(crate) struct Ports {
+    /// Where the settings are saved.
+    pub settings: Box<dyn SettingsStore>,
+    /// The replay buffer, the microphone, the hotkeys and the clips folder.
+    pub replay: Box<dyn ReplayMachine>,
+    /// The capture cards, screens, audio and the scene compositor.
+    pub sources: Box<dyn SourceMachine>,
 }
 
 struct App {
@@ -122,7 +132,7 @@ struct App {
     /// `scene_runtime`).
     input_slot: Arc<FrameSlot>,
     /// Draws the layers of the scene; `Some` only while there is a scene.
-    scene: Option<SceneCompositor>,
+    scene: Option<Box<dyn SceneCompositor>>,
     /// The layers above the base of the active scene, with their sources.
     overlays: Vec<Overlay>,
     /// The base layer of the active scene (its source is `source`).
@@ -134,7 +144,7 @@ struct App {
     audio_devices: Vec<AudioDevice>,
     video_index: Option<usize>,
     audio_index: Option<usize>,
-    audio: Option<AudioEngine>,
+    audio: Option<Box<dyn AudioPlayback>>,
     settings: AppSettings,
     /// Where the settings are saved (the real file, or a stand-in in tests).
     store: Box<dyn SettingsStore>,
@@ -173,7 +183,9 @@ struct App {
     /// Whether the card, a monitor or a window is being captured.
     source_kind: SourceKind,
     /// The sound of the PC or of one program, while a screen is captured.
-    loopback: Option<MicCapture>,
+    loopback: Option<Box<dyn MicInput>>,
+    /// What the sources are started on (the real machine, or a fake in tests).
+    machine: Box<dyn SourceMachine>,
     /// What can be captured, refreshed while the source popover is open.
     monitors: Vec<MonitorInfo>,
     windows: Vec<WindowInfo>,

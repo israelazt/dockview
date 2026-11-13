@@ -7,8 +7,7 @@ impl App {
     pub(super) fn new(
         slot: Arc<FrameSlot>,
         settings: AppSettings,
-        store: Box<dyn SettingsStore>,
-        replay_machine: Box<dyn ReplayMachine>,
+        ports: Ports,
         video_devices: Vec<VideoDevice>,
         audio_devices: Vec<AudioDevice>,
         cli: Cli,
@@ -40,7 +39,7 @@ impl App {
             audio_index: None,
             audio: None,
             settings,
-            store,
+            store: ports.settings,
             window: None,
             renderer: None,
             rendered: 0,
@@ -66,11 +65,12 @@ impl App {
             stats_log,
             telemetry: Telemetry::new(),
             auto: AutoSwitch::new(),
-            replay: ReplayService::new(replay_machine),
+            replay: ReplayService::new(ports.replay),
             toasts: ToastHost::new(),
             total_ram: perf::total_ram_bytes(),
             source_kind: SourceKind::Capture,
             loopback: None,
+            machine: ports.sources,
             monitors: Vec::new(),
             windows: Vec::new(),
             sources_refreshed: Instant::now(),
@@ -82,12 +82,10 @@ impl App {
             // The preview exists for screenshots, which must be the same every
             // time: one picture a second keeps the moving stripe at its start.
             let fps = if preview { 1 } else { 30 };
-            app.source = Source::Test(TestSource::start(
-                Arc::clone(&app.input_slot),
-                1920,
-                1080,
-                fps,
-            ));
+            app.source = Source::Test(
+                app.machine
+                    .start_test_pattern(Arc::clone(&app.input_slot), fps),
+            );
             if preview {
                 app.install_preview_devices();
             }
@@ -229,8 +227,11 @@ pub fn run() {
     let mut app = App::new(
         slot,
         saved,
-        Box::new(store),
-        Box::new(PlatformReplay),
+        Ports {
+            settings: Box::new(store),
+            replay: Box::new(PlatformReplay),
+            sources: Box::new(PlatformSources),
+        },
         video_devices,
         audio_devices,
         cli,

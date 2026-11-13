@@ -97,7 +97,7 @@ impl App {
     /// default, unless that is the capture card's own audio (see
     /// [`dockview_domain::device::pick_microphone`]).
     pub(super) fn automatic_mic(&self) -> Option<String> {
-        let default = on_helper_thread(|| Some(default_capture_device()));
+        let default = self.machine.default_capture_device();
         let game_audio = self.audio_index.and_then(|i| self.audio_devices.get(i));
         pick_microphone(
             &self.audio_devices,

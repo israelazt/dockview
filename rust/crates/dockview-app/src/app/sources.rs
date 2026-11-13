@@ -30,11 +30,11 @@ impl App {
             }
             route => {
                 let source = match route {
-                    AudioRoute::Process(pid) => CaptureSource::ProcessLoopback(pid),
-                    _ => CaptureSource::SystemLoopback,
+                    AudioRoute::Process(pid) => Loopback::Process(pid),
+                    _ => Loopback::System,
                 };
                 if let Some(tap) = tap {
-                    self.loopback = Some(MicCapture::start(source, 1.0, tap));
+                    self.loopback = Some(self.machine.start_loopback(source, tap));
                 }
             }
         }
@@ -63,7 +63,7 @@ impl App {
         self.video_size = (0, 0);
         self.source_kind = kind;
         self.set_capture_exclusion(true);
-        self.source = Source::Screen(ScreenCapture::start(
+        self.source = Source::Screen(self.machine.start_screen(
             target,
             ScreenOptions::default(),
             Arc::clone(&self.input_slot),
@@ -72,9 +72,11 @@ impl App {
     }
 
     pub(super) fn refresh_sources(&mut self) {
-        self.monitors = list_monitors();
+        self.monitors = self.machine.list_monitors();
         let own = std::process::id();
-        self.windows = list_windows()
+        self.windows = self
+            .machine
+            .list_windows()
             .into_iter()
             .filter(|w| w.process_id != own)
             .collect();
@@ -163,8 +165,8 @@ impl App {
         }
     }
 
-    pub(super) fn start_capture(&self, symbolic_link: &str) -> VideoCapture {
-        VideoCapture::start(
+    pub(super) fn start_capture(&self, symbolic_link: &str) -> Box<dyn CaptureHandle> {
+        self.machine.start_capture(
             symbolic_link.to_owned(),
             CaptureOptions {
                 prefer_compressed: self.settings.video_mode == VideoModePref::Compressed,
@@ -185,7 +187,7 @@ impl App {
             return;
         };
         self.settings.last_audio_device_id = Some(device.device_id.clone());
-        let audio = AudioEngine::start(
+        let audio = self.machine.start_playback(
             device.device_id.clone(),
             self.settings.volume,
             self.settings.audio_offset_ms,

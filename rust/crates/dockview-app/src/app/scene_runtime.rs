@@ -14,13 +14,11 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use dockview_domain::frame::FrameSlot;
+use dockview_domain::ports::{CaptureHandle, ScreenHandle};
 use dockview_domain::scene::{NormRect, Scene, SceneLayer, SourceRef};
 use dockview_domain::sources::Layer;
 use dockview_domain::sources::{CaptureOptions, CaptureStatus};
 use dockview_domain::sources::{CaptureTarget, ScreenOptions, ScreenStatus};
-use dockview_platform::capture::VideoCapture;
-use dockview_platform::compose::SceneCompositor;
-use dockview_platform::screen::{list_monitors, list_windows, ScreenCapture};
 
 use crate::cli::PipSpec;
 use dockview_domain::i18n;
@@ -38,11 +36,11 @@ const PIP_DEFAULT_SIZE: f32 = 0.28;
 /// What produces an overlay's pictures.
 pub enum OverlayRunning {
     Capture {
-        capture: VideoCapture,
+        capture: Box<dyn CaptureHandle>,
         link: String,
         reconnect: Reconnect,
     },
-    Screen(ScreenCapture),
+    Screen(Box<dyn ScreenHandle>),
 }
 
 /// A layer above the base, with its running source.
@@ -183,7 +181,7 @@ impl App {
                     return None;
                 }
                 Some(OverlayRunning::Capture {
-                    capture: VideoCapture::start(
+                    capture: self.machine.start_capture(
                         symbolic_link.clone(),
                         CaptureOptions::default(),
                         Arc::clone(slot),
@@ -198,7 +196,7 @@ impl App {
                     .monitors
                     .iter()
                     .find(|m| &m.device_name == device_name)?;
-                Some(OverlayRunning::Screen(ScreenCapture::start(
+                Some(OverlayRunning::Screen(self.machine.start_screen(
                     CaptureTarget::Monitor(monitor.handle),
                     ScreenOptions::default(),
                     Arc::clone(slot),
@@ -207,7 +205,7 @@ impl App {
             SourceRef::Window { title } => {
                 self.refresh_sources();
                 let (handle, _) = self.find_window(title)?;
-                Some(OverlayRunning::Screen(ScreenCapture::start(
+                Some(OverlayRunning::Screen(self.machine.start_screen(
                     CaptureTarget::Window(handle),
                     ScreenOptions::default(),
                     Arc::clone(slot),
@@ -278,7 +276,7 @@ impl App {
             Some(scene) => scene.set_layers(layers),
             None => {
                 self.input_slot.set_forward(None);
-                self.scene = Some(SceneCompositor::start(
+                self.scene = Some(self.machine.start_compositor(
                     layers,
                     Arc::clone(&self.slot),
                     SCENE_WIDTH,
@@ -340,7 +338,8 @@ impl App {
                     })
             }
             PipSpec::Monitor(n) => {
-                list_monitors()
+                self.machine
+                    .list_monitors()
                     .into_iter()
                     .nth(*n)
                     .map(|m| SourceRef::Monitor {
@@ -350,7 +349,8 @@ impl App {
             PipSpec::Window(text) => {
                 let wanted = text.to_lowercase();
                 let own = std::process::id();
-                list_windows()
+                self.machine
+                    .list_windows()
                     .into_iter()
                     .find(|w| w.process_id != own && w.title.to_lowercase().contains(&wanted))
                     .map(|w| SourceRef::Window { title: w.title })
@@ -388,7 +388,7 @@ impl App {
                         CaptureStatus::Disconnected { .. } | CaptureStatus::Failed(_)
                     );
                     if reconnect.tick(gone, Instant::now()) {
-                        *capture = VideoCapture::start(
+                        *capture = self.machine.start_capture(
                             link.clone(),
                             CaptureOptions::default(),
                             Arc::clone(&overlay.slot),

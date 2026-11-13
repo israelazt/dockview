@@ -30,6 +30,8 @@ pub mod replay_machine;
 pub mod screen;
 pub mod settings_store;
 #[cfg(windows)]
+pub mod source_machine;
+#[cfg(windows)]
 pub mod system_lang;
 #[cfg(windows)]
 pub mod tap_capture;
