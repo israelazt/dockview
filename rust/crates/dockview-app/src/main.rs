@@ -15,6 +15,7 @@ mod hotkey;
 mod i18n;
 mod perf;
 mod render;
+mod replay_service;
 mod scene_actions;
 mod scene_runtime;
 mod scene_transition;
@@ -40,8 +41,7 @@ use dockview_core::device_names;
 use dockview_core::diagnostics::{diagnose, Finding, Snapshot, VideoState};
 use dockview_core::frame::FrameSlot;
 use dockview_core::mf::{enumerate_video_devices, MfSession};
-use dockview_core::recorder::{RecorderStatus, ReplayRecorder, ReplaySettings, SaveHandle};
-use dockview_core::recording::{disk_free_bytes, EndReason, RecordingState, DISK_START_MIN_BYTES};
+use dockview_core::recorder::ReplaySettings;
 use dockview_core::scene::SceneLayer;
 use dockview_core::screen::{
     list_monitors, list_windows, CaptureTarget, MonitorInfo, ScreenCapture, ScreenOptions,
@@ -69,14 +69,12 @@ use auto_switch::{AutoSwitch, SwitchEvent};
 use cli::Cli;
 use i18n::{Lang, LangModeExt};
 use render::{Filter, Renderer};
+use replay_service::{RecordToggle, ReplayService};
 use scene_runtime::Overlay;
 use scene_transition::ActiveTransition;
 use telemetry::{Rates, Telemetry};
 use theme::{Appearance, Theme, ThemeModeExt};
-use ui::controls::{
-    Action, Controls, CurrentSource, MicState, MicView, Model, RecState, RecView, SourcesView,
-    StatusKind,
-};
+use ui::controls::{Action, Controls, CurrentSource, Model, RecState, SourcesView, StatusKind};
 use ui::gpu::UiGpu;
 use ui::input::Pointer;
 use ui::stats::{Stats, StatsPanel};
@@ -168,18 +166,11 @@ struct App {
     telemetry: Telemetry,
     /// The automatic move to a compressed mode (see `auto_switch`).
     auto: AutoSwitch,
-    /// The instant-replay buffer; `Some` while it is on.
-    recorder: Option<ReplayRecorder>,
-    /// A clip being written in the background.
-    saving: Option<SaveHandle>,
-    hotkey: Option<hotkey::Hotkey>,
+    /// Instant replay, clips, recording and the microphone (see `replay_service`).
+    replay: ReplayService,
     toasts: ToastHost,
     /// Installed RAM, which caps the replay length.
     total_ram: u64,
-    /// The microphone; `Some` only while the user has it on.
-    mic: Option<MicCapture>,
-    /// Recording was asked for while the buffer was still starting.
-    record_when_ready: bool,
     /// Whether the card, a monitor or a window is being captured.
     source_kind: SourceKind,
     /// The sound of the PC or of one program, while a screen is captured.
@@ -188,13 +179,6 @@ struct App {
     monitors: Vec<MonitorInfo>,
     windows: Vec<WindowInfo>,
     sources_refreshed: Instant,
-    /// The newest clip or recording saved this session, to show in Explorer.
-    last_saved: Option<std::path::PathBuf>,
-    /// The low-disk warning was already shown for this recording.
-    low_disk_warned: bool,
-    /// Smoothed loudness for the meter.
-    mic_level: f32,
-    mic_level_at: Instant,
 }
 
 /// Whether Windows allows UI animations ("Show animations in Windows").
@@ -303,22 +287,14 @@ impl App {
             stats_log,
             telemetry: Telemetry::new(),
             auto: AutoSwitch::new(),
-            recorder: None,
-            saving: None,
-            hotkey: None,
+            replay: ReplayService::new(),
             toasts: ToastHost::new(),
             total_ram: perf::total_ram_bytes(),
-            mic: None,
-            record_when_ready: false,
             source_kind: SourceKind::Capture,
             loopback: None,
             monitors: Vec::new(),
             windows: Vec::new(),
             sources_refreshed: Instant::now(),
-            last_saved: None,
-            low_disk_warned: false,
-            mic_level: 0.0,
-            mic_level_at: Instant::now(),
         };
 
         app.controls.set_animations(animations);
@@ -422,32 +398,17 @@ impl App {
             return;
         }
         self.clamp_replay_length();
-        let hotkey = hotkey::Hotkey::register();
-        if !hotkey.is_registered() {
-            eprintln!(
-                "replay hotkey {} is taken by another program",
-                hotkey::LABEL
-            );
-        }
-        if !hotkey.record_registered() {
-            eprintln!(
-                "record hotkey {} is taken by another program",
-                hotkey::RECORD_LABEL
-            );
-        }
-        self.hotkey = Some(hotkey);
+        self.replay.register_hotkeys();
         self.sync_replay();
     }
 
     /// Makes the recorder match `settings.replay_enabled`.
     fn sync_replay(&mut self) {
-        if self.settings.replay_enabled == self.recorder.is_some() {
+        if self.settings.replay_enabled == self.replay.is_on() {
             return;
         }
-        // The microphone rides on the recorder: it goes when the buffer goes.
-        self.mic = None;
         if self.settings.replay_enabled {
-            let recorder = ReplayRecorder::start(
+            self.replay.start_buffer(
                 Arc::clone(&self.slot),
                 ReplaySettings {
                     // A little extra so a clip of the chosen length always fits
@@ -459,9 +420,8 @@ impl App {
                     fps: 60,
                 },
             );
-            self.recorder = Some(recorder);
         } else {
-            self.recorder = None;
+            self.replay.stop_buffer();
         }
         self.route_audio();
     }
@@ -482,92 +442,15 @@ impl App {
             .map_or(0, |i| i + 1)
     }
 
-    fn rec_view(&self) -> RecView {
-        if self.record_when_ready {
-            return RecView {
-                state: RecState::Starting,
-                seconds: 0.0,
-            };
-        }
-        let Some(recorder) = &self.recorder else {
-            return RecView::idle();
-        };
-        let info = recorder.recording();
-        RecView {
-            state: match info.state {
-                RecordingState::Idle => RecState::Idle,
-                RecordingState::Starting => RecState::Starting,
-                RecordingState::Recording => RecState::Recording,
-            },
-            seconds: info.seconds as f32,
-        }
-    }
-
     /// Starts or stops recording the session.
     fn toggle_record(&mut self) {
-        if let Some(recorder) = &self.recorder {
-            if recorder.recording().state != RecordingState::Idle {
-                recorder.stop_recording();
-                return;
-            }
-        }
-        if self.record_when_ready {
-            self.record_when_ready = false; // a second press cancels the wait
-            return;
-        }
         // Recording rides on the replay buffer's encoder: switch it on if the
         // user had turned it off, and start once it is running.
-        if self.recorder.is_none() {
+        if self.replay.toggle_record() == RecordToggle::NeedsBuffer {
             self.settings.replay_enabled = true;
             self.sync_replay();
             self.save_settings();
-        }
-        self.record_when_ready = true;
-    }
-
-    /// Opens the file once the recorder is running.
-    fn begin_recording(&mut self) {
-        let Some(recorder) = &self.recorder else {
-            self.record_when_ready = false;
-            return;
-        };
-        match recorder.status() {
-            RecorderStatus::Recording => {}
-            RecorderStatus::Starting => return, // keep waiting
-            RecorderStatus::Unsupported(_) | RecorderStatus::Failed(_) => {
-                self.record_when_ready = false;
-                self.toast(i18n::Key::ToastRecFailed, ToastKind::Error);
-                return;
-            }
-        }
-        self.record_when_ready = false;
-        let folder = self.clips_folder();
-        if disk_free_bytes(&folder).is_some_and(|free| free < DISK_START_MIN_BYTES) {
-            self.toast(i18n::Key::ToastRecNoSpace, ToastKind::Error);
-            return;
-        }
-        let name = clips::recording_file_name(clips::local_time_now());
-        let path = clips::unique_path(&folder, &name);
-        match recorder.start_recording(path) {
-            Ok(()) => self.toast(i18n::Key::ToastRecStarted, ToastKind::Info),
-            Err(e) => {
-                eprintln!("recording not started: {e}");
-                self.toast(i18n::Key::ToastRecFailed, ToastKind::Error);
-            }
-        }
-    }
-
-    fn mic_view(&self) -> MicView {
-        let state = match self.mic.as_ref().map(MicCapture::status) {
-            None => MicState::Off,
-            Some(AudioStatus::Starting) => MicState::Starting,
-            Some(AudioStatus::Running) => MicState::Live,
-            Some(AudioStatus::Stopped) => MicState::Off,
-            Some(AudioStatus::Disconnected(_) | AudioStatus::Failed(_)) => MicState::Unavailable,
-        };
-        MicView {
-            state,
-            level: self.mic_level,
+            self.replay.wait_for_buffer();
         }
     }
 
@@ -575,14 +458,10 @@ impl App {
     /// what carries its audio.
     fn set_mic(&mut self, on: bool) {
         if !on {
-            self.mic = None;
-            if let Some(recorder) = &self.recorder {
-                recorder.clear_mic();
-            }
-            self.mic_level = 0.0;
+            self.replay.close_mic();
             return;
         }
-        if self.recorder.is_none() {
+        if !self.replay.is_on() {
             self.toast(i18n::Key::ToastTurnOnFirst, ToastKind::Info);
             return;
         }
@@ -591,9 +470,6 @@ impl App {
             .last_mic_device_id
             .clone()
             .or_else(|| self.automatic_mic());
-        let Some(recorder) = &self.recorder else {
-            return;
-        };
         eprintln!(
             "microphone: {}",
             device
@@ -603,11 +479,7 @@ impl App {
                     .friendly_name
                     .clone())
         );
-        self.mic = Some(MicCapture::start(
-            CaptureSource::Device(device),
-            1.0,
-            recorder.mic_tap(),
-        ));
+        self.replay.open_mic(device);
     }
 
     /// The microphone to use when the user has not chosen one: Windows'
@@ -640,7 +512,7 @@ impl App {
     /// window). Neither is played back by Dockview.
     fn route_audio(&mut self) {
         self.loopback = None;
-        let tap = self.recorder.as_ref().map(ReplayRecorder::audio_tap);
+        let tap = self.replay.audio_tap();
         match self.source_kind {
             SourceKind::Capture => {
                 if let Some(audio) = &self.audio {
@@ -776,9 +648,8 @@ impl App {
     /// Starts the buffer over, for a change that needs a new encoder. The
     /// microphone, which feeds the old recorder, is reopened on the new one.
     fn restart_recorder(&mut self) {
-        let mic_on = self.mic.is_some();
-        self.mic = None;
-        self.recorder = None;
+        let mic_on = self.replay.mic_on();
+        self.replay.stop_buffer();
         self.sync_replay();
         if mic_on {
             self.set_mic(true);
@@ -810,10 +681,7 @@ impl App {
     /// Opens Explorer on the newest file saved this session, or on the folder
     /// when there is none (or it was moved).
     fn show_saved(&self) {
-        match &self.last_saved {
-            Some(file) if file.exists() => clips::reveal_file(file),
-            _ => clips::open_folder(&self.clips_folder()),
-        }
+        self.replay.show_saved(&self.clips_folder());
     }
 
     /// Folder clips are saved to.
@@ -825,7 +693,7 @@ impl App {
     }
 
     fn replay_view(&self) -> ui::controls::ReplayView {
-        use ui::controls::{ReplayState, ReplayView};
+        use ui::controls::ReplayView;
         let mut view = ReplayView::off(hotkey::LABEL);
         view.record_hotkey = hotkey::RECORD_LABEL.to_owned();
         view.keep_seconds = self.settings.replay_seconds;
@@ -836,18 +704,7 @@ impl App {
         );
         view.at_limit = self.settings.replay_seconds >= self.replay_limit();
         view.folder = self.clips_folder().display().to_string();
-        view.saving = self.saving.is_some();
-        if let Some(recorder) = &self.recorder {
-            view.state = match recorder.status() {
-                RecorderStatus::Starting => ReplayState::Starting,
-                RecorderStatus::Recording => ReplayState::Recording,
-                RecorderStatus::Unsupported(_) | RecorderStatus::Failed(_) => {
-                    ReplayState::Unavailable
-                }
-            };
-            view.buffered_seconds = recorder.buffered_seconds() as f32;
-            view.buffered_mb = recorder.buffered_bytes() as f32 / 1e6;
-        }
+        self.replay.fill_view(&mut view);
         view
     }
 
@@ -858,84 +715,24 @@ impl App {
     }
 
     fn save_replay(&mut self) {
-        if self.saving.is_some() {
-            return;
-        }
-        let Some(recorder) = &self.recorder else {
-            self.toast(i18n::Key::ToastTurnOnFirst, ToastKind::Info);
-            return;
-        };
         let folder = self.clips_folder();
-        if std::fs::create_dir_all(&folder).is_err() {
-            self.toast(i18n::Key::ToastClipFailed, ToastKind::Error);
-            return;
-        }
-        let name = clips::clip_file_name(clips::local_time_now());
-        let path = clips::unique_path(&folder, &name);
-        self.saving = Some(recorder.save(f64::from(self.settings.replay_seconds), path));
-        self.toast(i18n::Key::ToastSaving, ToastKind::Info);
+        self.replay
+            .save_clip(&folder, f64::from(self.settings.replay_seconds));
     }
 
-    /// Per-tick work: the hotkey and finished saves.
+    /// Per-tick work: the hotkeys, and whatever the replay service reports.
     fn poll_replay(&mut self) {
-        let now = Instant::now();
-        let dt = now.duration_since(self.mic_level_at).as_secs_f32().min(0.2);
-        self.mic_level_at = now;
-        // Rise at once, fall smoothly.
-        let raw = self.mic.as_ref().map_or(0.0, MicCapture::level);
-        self.mic_level = raw.max(self.mic_level - dt * 1.5).clamp(0.0, 1.0);
-        if self.hotkey.as_ref().is_some_and(|h| h.take_pressed()) {
+        let (save, record) = self.replay.take_hotkeys();
+        if save {
             self.save_replay();
         }
-        if self
-            .hotkey
-            .as_ref()
-            .is_some_and(|h| h.take_record_pressed())
-        {
+        if record {
             self.toggle_record();
         }
-        if self.record_when_ready {
-            self.begin_recording();
-        }
-        let mut outcomes = Vec::new();
-        if let Some(recorder) = &self.recorder {
-            while let Some(outcome) = recorder.take_recording_result() {
-                outcomes.push(outcome);
-            }
-        }
-        for outcome in outcomes {
-            if let Err(e) = &outcome.result {
-                eprintln!("recording ended with an error: {e}");
-            }
-            if let Ok(clip) = &outcome.result {
-                self.last_saved = Some(clip.path.clone());
-            }
-            if let Some((key, kind)) = outcome_toast(outcome.reason, outcome.result.is_ok()) {
-                self.toast(key, kind);
-            }
-        }
-        // Warn once when the disk is running low.
-        let info = self.recorder.as_ref().map(|r| r.recording());
-        match info {
-            Some(info) if info.state == RecordingState::Idle => self.low_disk_warned = false,
-            Some(info) if info.low_disk && !self.low_disk_warned => {
-                self.low_disk_warned = true;
-                self.toast(i18n::Key::ToastLowDisk, ToastKind::Error);
-            }
-            _ => {}
-        }
-        if let Some(result) = self.saving.as_ref().and_then(SaveHandle::poll) {
-            self.saving = None;
-            match result {
-                Ok(clip) => {
-                    self.last_saved = Some(clip.path);
-                    self.toast(i18n::Key::ToastClipSaved, ToastKind::Success);
-                }
-                Err(e) => {
-                    eprintln!("clip not saved: {e}");
-                    self.toast(i18n::Key::ToastClipFailed, ToastKind::Error);
-                }
-            }
+        let folder = self.clips_folder();
+        self.replay.poll(&folder);
+        for notice in self.replay.take_notices() {
+            self.toast(notice.key, notice.kind);
         }
     }
 
@@ -1004,8 +801,8 @@ impl App {
             self.settings.volume,
             self.settings.audio_offset_ms,
         );
-        if let Some(recorder) = &self.recorder {
-            audio.set_tap(Some(recorder.audio_tap()));
+        if let Some(tap) = self.replay.audio_tap() {
+            audio.set_tap(Some(tap));
         }
         self.audio = Some(audio);
     }
@@ -1149,8 +946,8 @@ impl App {
             replay: self.replay_view(),
             mic_devices: self.mic_device_names(self.lang_mode().resolve(self.system_lang)),
             mic_selected: Some(self.mic_selected()),
-            mic: self.mic_view(),
-            rec: self.rec_view(),
+            mic: self.replay.mic_view(),
+            rec: self.replay.rec_view(),
             sources: self.sources_view(self.lang_mode().resolve(self.system_lang)),
             scenes: self.scenes_view(self.lang_mode().resolve(self.system_lang)),
         }
@@ -1187,12 +984,7 @@ impl App {
                 }
             }
             Action::SelectAudio(index) => self.select_audio(Some(index)),
-            Action::ToggleReplay
-                if self
-                    .recorder
-                    .as_ref()
-                    .is_some_and(|r| r.recording().state != RecordingState::Idle) =>
-            {
+            Action::ToggleReplay if self.replay.recording_active() => {
                 // Turning the buffer off would cut the recording short.
                 self.toast(i18n::Key::ToastStopRecordingFirst, ToastKind::Info);
                 return;
@@ -1231,9 +1023,9 @@ impl App {
                 return;
             }
             Action::ToggleMic => {
-                let on = self.mic.is_none();
+                let on = !self.replay.mic_on();
                 self.set_mic(on);
-                if self.mic.is_some() == on {
+                if self.replay.mic_on() == on {
                     let key = if on {
                         i18n::Key::ToastMicOn
                     } else {
@@ -1248,7 +1040,7 @@ impl App {
                     .checked_sub(1)
                     .and_then(|i| self.audio_devices.get(i))
                     .map(|d| d.device_id.clone());
-                if self.mic.is_some() {
+                if self.replay.mic_on() {
                     // Reopen on the new device.
                     self.set_mic(false);
                     self.set_mic(true);
@@ -1258,11 +1050,9 @@ impl App {
                 self.settings.replay_seconds =
                     settings::step_replay_seconds(self.settings.replay_seconds, delta);
                 self.clamp_replay_length();
-                if let Some(recorder) = &self.recorder {
-                    recorder.set_keep_seconds(f64::from(
-                        self.settings.replay_seconds + settings::REPLAY_MARGIN_SECONDS,
-                    ));
-                }
+                self.replay.set_keep_seconds(f64::from(
+                    self.settings.replay_seconds + settings::REPLAY_MARGIN_SECONDS,
+                ));
             }
             Action::SaveReplay => {
                 self.save_replay();
@@ -1274,11 +1064,7 @@ impl App {
             }
             Action::ChooseFolder => self.choose_folder(),
             Action::SetQuality(quality) => {
-                if self
-                    .recorder
-                    .as_ref()
-                    .is_some_and(|r| r.recording().state != RecordingState::Idle)
-                {
+                if self.replay.recording_active() {
                     // A new encoder would cut the recording short.
                     self.toast(i18n::Key::ToastStopRecordingFirst, ToastKind::Info);
                     return;
@@ -1286,7 +1072,7 @@ impl App {
                 if self.settings.replay_bitrate_mbps != quality.mbps() {
                     self.settings.replay_bitrate_mbps = quality.mbps();
                     self.clamp_replay_length();
-                    if self.recorder.is_some() {
+                    if self.replay.is_on() {
                         self.restart_recorder();
                         self.toast(i18n::Key::ToastQualityChanged, ToastKind::Info);
                     }
@@ -1512,7 +1298,7 @@ impl App {
 
     fn render(&mut self) {
         let model = self.model();
-        let rec = self.rec_view();
+        let rec = self.replay.rec_view();
         let now = Instant::now();
         let dt = now.duration_since(self.last_frame).as_secs_f32().min(0.1);
         self.last_frame = now;
@@ -1842,8 +1628,9 @@ impl ApplicationHandler for App {
         // Redraw for new video, for input, and while the controls are on
         // screen (hover, drag and fade animations need steady frames).
         let new_frame = self.slot.wait_for_frame(FRAME_WAIT);
-        let animating =
-            self.controls.is_visible() || self.toasts.is_visible() || self.rec_view().is_on();
+        let animating = self.controls.is_visible()
+            || self.toasts.is_visible()
+            || self.replay.rec_view().is_on();
         if new_frame || animating || std::mem::take(&mut self.needs_redraw) {
             if let Some(window) = &self.window {
                 window.request_redraw();
@@ -1908,49 +1695,9 @@ fn main() {
     }
 }
 
-/// The message to show when a recording (or one of its files) ends, if any.
-fn outcome_toast(reason: EndReason, saved: bool) -> Option<(i18n::Key, ToastKind)> {
-    use i18n::Key;
-    match (reason, saved) {
-        // The user cancelled before anything was recorded: nothing to say.
-        (EndReason::Cancelled, _) => None,
-        (EndReason::ResolutionChanged, true) => Some((Key::ToastRecNewPart, ToastKind::Info)),
-        (EndReason::DiskFull, true) => Some((Key::ToastRecDiskFull, ToastKind::Error)),
-        (EndReason::NoSignal, _) => Some((Key::ToastRecNoSignal, ToastKind::Error)),
-        (_, true) => Some((Key::ToastRecSaved, ToastKind::Success)),
-        (_, false) => Some((Key::ToastRecFailed, ToastKind::Error)),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn every_way_a_recording_can_end_says_the_right_thing() {
-        use i18n::Key;
-        assert_eq!(outcome_toast(EndReason::Cancelled, false), None);
-        assert_eq!(
-            outcome_toast(EndReason::Stopped, true),
-            Some((Key::ToastRecSaved, ToastKind::Success))
-        );
-        assert_eq!(
-            outcome_toast(EndReason::ResolutionChanged, true),
-            Some((Key::ToastRecNewPart, ToastKind::Info))
-        );
-        assert_eq!(
-            outcome_toast(EndReason::DiskFull, true),
-            Some((Key::ToastRecDiskFull, ToastKind::Error))
-        );
-        assert_eq!(
-            outcome_toast(EndReason::NoSignal, false),
-            Some((Key::ToastRecNoSignal, ToastKind::Error))
-        );
-        assert_eq!(
-            outcome_toast(EndReason::Failed, false),
-            Some((Key::ToastRecFailed, ToastKind::Error))
-        );
-    }
 
     #[test]
     fn next_index_wraps_and_handles_empty_lists() {

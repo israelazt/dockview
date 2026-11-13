@@ -107,7 +107,16 @@ Dos módulos nuevos en la app, sin ventana ni ajustes, con tests (10):
 
 Comprobado con 365 tests y con la app real (50 fps recibidos y mostrados, 1,7 ms de latencia).
 
-Siguen pendientes de D-5 el replay, la grabación y el micrófono, y de D-4 las fuentes y el audio.
+### Avance de D-5 (parte 2) y D-6: `ReplayService` (2026-11-12)
+`replay_service.rs`: posee el recorder, el clip que se está guardando, los atajos globales, el micrófono con su medidor y la espera de «grabar cuando esté listo». No conoce ajustes ni ventana: recibe carpeta, segundos y dispositivo, y **devuelve `Notice`s** (clave + tipo de aviso) que `App` muestra como toasts. Es el primer uso real de la capa de eventos (D-6).
+
+Lógica de decisión que antes estaba enterrada en `App` y ahora es una función pura con tests: qué hace pulsar «grabar» en cada estado (`decide_toggle`), el mensaje de cada final de grabación (`outcome_notice`), el aviso único de poco disco (`LowDiskWarning`) y el suavizado del medidor del micrófono (`smooth_level`). 7 tests nuevos.
+
+`App` pierde 9 campos y 8 métodos; `main.rs` baja de 2020 a 1724 líneas. Comprobado con 372 tests y con la app real (capturadora + micrófono + grabación: MP4 de 7,3 s con vídeo y tres pistas de audio, cierre en 335 ms).
+
+Regla del autor (2026-11-12): **`main.rs` solo orquesta; no debe tener lógica.** Eso fija el destino de lo que queda: `App` y sus métodos salen de `main.rs` (a `app/`), y `main.rs` se queda con la declaración de módulos y el arranque.
+
+Siguen pendientes de D-4 las fuentes y el audio.
 
 ## Lo que no conviene tocar
 - La separación en dos crates y el sentido de las dependencias.
