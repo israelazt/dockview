@@ -332,6 +332,7 @@ impl Compositor {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support::hardware_or_skip;
 
     /// A solid NV12 picture of the given luma.
     fn solid(width: u32, height: u32, luma: u8) -> Frame {
@@ -351,6 +352,9 @@ mod tests {
 
     #[test]
     fn two_layers_are_drawn_in_order_and_in_place() {
+        if !hardware_or_skip("a GPU") {
+            return;
+        }
         let Ok(mut compositor) = Compositor::new(640, 360) else {
             eprintln!("no video processor on this machine; skipping");
             return;
@@ -392,6 +396,9 @@ mod tests {
 
     #[test]
     fn a_half_transparent_layer_lets_the_one_below_show_through() {
+        if !hardware_or_skip("a GPU") {
+            return;
+        }
         let Ok(mut compositor) = Compositor::new(640, 360) else {
             eprintln!("no video processor on this machine; skipping");
             return;
@@ -411,6 +418,9 @@ mod tests {
 
     #[test]
     fn a_yuy2_source_can_be_a_layer_too() {
+        if !hardware_or_skip("a GPU") {
+            return;
+        }
         let Ok(mut compositor) = Compositor::new(640, 360) else {
             eprintln!("no video processor on this machine; skipping");
             return;

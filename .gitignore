@@ -37,3 +37,6 @@ rust/target/
 
 # Skill symlinks (real files live in .agents/skills)
 .claude/skills/
+
+# Local Claude Code permissions (each person has their own)
+.claude/settings.local.json

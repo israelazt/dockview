@@ -1,9 +1,13 @@
 use super::*;
+use crate::test_support::hardware_or_skip;
 use crate::testsrc::TestSource;
 
 /// Records a synthetic source; skips quietly on a PC without a hardware
 /// H.264 encoder, which is not a failure of the code under test.
 fn record(seconds: f64) -> Option<(ReplayRecorder, TestSource)> {
+    if !hardware_or_skip("a hardware H.264 encoder") {
+        return None;
+    }
     let slot = Arc::new(FrameSlot::new());
     let source = TestSource::start(Arc::clone(&slot), 640, 360, 30);
     let recorder = ReplayRecorder::start(
@@ -275,6 +279,9 @@ fn wait_for_recording_result(recorder: &ReplayRecorder) -> Result<SavedClip, Str
 /// A recorder fed by a test source, keeping the slot so the source can be
 /// swapped for another (to simulate a signal that drops or changes size).
 fn recorder_with_slot() -> Option<(ReplayRecorder, Arc<FrameSlot>, TestSource)> {
+    if !hardware_or_skip("a hardware H.264 encoder") {
+        return None;
+    }
     let slot = Arc::new(FrameSlot::new());
     let source = TestSource::start(Arc::clone(&slot), 640, 360, 30);
     let recorder = ReplayRecorder::start(

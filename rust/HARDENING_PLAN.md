@@ -117,12 +117,18 @@ Pruebas manuales pendientes de 2-9 (anotar el resultado en `CAPTURE_PLAN.md`):
 
 | Tarea | Qué | Listo cuando |
 |---|---|---|
-| 4-1 | Los tests que necesitan GPU o codificador por hardware se saltan con un mensaje claro cuando no los hay (una función común `hardware_or_skip()` en `platform`) | `cargo test` pasa con la variable `DOCKVIEW_NO_HARDWARE=1` |
-| 4-2 | `.github/workflows/rust.yml` en `windows-latest`: `fmt --check`, `clippy -D warnings`, `test --workspace`, con caché de cargo | El flujo pasa en GitHub en un push |
-| 4-3 | Sacar `.claude/settings.local.json` de git y añadirlo a `.gitignore` | `git ls-files` ya no lo lista |
-| 4-4 | Apuntar `origin` a `israelazt/dockview` | `git remote -v` muestra la URL nueva y el push funciona |
-| 4-5 | `rust/README.md`: los cinco crates reales, cómo compilar, probar y lanzar | Coincide con `ARCHITECTURE.md` |
-| 4-6 | `README.md` raíz: aviso de que el desarrollo vive en `rust/` y quitar `your-username`; `PLAN.md`: cabecera «histórico» con enlace a los planes vigentes | Sin instrucciones falsas. La reescritura completa espera al cambio de nombre a Luminifex |
+| 4-1 ✅ | Los tests que necesitan GPU o codificador por hardware se saltan con un mensaje claro cuando no los hay (una función común `hardware_or_skip()` en `platform`) | `cargo test` pasa con la variable `DOCKVIEW_NO_HARDWARE=1` |
+| 4-2 ✅ | `.github/workflows/rust.yml` en `windows-latest`: `fmt --check`, `clippy -D warnings`, `test --workspace`, con caché de cargo | El flujo pasa en GitHub en un push |
+| 4-3 ✅ | Sacar `.claude/settings.local.json` de git y añadirlo a `.gitignore` | `git ls-files` ya no lo lista |
+| 4-4 ✅ | Apuntar `origin` a `israelazt/dockview` | `git remote -v` muestra la URL nueva y el push funciona |
+| 4-5 ✅ | `rust/README.md`: los cinco crates reales, cómo compilar, probar y lanzar | Coincide con `ARCHITECTURE.md` |
+| 4-6 ✅ | `README.md` raíz: aviso de que el desarrollo vive en `rust/` y quitar `your-username`; `PLAN.md`: cabecera «histórico» con enlace a los planes vigentes | Sin instrucciones falsas. La reescritura completa espera al cambio de nombre a Luminifex |
+
+**Hecho (2026-11-13), pendiente de ver el primer resultado de la CI en GitHub.** Diferencias con lo previsto:
+- 4-1: la variable es `DOCKVIEW_NO_HARDWARE=1`; además de la GPU y el codificador cubre pantalla, pantalla del escritorio y la codificación de Media Foundation. Con ella `platform` pasa en 0,13 s.
+- 4-2: el flujo está en `.github/workflows/rust.yml` (raíz del repositorio) y corre en `windows-latest` con `fmt --check`, `clippy -D warnings` y `test --workspace`.
+- 4-3: el archivo sigue en tu disco; solo dejó de estar en git.
+- 4-4: `origin` ya apunta a `israelazt/dockview`.
 
 **Pausa 4:** con CI en verde es buen momento para retomar el bloque B de Estudio.
 

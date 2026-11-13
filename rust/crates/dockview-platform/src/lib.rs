@@ -40,6 +40,8 @@ pub mod system_lang;
 pub mod tap_capture;
 #[cfg(windows)]
 pub mod targets;
+#[cfg(test)]
+mod test_support;
 pub mod testsrc;
 #[cfg(windows)]
 pub mod ui_gpu;

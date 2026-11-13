@@ -192,6 +192,7 @@ pub(super) fn stretched_duration(duration: i64, gap_to_next: i64) -> i64 {
 
 #[cfg(test)]
 mod tests {
+    use crate::test_support::hardware_or_skip;
     #[test]
     fn a_frame_before_a_long_gap_is_stretched_over_it() {
         use super::stretched_duration;
@@ -230,6 +231,9 @@ mod tests {
 
     #[test]
     fn a_short_clip_encodes_to_a_playable_file() {
+        if !hardware_or_skip("Media Foundation encoding") {
+            return;
+        }
         // Uses whatever encoder this machine has (hardware or software).
         let session = MfSession::start().expect("media foundation");
         let path = std::env::temp_dir().join(format!("dockview-enc-{}.mp4", std::process::id()));
@@ -254,6 +258,9 @@ mod tests {
 
     #[test]
     fn a_frame_that_is_too_small_is_rejected() {
+        if !hardware_or_skip("Media Foundation encoding") {
+            return;
+        }
         let session = MfSession::start().expect("media foundation");
         let path =
             std::env::temp_dir().join(format!("dockview-enc-small-{}.mp4", std::process::id()));

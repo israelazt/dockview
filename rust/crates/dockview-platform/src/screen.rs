@@ -383,6 +383,7 @@ fn run(
 
 #[cfg(test)]
 mod tests {
+    use crate::test_support::hardware_or_skip;
     use std::time::Instant;
 
     use dockview_domain::frame::PixelFormat;
@@ -391,6 +392,9 @@ mod tests {
 
     #[test]
     fn capturing_the_primary_monitor_delivers_even_sized_nv12_frames() {
+        if !hardware_or_skip("a screen") {
+            return;
+        }
         let Some(monitor) = list_monitors().into_iter().next() else {
             return;
         };

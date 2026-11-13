@@ -1,5 +1,7 @@
 # Plan de migración Dockview → Rust
 
+> **Documento histórico.** Es el plan de la migración a Rust, escrito el 2026-11-11, y no se mantiene. El estado actual está en `ARCHITECTURE.md`; el trabajo en curso, en `HARDENING_PLAN.md` y `STUDIO_PLAN.md`.
+
 ## Primary goal
 
 Abrir un único `Dockview.exe` (sin instalador, sin registro, sin cuenta) que muestre el video de una capturadora UVC económica a **1080p** con el audio sincronizado y **sin retraso perceptible**.

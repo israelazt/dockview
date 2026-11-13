@@ -1,5 +1,9 @@
 # Dockview
 
+> **The code in this repository is moving to Rust.** The active development is in
+> [`rust/`](rust/README.md) (branch `migration/rust`); the C#/WPF version
+> described below is kept only as a reference and no longer receives changes.
+
 > A minimalist Windows capture card viewer built for the Nintendo Switch — because playing on your PC monitor shouldn't require a streaming setup.
 
 ![Dockview screenshot](Assets/screenshot.png)
@@ -40,7 +44,7 @@ Grab the latest `Dockview.exe` from the [Releases](../../releases) page. No inst
 **Prerequisites:** .NET 8 SDK, Visual Studio 2022 or VS Code with C# Dev Kit.
 
 ```bash
-git clone https://github.com/your-username/dockview.git
+git clone https://github.com/israelazt/dockview.git
 cd dockview
 dotnet run
 ```

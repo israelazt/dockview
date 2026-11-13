@@ -134,9 +134,13 @@ pub fn window_exists(handle: isize) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support::hardware_or_skip;
 
     #[test]
     fn monitors_are_listed_with_the_primary_first() {
+        if !hardware_or_skip("a display") {
+            return;
+        }
         let monitors = list_monitors();
         assert!(!monitors.is_empty(), "this PC has at least one monitor");
         assert!(monitors[0].primary);

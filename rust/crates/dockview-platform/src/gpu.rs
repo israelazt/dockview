@@ -231,6 +231,7 @@ impl Nv12Target {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support::hardware_or_skip;
 
     #[test]
     fn a_rectangle_is_an_origin_and_a_size() {
@@ -240,6 +241,9 @@ mod tests {
 
     #[test]
     fn a_target_publishes_a_picture_of_its_size() {
+        if !hardware_or_skip("a GPU") {
+            return;
+        }
         let Ok((device, context)) = create_device() else {
             eprintln!("no video-capable GPU; skipping");
             return;
