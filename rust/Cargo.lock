@@ -338,10 +338,19 @@ dependencies = [
 name = "dockview-core"
 version = "0.1.0"
 dependencies = [
+ "dockview-domain",
  "serde",
  "serde_json",
  "wasapi",
  "windows",
+]
+
+[[package]]
+name = "dockview-domain"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

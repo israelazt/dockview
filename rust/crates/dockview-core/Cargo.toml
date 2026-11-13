@@ -5,6 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+dockview-domain = { path = "../dockview-domain" }
 serde.workspace = true
 serde_json.workspace = true
 
