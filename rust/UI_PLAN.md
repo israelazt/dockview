@@ -1,5 +1,7 @@
 # Dockview UI — diseño y plan
 
+> Reorganización con panel lateral: ver `STUDIO_PLAN.md`.
+
 ## Objetivo
 
 Una interfaz elegante y mínima que casi no se ve: el video ocupa toda la ventana y los controles aparecen solo cuando hacen falta. Oscuro y claro, inglés (EE. UU.) y español (Latinoamérica).
