@@ -26,8 +26,10 @@ use dockview_domain::audio_status::AudioStatus;
 use dockview_domain::device::{match_audio_to_video, pick_microphone, AudioDevice, VideoDevice};
 use dockview_domain::device_names;
 use dockview_domain::diagnostics::{diagnose, Finding, Snapshot, VideoState};
+use dockview_domain::events::AppEvent;
 use dockview_domain::frame::FrameSlot;
-use dockview_domain::recording::ReplaySettings;
+use dockview_domain::ports::ReplayMachine;
+use dockview_domain::recording::{RecorderStatus, RecordingInfo, RecordingState, ReplaySettings};
 use dockview_domain::scene::SceneLayer;
 use dockview_domain::settings::{
     self, AppSettings, LangMode, RenderPreset, SettingsStore, ThemeMode, VideoModePref,
@@ -37,6 +39,7 @@ use dockview_platform::audio::{default_capture_device, enumerate_audio_devices, 
 use dockview_platform::capture::{CaptureOptions, CaptureStatus, VideoCapture};
 use dockview_platform::compose::SceneCompositor;
 use dockview_platform::mf::{enumerate_video_devices, MfSession};
+use dockview_platform::replay_machine::PlatformReplay;
 use dockview_platform::screen::{
     list_monitors, list_windows, CaptureTarget, MonitorInfo, ScreenCapture, ScreenOptions,
     ScreenStatus, WindowInfo,
@@ -69,7 +72,9 @@ use crate::sources::{
 use crate::stats_log;
 use crate::telemetry::{Rates, Stats, Telemetry};
 use crate::theme::{Appearance, Theme, ThemeModeExt};
-use crate::ui::controls::{Action, Controls, Model, RecState, SourcesView};
+use crate::ui::controls::{
+    Action, Controls, MicState, MicView, Model, RecState, RecView, ReplayState, SourcesView,
+};
 use crate::ui::gpu::UiGpu;
 use crate::ui::input::Pointer;
 use crate::ui::stats::StatsPanel;

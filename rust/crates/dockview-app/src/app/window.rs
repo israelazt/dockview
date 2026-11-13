@@ -34,7 +34,7 @@ impl App {
 
     pub(super) fn render(&mut self) {
         let model = self.model();
-        let rec = self.replay.rec_view();
+        let rec = self.rec_view();
         let now = Instant::now();
         let dt = now.duration_since(self.last_frame).as_secs_f32().min(0.1);
         self.last_frame = now;

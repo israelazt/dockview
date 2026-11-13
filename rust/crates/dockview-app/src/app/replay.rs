@@ -170,8 +170,26 @@ impl App {
         );
         view.at_limit = self.settings.replay_seconds >= self.replay_limit();
         view.folder = self.clips_folder().display().to_string();
-        self.replay.fill_view(&mut view);
+        view.saving = self.replay.saving();
+        if let Some(buffer) = self.replay.buffer_info() {
+            view.state = replay_state_of(&buffer.status);
+            view.buffered_seconds = buffer.buffered_seconds as f32;
+            view.buffered_mb = buffer.buffered_bytes as f32 / 1e6;
+        }
         view
+    }
+
+    /// What the record button shows.
+    pub(super) fn rec_view(&self) -> RecView {
+        rec_view_of(
+            self.replay.waiting_to_record(),
+            self.replay.recording_info(),
+        )
+    }
+
+    /// What the microphone controls show.
+    pub(super) fn mic_view(&self) -> MicView {
+        mic_view_of(self.replay.mic_status(), self.replay.mic_level())
     }
 
     pub(super) fn save_replay(&mut self) {
@@ -191,8 +209,153 @@ impl App {
         }
         let folder = self.clips_folder();
         self.replay.poll(&folder);
-        for notice in self.replay.take_notices() {
-            self.toast(notice.key, notice.kind);
+        for event in self.replay.take_events() {
+            let (key, kind) = toast_for(event);
+            self.toast(key, kind);
         }
+    }
+}
+
+/// What the record button shows: "starting" while it waits for the buffer.
+fn rec_view_of(waiting: bool, info: Option<RecordingInfo>) -> RecView {
+    if waiting {
+        return RecView {
+            state: RecState::Starting,
+            seconds: 0.0,
+        };
+    }
+    let Some(info) = info else {
+        return RecView::idle();
+    };
+    RecView {
+        state: match info.state {
+            RecordingState::Idle => RecState::Idle,
+            RecordingState::Starting => RecState::Starting,
+            RecordingState::Recording => RecState::Recording,
+        },
+        seconds: info.seconds as f32,
+    }
+}
+
+/// What the microphone controls show for the microphone's state (`None` is off).
+fn mic_view_of(status: Option<AudioStatus>, level: f32) -> MicView {
+    let state = match status {
+        None | Some(AudioStatus::Stopped) => MicState::Off,
+        Some(AudioStatus::Starting) => MicState::Starting,
+        Some(AudioStatus::Running) => MicState::Live,
+        Some(AudioStatus::Disconnected(_) | AudioStatus::Failed(_)) => MicState::Unavailable,
+    };
+    MicView { state, level }
+}
+
+/// How the replay popover shows the state of the buffer.
+fn replay_state_of(status: &RecorderStatus) -> ReplayState {
+    match status {
+        RecorderStatus::Starting => ReplayState::Starting,
+        RecorderStatus::Recording => ReplayState::Recording,
+        RecorderStatus::Unsupported(_) | RecorderStatus::Failed(_) => ReplayState::Unavailable,
+    }
+}
+
+/// How an event is shown: the words and the kind of toast.
+fn toast_for(event: AppEvent) -> (i18n::Key, ToastKind) {
+    use i18n::Key;
+    match event {
+        AppEvent::ReplayIsOff => (Key::ToastTurnOnFirst, ToastKind::Info),
+        AppEvent::ClipSaving => (Key::ToastSaving, ToastKind::Info),
+        AppEvent::ClipSaved => (Key::ToastClipSaved, ToastKind::Success),
+        AppEvent::ClipFailed => (Key::ToastClipFailed, ToastKind::Error),
+        AppEvent::RecordingStarted => (Key::ToastRecStarted, ToastKind::Info),
+        AppEvent::RecordingFailed => (Key::ToastRecFailed, ToastKind::Error),
+        AppEvent::RecordingNoSpace => (Key::ToastRecNoSpace, ToastKind::Error),
+        AppEvent::RecordingSaved => (Key::ToastRecSaved, ToastKind::Success),
+        AppEvent::RecordingNewPart => (Key::ToastRecNewPart, ToastKind::Info),
+        AppEvent::RecordingDiskFull => (Key::ToastRecDiskFull, ToastKind::Error),
+        AppEvent::RecordingNoSignal => (Key::ToastRecNoSignal, ToastKind::Error),
+        AppEvent::LowDisk => (Key::ToastLowDisk, ToastKind::Error),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn info(state: RecordingState, seconds: f64) -> RecordingInfo {
+        RecordingInfo {
+            state,
+            seconds,
+            bytes: 0,
+            low_disk: false,
+        }
+    }
+
+    #[test]
+    fn the_record_button_follows_the_wait_then_the_recording() {
+        assert_eq!(rec_view_of(false, None), RecView::idle());
+        // Waiting for the buffer wins over whatever the recorder says.
+        let waiting = rec_view_of(true, Some(info(RecordingState::Idle, 0.0)));
+        assert_eq!((waiting.state, waiting.seconds), (RecState::Starting, 0.0));
+        let live = rec_view_of(false, Some(info(RecordingState::Recording, 12.5)));
+        assert_eq!((live.state, live.seconds), (RecState::Recording, 12.5));
+        assert!(rec_view_of(false, Some(info(RecordingState::Starting, 0.0))).is_on());
+    }
+
+    #[test]
+    fn the_microphone_light_follows_its_state() {
+        assert_eq!(mic_view_of(None, 0.0).state, MicState::Off);
+        assert_eq!(
+            mic_view_of(Some(AudioStatus::Starting), 0.0).state,
+            MicState::Starting
+        );
+        assert_eq!(
+            mic_view_of(Some(AudioStatus::Running), 0.4).state,
+            MicState::Live
+        );
+        assert_eq!(mic_view_of(Some(AudioStatus::Running), 0.4).level, 0.4);
+        assert_eq!(
+            mic_view_of(Some(AudioStatus::Failed("x".into())), 0.0).state,
+            MicState::Unavailable
+        );
+    }
+
+    #[test]
+    fn the_buffer_state_maps_to_the_popover_state() {
+        assert_eq!(
+            replay_state_of(&RecorderStatus::Starting),
+            ReplayState::Starting
+        );
+        assert_eq!(
+            replay_state_of(&RecorderStatus::Recording),
+            ReplayState::Recording
+        );
+        assert_eq!(
+            replay_state_of(&RecorderStatus::Unsupported("no encoder".into())),
+            ReplayState::Unavailable
+        );
+    }
+
+    #[test]
+    fn every_event_has_a_message_and_failures_are_errors() {
+        use AppEvent::*;
+        for event in [
+            ReplayIsOff,
+            ClipSaving,
+            ClipSaved,
+            ClipFailed,
+            RecordingStarted,
+            RecordingFailed,
+            RecordingNoSpace,
+            RecordingSaved,
+            RecordingNewPart,
+            RecordingDiskFull,
+            RecordingNoSignal,
+            LowDisk,
+        ] {
+            let (key, _) = toast_for(event);
+            assert!(!i18n::tr(i18n::Lang::En, key).is_empty(), "{event:?}");
+        }
+        assert_eq!(toast_for(ClipSaved).1, ToastKind::Success);
+        assert_eq!(toast_for(ClipFailed).1, ToastKind::Error);
+        assert_eq!(toast_for(LowDisk).1, ToastKind::Error);
     }
 }

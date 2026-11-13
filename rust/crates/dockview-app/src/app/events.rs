@@ -134,9 +134,8 @@ impl ApplicationHandler for App {
         // Redraw for new video, for input, and while the controls are on
         // screen (hover, drag and fade animations need steady frames).
         let new_frame = self.slot.wait_for_frame(FRAME_WAIT);
-        let animating = self.controls.is_visible()
-            || self.toasts.is_visible()
-            || self.replay.rec_view().is_on();
+        let animating =
+            self.controls.is_visible() || self.toasts.is_visible() || self.rec_view().is_on();
         if new_frame || animating || std::mem::take(&mut self.needs_redraw) {
             if let Some(window) = &self.window {
                 window.request_redraw();

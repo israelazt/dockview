@@ -95,8 +95,8 @@ impl App {
             replay: self.replay_view(),
             mic_devices: self.mic_device_names(self.lang_mode().resolve(self.system_lang)),
             mic_selected: Some(self.mic_selected()),
-            mic: self.replay.mic_view(),
-            rec: self.replay.rec_view(),
+            mic: self.mic_view(),
+            rec: self.rec_view(),
             sources: self.sources_view(self.lang_mode().resolve(self.system_lang)),
             scenes: self.scenes_view(self.lang_mode().resolve(self.system_lang)),
         }
