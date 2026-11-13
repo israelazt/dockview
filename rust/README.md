@@ -70,5 +70,10 @@ fail if a text or an icon is missing from the cut fonts.
 
 ## Checking the interface
 
+`tools\measure.ps1` takes the performance baseline (it opens the program with the
+capture card for about 16 minutes; do not run it while playing) and
+`tools\stats_summary.py` summarises a `--log-stats` file or the start-up times in
+the log.
+
 `tools\ui_shots.ps1` takes the same screenshots every time and `tools\ui_compare.py`
 compares two sets pixel by pixel (it needs Python with Pillow and numpy).

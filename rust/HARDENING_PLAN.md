@@ -207,12 +207,19 @@ Primero medir. Lo que no mejore las cifras no se fusiona.
 
 | Tarea | Qué | Listo cuando |
 |---|---|---|
-| 7-1 | Línea base con `--log-stats`, 5 min cada una: solo ver, grabando, escena con esquina, y arranque en frío. Cifras al final de este documento | Tabla escrita |
-| 7-2 | `platform/audio.rs`: los hilos de audio piden prioridad «Pro Audio» a Windows (MMCSS); comprobar la firma en la documentación de `windows` antes de usarla | Prueba real con la CPU cargada: sin chasquidos; cifras de 7-1 sin empeorar |
-| 7-3 | `app`: `Core::model()` sin trabajo repetido: nombres de dispositivo en caché (se recalculan al cambiar las listas o los alias) e idioma resuelto una vez | Tests de `model` iguales; menos reservas por fotograma |
-| 7-4 | `platform`: compilar los sombreadores en `build.rs` e incrustar el resultado | Arranque en frío más corto que en 7-1; capturas idénticas |
-| 7-5 | **Exploración:** decodificar MJPEG por hardware (`MF_SOURCE_READER_D3D_MANAGER`) en un ejemplo `mjpeg_probe`; medir CPU y latencia contra hoy | Cifras y decisión escritas: seguir o descartar |
-| 7-6 | **Exploración:** mantener pantallas y escenas en la GPU (textura compartida entre compositor y renderer, sin `Nv12Target::publish` hacia la CPU) en un ejemplo; medir latencia | Cifras y decisión; si compensa, plan propio |
+| 7-1 ⏳ | Línea base con `--log-stats`, 5 min cada una: solo ver, grabando, escena con esquina, y arranque en frío. Cifras al final de este documento | Tabla escrita |
+| 7-2 ✅ | `platform/audio.rs`: los hilos de audio piden prioridad «Pro Audio» a Windows (MMCSS); comprobar la firma en la documentación de `windows` antes de usarla | Prueba real con la CPU cargada: sin chasquidos; cifras de 7-1 sin empeorar |
+| 7-3 ✖ | `app`: `Core::model()` sin trabajo repetido: nombres de dispositivo en caché (se recalculan al cambiar las listas o los alias) e idioma resuelto una vez | Tests de `model` iguales; menos reservas por fotograma |
+| 7-4 ✖ | `platform`: compilar los sombreadores en `build.rs` e incrustar el resultado | Arranque en frío más corto que en 7-1; capturas idénticas |
+| 7-5 ⏳ | **Exploración:** decodificar MJPEG por hardware (`MF_SOURCE_READER_D3D_MANAGER`) en un ejemplo `mjpeg_probe`; medir CPU y latencia contra hoy | Cifras y decisión escritas: seguir o descartar |
+| 7-6 ⏳ | **Exploración:** mantener pantallas y escenas en la GPU (textura compartida entre compositor y renderer, sin `Nv12Target::publish` hacia la CPU) en un ejemplo; medir latencia | Cifras y decisión; si compensa, plan propio |
+
+**Estado (2026-11-13), sin abrir la app** (el autor estaba jugando; las tareas que necesitan la capturadora quedan pendientes):
+- **7-1 ⏳ herramientas listas, falta tomar las cifras.** `tools/measure.ps1` corre los cuatro escenarios (solo ver, grabando, escena con esquina, arranque en frío) con `--log-stats` y resume cada uno con `tools/stats_summary.py` (mediana y p95 de fps, latencia, CPU, GPU, memoria y búfer de audio, sin los 3 primeros segundos). El arranque en frío sale de nuevas marcas en el registro (`devices listed`, `application ready`, `window created`, `renderer ready`, `first picture shown`). **Abre la app con la capturadora durante ~16 minutos: ejecutarlo fuera de una partida** (`cargo build --release -p dockview` y luego `.\tools\measure.ps1`). Verificado con datos sintéticos.
+- **7-2 ✅ hecho, falta la prueba con carga.** `platform/src/mmcss.rs` (`MmcssGuard`, clase «Pro Audio») en los hilos de captura y de salida de audio; si Windows no la concede, lo dice el registro y el hilo sigue como antes. Windows la concede en esta máquina. Pendiente: con la CPU cargada (juego más grabación) comprobar que no hay chasquidos y que las cifras de 7-1 no empeoran.
+- **7-3 ✖ descartada con cifras.** `Core::model()` cuesta **4,7 µs en un build de debug** (en release, bastante menos): a 60 fps son unas décimas de milisegundo por segundo (≈0,03 % de un núcleo). No hay nada que ganar con una caché.
+- **7-4 ✖ descartada por ahora con cifras.** Compilar los 4 sombreadores del vídeo cuesta **39 ms**, una vez al arrancar. Trasladarlo a `build.rs` (con `fxc` o `D3DCompile` en la compilación) añade complejidad por ≤ 60 ms. Se reabre solo si el arranque en frío medido en 7-1 muestra que pesan más del 5 %.
+- **7-5 ⏳ y 7-6 ⏳ exploraciones:** necesitan la capturadora y la GPU funcionando y medir CPU y latencia; se hacen cuando se pueda usar la máquina.
 
 **Pausa 7:** decidir con las cifras qué exploraciones se convierten en trabajo real.
 

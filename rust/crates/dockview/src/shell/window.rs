@@ -95,6 +95,9 @@ impl Shell {
                 graphics_lost |= is_device_lost(&e);
             }
             self.core.frame_uploaded((frame.width, frame.height));
+            if self.core.rendered_frames() == 1 {
+                dockview_domain::log_info!("first picture shown");
+            }
             slot.recycle(frame);
             self.last_video_shown = now;
         }

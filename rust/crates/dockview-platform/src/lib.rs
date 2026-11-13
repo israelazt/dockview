@@ -23,6 +23,8 @@ pub mod log_file;
 #[cfg(windows)]
 pub mod mf;
 #[cfg(windows)]
+pub mod mmcss;
+#[cfg(windows)]
 pub mod perf;
 #[cfg(windows)]
 pub mod recorder;

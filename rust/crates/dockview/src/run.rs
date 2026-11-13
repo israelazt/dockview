@@ -22,6 +22,13 @@ use crate::shell::host::{HostShared, ShellHost};
 use crate::shell::present::{report_startup_failure, StartupFailure};
 use crate::shell::Shell;
 
+/// The real machine, once it has listed the devices (which can take a moment).
+fn devices_listed() -> PlatformSources {
+    let sources = PlatformSources::new();
+    dockview_domain::log_info!("devices listed");
+    sources
+}
+
 /// Reads the command line, finds the devices and runs the event loop.
 pub fn run() {
     // A window program has no console; from a terminal, use that terminal's.
@@ -64,7 +71,7 @@ pub fn run() {
     let ports = Ports {
         settings: Box::new(store),
         replay: Box::new(PlatformReplay),
-        sources: Box::new(PlatformSources::new()),
+        sources: Box::new(devices_listed()),
         system: Arc::new(PlatformSystem::new()),
         stats_sink: cli
             .log_stats
@@ -74,6 +81,7 @@ pub fn run() {
         host: Box::new(ShellHost::new(Rc::clone(&host))),
     };
     let core = Core::new(slot, saved, ports, cli, detect_system_lang());
+    dockview_domain::log_info!("application ready");
     let mut shell = Shell::new(core, host);
     if let Err(e) = event_loop.run_app(&mut shell) {
         dockview_domain::log_error!("event loop error: {e}");

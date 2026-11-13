@@ -14,6 +14,7 @@ use wasapi::{
     WaveFormat,
 };
 
+use crate::mmcss::MmcssGuard;
 use crate::worker::Worker;
 use dockview_domain::audio_status::AudioStatus;
 use dockview_domain::audio_sync::{
@@ -193,6 +194,7 @@ fn capture_thread(shared: &Shared, stop: &AtomicBool, device_id: &str) {
 
 fn capture_loop(shared: &Shared, stop: &AtomicBool, device_id: &str) -> Result<(), WasapiError> {
     let _ = initialize_mta();
+    let _priority = raise_priority("capture");
     let enumerator = DeviceEnumerator::new()?;
     let device = enumerator.get_device(device_id)?;
     let mut client = device.get_iaudioclient()?;
@@ -242,6 +244,7 @@ fn render_thread(shared: &Shared, stop: &AtomicBool, _unused: &str) {
 
 fn render_loop(shared: &Shared, stop: &AtomicBool) -> Result<(), WasapiError> {
     let _ = initialize_mta();
+    let _priority = raise_priority("render");
     let enumerator = DeviceEnumerator::new()?;
     let device = enumerator.get_default_device(Direction::Render)?;
     let output_id = device.get_id()?;
@@ -316,4 +319,16 @@ fn default_output_changed(enumerator: &DeviceEnumerator, current_id: &str) -> bo
         .get_default_device(Direction::Render)
         .and_then(|device| device.get_id())
         .is_ok_and(|id| id != current_id)
+}
+
+/// Puts the calling audio thread in the "Pro Audio" scheduling class, and says
+/// in the log when that was not possible.
+fn raise_priority(thread: &str) -> Option<MmcssGuard> {
+    let guard = MmcssGuard::pro_audio();
+    if guard.is_none() {
+        dockview_domain::log_warn!(
+            "the audio {thread} thread could not get the Pro Audio priority"
+        );
+    }
+    guard
 }

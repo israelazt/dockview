@@ -45,6 +45,7 @@ impl ApplicationHandler for Shell {
             }
         };
 
+        dockview_domain::log_info!("window created");
         let hwnd = match window.window_handle().map(|h| h.as_raw()) {
             Ok(RawWindowHandle::Win32(h)) => HWND(h.hwnd.get() as *mut c_void),
             _ => {
@@ -73,6 +74,7 @@ impl ApplicationHandler for Shell {
                 return;
             }
         }
+        dockview_domain::log_info!("renderer ready");
         self.ui_scale = self
             .core
             .cli()
