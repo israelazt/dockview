@@ -23,7 +23,7 @@ Objetivo: que Dockview sea la herramienta única para grabar y transmitir (LoL y
 
 ## Spike 2: qué mide y cuándo falla
 
-Herramienta: `cargo run --release -p dockview-core --example screen_probe -- [opciones]`.
+Herramienta: `cargo run --release -p dockview-platform --example screen_probe -- [opciones]`.
 
 Mide, durante N segundos:
 1. **Captura** (Windows Graphics Capture) de un monitor o de una ventana por título: FPS entregados, intervalo entre frames (media, p99, máximo) y CPU del proceso.
@@ -189,7 +189,7 @@ Lo que se quiere: componer **varias fuentes a la vez** (por ejemplo el juego a p
 
 ### Decisiones de diseño
 1. **Varias fuentes vivas**, cada una con su propio `FrameSlot`. Hoy `Source` (en `main.rs`) es una sola; pasa a ser una lista de fuentes con identificador.
-2. **Compositor en la GPU** (`dockview-core`): sube el frame NV12 de cada fuente como textura, dibuja las capas en una textura BGRA, la convierte a NV12 con el procesador de video de D3D11 (el mismo camino de S-1) y la publica en un **slot de salida**. El visor, el replay y la grabación leen ese slot: G-1..G-4 y S-1..S-3 no se tocan.
+2. **Compositor en la GPU** (`dockview-platform`): sube el frame NV12 de cada fuente como textura, dibuja las capas en una textura BGRA, la convierte a NV12 con el procesador de video de D3D11 (el mismo camino de S-1) y la publica en un **slot de salida**. El visor, el replay y la grabación leen ese slot: G-1..G-4 y S-1..S-3 no se tocan.
 3. **Atajo sin coste**: una escena de una sola capa a pantalla completa no pasa por el compositor; el frame se reenvía tal cual (igual que hoy).
 4. **Modelo**: una escena es una lista ordenada de capas; cada capa tiene fuente, rectángulo **libre y normalizado** (x, y, ancho, alto de 0 a 1), ajuste (llenar, encajar, recortar) y visible/oculta. Se guarda en `settings.json`. El tamaño de salida es fijo (1080p), así no se parte la grabación al cambiar de escena.
 5. **Audio**: igual que ahora (pista del juego, micrófono y mezcla). Cada escena indica de qué fuente viene el sonido principal.
@@ -213,7 +213,7 @@ Lo que se quiere: componer **varias fuentes a la vez** (por ejemplo el juego a p
 
 ### Resultados de E-1 (GTX 1660 Ti, dos monitores 1080p)
 
-`crates/dockview-core/src/compose.rs`: `Compositor` (dibuja capas en una textura NV12 con el procesador de video de D3D11, sin shaders), `SceneCompositor` (lo ejecuta en un hilo y publica en un `FrameSlot` de salida), `Layer`, `NormRect` y `Fit` (llenar/encajar/recortar). Herramienta de medición: `cargo run --release -p dockview-core --example compose_probe -- --main monitor:1 --pip monitor:0 --seconds 15`.
+`crates/dockview-platform/src/compose.rs`: `Compositor` (dibuja capas en una textura NV12 con el procesador de video de D3D11, sin shaders), `SceneCompositor` (lo ejecuta en un hilo y publica en un `FrameSlot` de salida), `Layer`, `NormRect` y `Fit` (llenar/encajar/recortar). Herramienta de medición: `cargo run --release -p dockview-platform --example compose_probe -- --main monitor:1 --pip monitor:0 --seconds 15`.
 
 | Prueba | Resultado |
 |---|---|
@@ -230,7 +230,7 @@ Lo que se quiere: componer **varias fuentes a la vez** (por ejemplo el juego a p
 
 ### Resultados de E-3a
 
-Regla del autor: **módulos pequeños**. Por eso el modelo vive en `dockview-core/src/scene.rs` (datos puros, sin Windows), la lógica en tiempo de ejecución en `dockview-app/src/scene_runtime.rs`, y la interfaz irá en módulos propios, sin crecer `main.rs` ni `controls.rs`.
+Regla del autor: **módulos pequeños**. Por eso el modelo vive en `dockview-domain/src/scene.rs` (datos puros, sin Windows), la lógica en tiempo de ejecución en `dockview-app/src/scene_runtime.rs`, y la interfaz irá en módulos propios, sin crecer `main.rs` ni `controls.rs`.
 
 - **Modelo** (`scene.rs`): una escena es una lista de capas, de abajo arriba. La primera es la **base** (la fuente principal, cuyo sonido se graba); las demás van encima. Cada capa tiene fuente, rectángulo libre normalizado, ajuste (encajar, recortar, estirar) y visible. La fuente se guarda como capturadora (enlace del dispositivo), monitor (nombre del dispositivo) o ventana (título). Máximo 8 capas; una capa nueva ocupa la primera esquina libre; un archivo dañado se repara al cargar.
 - **Guardado:** `scenes` y `activeScene` en `settings.json`. Un archivo antiguo sin ellos carga igual, y quien nunca crea una escena no ve cambios en el archivo.
@@ -251,7 +251,7 @@ Regla del autor: **módulos pequeños**. Por eso el modelo vive en `dockview-cor
 
 Al cambiar de escena, las capas que ambas tienen **viajan** de su rectángulo al nuevo (400 ms, curva ease in-out) y las que solo tiene una **se funden**. Los fuentes compartidos no se reabren.
 
-- **Núcleo** (`dockview-core/src/transition.rs`, datos puros): empareja capas por fuente, interpola el rectángulo y la opacidad, tres curvas (lineal, ease in-out, rebote). 10 tests.
+- **Núcleo** (`dockview-domain/src/transition.rs`, datos puros): empareja capas por fuente, interpola el rectángulo y la opacidad, tres curvas (lineal, ease in-out, rebote). 10 tests.
 - **Compositor**: `Layer` gana `opacity`, aplicada con `VideoProcessorSetStreamAlpha`. Test en la GPU real: una capa al 50 % se mezcla con la de abajo.
 - **App** (`scene_transition.rs`): conserva los overlays compartidos, mantiene vivos los que salen hasta acabar y, en cada vuelta del bucle, pasa las capas al compositor. Cualquier edición o cambio de escena termina antes la transición en curso. `--show-stats` imprime cuántas imágenes se pidieron.
 - **Límite:** solo hay una fuente principal, así que si las bases de las dos escenas difieren, la base nueva aparece de golpe (las demás capas sí se animan). Con `Fuente simple` → escena (o al revés) hoy no hay morph al quitar la escena.
@@ -296,7 +296,7 @@ Pensada también como entrada de la **Canon M50 Mark II por HDMI limpio** (una c
 El nombre que Windows muestra viene del firmware de la tarjeta («C7 USB3.0 Video») y no se puede cambiar de forma segura ni viaja con ella a otro PC. Por eso Dockview **reconoce las tarjetas por su VID/PID USB**, que es igual en cualquier ordenador y puerto, y muestra un nombre mejor. Solo cambia lo que se muestra: el dispositivo se sigue buscando por su nombre real.
 
 - **Orden de prioridad:** el alias del usuario, luego el nombre de la tabla de tarjetas conocidas, luego el de Windows.
-- **Tabla integrada** (`dockview-core/src/device_names.rs`): `345f:2131` → «Pacoxi Budget HDMI Capture (USB3)». Cualquiera puede añadir la suya.
+- **Tabla integrada** (`dockview-domain/src/device_names.rs`): `345f:2131` → «Pacoxi Budget HDMI Capture (USB3)». Cualquiera puede añadir la suya.
 - **Alias propio** en `settings.json`: `"deviceAliases": { "345f:2131": "Mi capturadora" }` (la clave es `vid:pid` en minúsculas). Aún no hay forma de editarlo desde la interfaz.
 - Verificado con la app real: la lista de fuentes muestra el nombre nuevo con la tarjeta conectada. De paso, `--open-sources`, `--open-settings` y `--open-replay` ahora funcionan también con dispositivos reales (antes solo con el patrón de prueba).
 

@@ -34,12 +34,12 @@ use windows::Win32::Graphics::Dxgi::Common::{
 };
 use windows::Win32::Media::{timeBeginPeriod, timeEndPeriod};
 
-use crate::frame::{Frame, FrameSlot, PixelFormat};
-use crate::geometry::{even, layer_geometry, PixelRect};
 use crate::gpu::{create_device, failed, Nv12Target};
 use crate::worker::{StatusCell, Worker};
+use dockview_domain::frame::{Frame, FrameSlot, PixelFormat};
+use dockview_domain::geometry::{even, layer_geometry, PixelRect};
 
-pub use crate::scene::{Fit, NormRect};
+pub use dockview_domain::scene::{Fit, NormRect};
 
 /// One layer of a scene: where a source's frames are drawn.
 #[derive(Clone)]

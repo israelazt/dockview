@@ -7,7 +7,7 @@
 
 use std::time::{Duration, Instant};
 
-use dockview_core::diagnostics::Finding;
+use dockview_domain::diagnostics::Finding;
 
 use crate::perf::{ProcessSampler, ProcessUsage};
 

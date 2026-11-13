@@ -7,7 +7,9 @@
 use std::collections::HashMap;
 use std::f32::consts::TAU;
 
-use dockview_core::settings::{recording_bytes_per_hour, RecordingQuality, MAX_AUDIO_OFFSET_MS};
+use dockview_platform::settings::{
+    recording_bytes_per_hour, RecordingQuality, MAX_AUDIO_OFFSET_MS,
+};
 
 mod consts;
 mod interaction;

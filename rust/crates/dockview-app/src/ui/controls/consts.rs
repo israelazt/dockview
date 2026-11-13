@@ -1,6 +1,6 @@
 //! Sizes, timings, icons and text styles of the controls.
 
-use dockview_core::settings::{LangMode, RenderPreset, VideoModePref};
+use dockview_platform::settings::{LangMode, RenderPreset, VideoModePref};
 
 use crate::theme::ThemeMode;
 

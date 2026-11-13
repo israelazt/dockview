@@ -5,7 +5,8 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-dockview-core = { path = "../dockview-core" }
+dockview-domain = { path = "../dockview-domain" }
+dockview-platform = { path = "../dockview-platform" }
 winit.workspace = true
 cosmic-text = "0.19"
 png = "0.18"

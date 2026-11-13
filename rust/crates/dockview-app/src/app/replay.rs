@@ -95,7 +95,7 @@ impl App {
 
     /// The microphone to use when the user has not chosen one: Windows'
     /// default, unless that is the capture card's own audio (see
-    /// [`dockview_core::device::pick_microphone`]).
+    /// [`dockview_domain::device::pick_microphone`]).
     pub(super) fn automatic_mic(&self) -> Option<String> {
         let default = on_helper_thread(|| Some(default_capture_device()));
         let game_audio = self.audio_index.and_then(|i| self.audio_devices.get(i));

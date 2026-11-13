@@ -1,0 +1,33 @@
+//! Dockview platform: the Windows side. Capture, audio, the encoder, the GPU,
+//! the recorder and what is saved to disk. It implements the ports defined in
+//! `dockview-domain`. See `rust/ARCHITECTURE.md`.
+
+#[cfg(windows)]
+pub mod audio;
+#[cfg(windows)]
+pub mod capture;
+pub mod compose;
+#[cfg(windows)]
+pub mod encode;
+pub mod gpu;
+#[cfg(windows)]
+pub mod mf;
+#[cfg(windows)]
+pub mod recorder;
+#[cfg(windows)]
+pub mod recording;
+#[cfg(windows)]
+pub mod replay;
+#[cfg(windows)]
+pub mod screen;
+pub mod settings;
+#[cfg(windows)]
+pub mod tap_capture;
+#[cfg(windows)]
+pub mod targets;
+pub mod testsrc;
+pub mod worker;
+
+pub fn version() -> &'static str {
+    env!("CARGO_PKG_VERSION")
+}

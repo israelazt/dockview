@@ -17,9 +17,9 @@ use std::time::{Duration, Instant};
 use wasapi::{initialize_mta, AudioClient, DeviceEnumerator, Direction, StreamMode, WasapiError};
 
 use crate::audio::{format, init_stream, AudioStatus};
-use crate::audio_sync::BYTES_PER_FRAME;
-use crate::pcm::AudioTap;
 use crate::worker::Worker;
+use dockview_domain::audio_sync::BYTES_PER_FRAME;
+use dockview_domain::pcm::AudioTap;
 
 const EVENT_TIMEOUT_MS: u32 = 100;
 const STOP_TIMEOUT: Duration = Duration::from_secs(2);

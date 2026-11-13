@@ -4,9 +4,9 @@
 
 use std::sync::Arc;
 
-use dockview_core::device_names;
-use dockview_core::frame::FrameSlot;
-use dockview_core::scene::{Scene, SourceRef, MAX_SCENE_LAYERS};
+use dockview_domain::device_names;
+use dockview_domain::frame::FrameSlot;
+use dockview_domain::scene::{Scene, SourceRef, MAX_SCENE_LAYERS};
 
 use crate::i18n;
 use crate::i18n::LangModeExt;

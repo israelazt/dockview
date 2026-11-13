@@ -8,14 +8,14 @@ use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use dockview_core::audio::{enumerate_audio_devices, AudioEngine};
-use dockview_core::capture::{CaptureOptions, VideoCapture};
-use dockview_core::device::match_audio_to_video;
-use dockview_core::frame::FrameSlot;
-use dockview_core::mf::{enumerate_video_devices, MfSession};
-use dockview_core::recorder::{RecorderStatus, ReplayRecorder, ReplaySettings};
-use dockview_core::recording::RecordingState;
-use dockview_core::tap_capture::{CaptureSource, TapCapture as MicCapture};
+use dockview_domain::device::match_audio_to_video;
+use dockview_domain::frame::FrameSlot;
+use dockview_platform::audio::{enumerate_audio_devices, AudioEngine};
+use dockview_platform::capture::{CaptureOptions, VideoCapture};
+use dockview_platform::mf::{enumerate_video_devices, MfSession};
+use dockview_platform::recorder::{RecorderStatus, ReplayRecorder, ReplaySettings};
+use dockview_platform::recording::RecordingState;
+use dockview_platform::tap_capture::{CaptureSource, TapCapture as MicCapture};
 
 use windows::Win32::Foundation::FILETIME;
 use windows::Win32::System::Threading::{GetCurrentProcess, GetProcessTimes};

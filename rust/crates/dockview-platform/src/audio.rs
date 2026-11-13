@@ -14,12 +14,12 @@ use wasapi::{
     WaveFormat,
 };
 
-use crate::audio_sync::{
+use crate::worker::Worker;
+use dockview_domain::audio_sync::{
     plan_correction, target_frames, AudioRing, BYTES_PER_FRAME, CHANNELS, SAMPLE_RATE,
 };
-use crate::device::AudioDevice;
-use crate::pcm::AudioTap;
-use crate::worker::Worker;
+use dockview_domain::device::AudioDevice;
+use dockview_domain::pcm::AudioTap;
 
 /// How often the render thread re-evaluates drift.
 const DRIFT_CHECK_INTERVAL: Duration = Duration::from_millis(500);

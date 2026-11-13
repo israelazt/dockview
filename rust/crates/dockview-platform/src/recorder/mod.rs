@@ -22,9 +22,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use crate::encode::{sequence_header, EncodeSettings, EncodedFrame, H264Encoder, Mp4Remuxer};
-use crate::frame::{Frame, FrameSlot, FrameTap, PixelFormat};
 use crate::mf::MfSession;
-use crate::pcm::{frames_to_ticks, AudioTap, PcmRing};
 use crate::recording::{
     audio_track_count, disk_free_bytes, disk_level, part_path, ActiveRecording, DiskLevel,
     EndReason, RecordingInfo, RecordingOutcome, RecordingState, DISK_START_MIN_BYTES,
@@ -32,6 +30,8 @@ use crate::recording::{
 };
 use crate::replay::ReplayRing;
 use crate::worker::Worker;
+use dockview_domain::frame::{Frame, FrameSlot, FrameTap, PixelFormat};
+use dockview_domain::pcm::{frames_to_ticks, AudioTap, PcmRing};
 
 /// Frames the tap may hold before it starts dropping (about 130 ms at 60 fps).
 const TAP_CAPACITY: usize = 8;

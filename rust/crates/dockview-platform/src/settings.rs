@@ -11,7 +11,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use crate::scene::Scene;
+use dockview_domain::scene::Scene;
 
 /// Maximum audio sync offset in either direction, in milliseconds.
 pub const MAX_AUDIO_OFFSET_MS: i32 = 300;
@@ -300,7 +300,7 @@ impl AppSettings {
             .map(Scene::sanitized)
             .filter(|s| !s.layers.is_empty())
             .collect();
-        self.device_aliases = crate::device_names::sanitize_aliases(self.device_aliases);
+        self.device_aliases = dockview_domain::device_names::sanitize_aliases(self.device_aliases);
         // The scene in use must exist.
         self.active_scene = self.active_scene.filter(|&i| i < self.scenes.len());
         self
@@ -351,7 +351,7 @@ pub fn save(settings: &AppSettings) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::scene::SourceRef;
+    use dockview_domain::scene::SourceRef;
 
     fn temp_file(name: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!("dockview-test-{}-{name}", std::process::id()));
@@ -613,7 +613,7 @@ mod tests {
 
     #[test]
     fn scenes_are_saved_and_an_old_file_without_them_still_loads() {
-        use crate::scene::{Scene, SourceRef};
+        use dockview_domain::scene::{Scene, SourceRef};
         let old = r#"{"volume":0.5}"#;
         let loaded: AppSettings = serde_json::from_str(old).unwrap();
         assert!(loaded.scenes.is_empty() && loaded.active_scene.is_none());
@@ -635,7 +635,7 @@ mod tests {
 
     #[test]
     fn sanitizing_drops_empty_scenes_and_a_dangling_active_one() {
-        use crate::scene::{Scene, SourceRef};
+        use dockview_domain::scene::{Scene, SourceRef};
         let mut s = AppSettings::default();
         s.scenes.push(Scene {
             name: "vacía".into(),

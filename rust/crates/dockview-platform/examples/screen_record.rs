@@ -20,13 +20,13 @@ use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use dockview_core::frame::FrameSlot;
-use dockview_core::recorder::{RecorderStatus, ReplayRecorder, ReplaySettings};
-use dockview_core::recording::RecordingState;
-use dockview_core::screen::{
+use dockview_domain::frame::FrameSlot;
+use dockview_platform::recorder::{RecorderStatus, ReplayRecorder, ReplaySettings};
+use dockview_platform::recording::RecordingState;
+use dockview_platform::screen::{
     list_monitors, list_windows, CaptureTarget, ScreenCapture, ScreenOptions, ScreenStatus,
 };
-use dockview_core::tap_capture::{CaptureSource, TapCapture};
+use dockview_platform::tap_capture::{CaptureSource, TapCapture};
 
 use windows::Win32::Foundation::FILETIME;
 use windows::Win32::System::Threading::{GetCurrentProcess, GetProcessTimes};

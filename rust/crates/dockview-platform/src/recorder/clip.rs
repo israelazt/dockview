@@ -9,7 +9,7 @@ use super::*;
 /// an editor can rebalance them. Without one, just the game.
 pub(super) fn audio_tracks(game: Option<Vec<i16>>, mic: Option<Vec<i16>>) -> Vec<Vec<i16>> {
     match (game, mic) {
-        (Some(game), Some(mic)) => vec![crate::pcm::mix_tracks(&game, &mic), game, mic],
+        (Some(game), Some(mic)) => vec![dockview_domain::pcm::mix_tracks(&game, &mic), game, mic],
         (Some(only), None) | (None, Some(only)) => vec![only],
         (None, None) => Vec::new(),
     }
@@ -39,7 +39,7 @@ pub(super) fn write_clip(
 
     // Interleave audio and video by time so the MP4 is written in order.
     const AUDIO_BLOCK_FRAMES: usize = 1024;
-    let channels = crate::audio_sync::CHANNELS;
+    let channels = dockview_domain::audio_sync::CHANNELS;
     let mut audio_at = vec![0usize; tracks.len()];
     let write_audio_until = |remux: &mut Mp4Remuxer, audio_at: &mut [usize], until: i64| {
         for (track, samples) in tracks.iter().enumerate() {

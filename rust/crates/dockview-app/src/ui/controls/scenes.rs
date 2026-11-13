@@ -459,7 +459,7 @@ mod tests {
     use super::super::tests::Rig;
     use super::super::Action;
     use super::*;
-    use dockview_core::scene::MAX_SCENE_LAYERS;
+    use dockview_domain::scene::MAX_SCENE_LAYERS;
 
     fn view(active: Option<usize>) -> ScenesView {
         ScenesView {

@@ -15,11 +15,11 @@ use std::path::{Path, PathBuf};
 use windows::core::HSTRING;
 use windows::Win32::Storage::FileSystem::GetDiskFreeSpaceExW;
 
-use crate::audio_sync::CHANNELS;
 use crate::encode::{EncodeSettings, EncodedFrame, Mp4Remuxer};
 use crate::mf::MfSession;
-use crate::pcm::{frames_to_ticks, mix_tracks, PcmRing};
 use crate::recorder::SavedClip;
+use dockview_domain::audio_sync::CHANNELS;
+use dockview_domain::pcm::{frames_to_ticks, mix_tracks, PcmRing};
 
 /// Audio is written in blocks of this many frames (about 21 ms).
 const AUDIO_BLOCK_FRAMES: i64 = 1024;

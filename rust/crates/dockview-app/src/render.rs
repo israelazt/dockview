@@ -3,7 +3,7 @@
 
 use std::ffi::c_void;
 
-use dockview_core::frame::{Frame, PixelFormat};
+use dockview_domain::frame::{Frame, PixelFormat};
 use windows::core::{s, Error, Interface, Result};
 use windows::Win32::Foundation::{E_FAIL, HANDLE, HMODULE, HWND};
 use windows::Win32::Graphics::Direct3D::Fxc::{D3DCompile, D3DCOMPILE_OPTIMIZATION_LEVEL3};

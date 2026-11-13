@@ -65,7 +65,7 @@ impl App {
         }
 
         let findings = if self.cli.ui_preview && self.cli.demo_findings {
-            use dockview_core::diagnostics::Finding;
+            use dockview_domain::diagnostics::Finding;
             vec![
                 Finding::NeedsUsb3,
                 Finding::DroppingFrames,

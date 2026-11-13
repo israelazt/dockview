@@ -3,8 +3,8 @@
 //!
 //! Run with: `cargo run -p dockview-core --example list_devices`
 
-use dockview_core::mf::{enumerate_stream_types, enumerate_video_devices, MfSession};
-use dockview_core::stream::{select_best, CaptureProfile};
+use dockview_domain::stream::{select_best, CaptureProfile};
+use dockview_platform::mf::{enumerate_stream_types, enumerate_video_devices, MfSession};
 
 fn main() -> windows::core::Result<()> {
     let session = MfSession::start()?;

@@ -17,7 +17,7 @@ Pendiente: T-2.5 (MJPEG→NV12 con decodificador por hardware, hoy lo hace el re
 
 - Referencia: el C# de la raíz (no se modifica hasta terminar).
 - UI: `winit` + D3D11/DXGI directo. Audio: `wasapi` o `windows-rs` directo.
-- Estructura: workspace `rust/` → `dockview-core` (lógica + captura + audio) y `dockview-app` (ventana + render).
+- Estructura: workspace `rust/` → `dockview-platform` (lógica + captura + audio) y `dockview-app` (ventana + render).
 - Cada tarea: un commit, `cargo test` y `cargo clippy` en verde antes de pasar a la siguiente.
 - Skills: `rust-best-practices` y `rust-testing` aplican a todo el código.
 
@@ -59,7 +59,7 @@ Pendiente: T-2.5 (MJPEG→NV12 con decodificador por hardware, hoy lo hace el re
 
 ---
 
-## Phase 1 — Lógica pura (`dockview-core`, sin hardware)
+## Phase 1 — Lógica pura (`dockview-platform`, sin hardware)
 
 **How this serves the primary goal:** elegir el modo 1080p60 correcto y recordar dispositivos es lo que hace que "abrir y ver" funcione sin configurar; es testeable sin capturadora.
 
@@ -70,7 +70,7 @@ Pendiente: T-2.5 (MJPEG→NV12 con decodificador por hardware, hoy lo hace el re
 - **T-1.5** `stream.rs`: `select_best()` con perfiles. Portar `Dockview.Tests/StreamSelectorTests.cs` (118 líneas) tal cual.
 - **T-1.6** `device.rs`: emparejamiento audio↔video por palabras comunes del nombre. Portar `Dockview.Tests/DeviceMatcherTests.cs`.
 
-**Verificación:** `cargo test -p dockview-core` ≥ todos los casos de los 3 archivos C# portados. **Guarda:** no copiar la API de .NET; usar `Option`/`Result`.
+**Verificación:** `cargo test -p dockview-platform` ≥ todos los casos de los 3 archivos C# portados. **Guarda:** no copiar la API de .NET; usar `Option`/`Result`.
 
 ---
 

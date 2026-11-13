@@ -20,10 +20,10 @@ use windows::Win32::Media::MediaFoundation::{
     MF_SOURCE_READER_ENABLE_VIDEO_PROCESSING,
 };
 
-use crate::frame::{Frame, FrameSlot, PixelFormat};
 use crate::mf::{first_video_stream, open_source, read_native_types, unpack_pair, MfSession};
-use crate::stream::{select_best, select_best_compressed, CaptureProfile, StreamInfo};
 use crate::worker::{StatusCell, Worker};
+use dockview_domain::frame::{Frame, FrameSlot, PixelFormat};
+use dockview_domain::stream::{select_best, select_best_compressed, CaptureProfile, StreamInfo};
 
 /// How long `Drop` waits for the capture thread before detaching it. A source
 /// with no signal can leave `ReadSample` blocked indefinitely.

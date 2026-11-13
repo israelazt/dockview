@@ -7,10 +7,10 @@
 
 use std::time::{Duration, Instant};
 
-use dockview_core::capture::CaptureStatus;
-use dockview_core::device::{AudioDevice, VideoDevice};
-use dockview_core::diagnostics::VideoState;
-use dockview_core::screen::{MonitorInfo, ScreenStatus, WindowInfo};
+use dockview_domain::device::{AudioDevice, VideoDevice};
+use dockview_domain::diagnostics::VideoState;
+use dockview_platform::capture::CaptureStatus;
+use dockview_platform::screen::{MonitorInfo, ScreenStatus, WindowInfo};
 
 use crate::i18n::{self, Lang};
 use crate::ui::controls::{CurrentSource, StatusKind};

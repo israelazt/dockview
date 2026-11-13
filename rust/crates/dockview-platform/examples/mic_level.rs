@@ -7,9 +7,9 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
-use dockview_core::audio::enumerate_audio_devices;
-use dockview_core::pcm::AudioTap;
-use dockview_core::tap_capture::{CaptureSource, TapCapture};
+use dockview_domain::pcm::AudioTap;
+use dockview_platform::audio::enumerate_audio_devices;
+use dockview_platform::tap_capture::{CaptureSource, TapCapture};
 
 fn measure(label: &str, source: CaptureSource) {
     let tap = Arc::new(AudioTap::new(64));

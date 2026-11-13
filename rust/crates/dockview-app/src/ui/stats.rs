@@ -1,7 +1,7 @@
 //! The statistics panel: a card in the top-left corner that shows what the
 //! app and the capture device are doing, with a plain-language diagnosis.
 
-use dockview_core::diagnostics::Finding;
+use dockview_domain::diagnostics::Finding;
 
 use super::text::Weight;
 use super::{Rect, TextStyle, Ui};

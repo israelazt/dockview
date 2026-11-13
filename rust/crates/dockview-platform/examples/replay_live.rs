@@ -7,12 +7,12 @@ use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use dockview_core::audio::{enumerate_audio_devices, AudioEngine};
-use dockview_core::capture::{CaptureOptions, VideoCapture};
-use dockview_core::device::match_audio_to_video;
-use dockview_core::frame::FrameSlot;
-use dockview_core::mf::{enumerate_video_devices, MfSession};
-use dockview_core::recorder::{RecorderStatus, ReplayRecorder, ReplaySettings};
+use dockview_domain::device::match_audio_to_video;
+use dockview_domain::frame::FrameSlot;
+use dockview_platform::audio::{enumerate_audio_devices, AudioEngine};
+use dockview_platform::capture::{CaptureOptions, VideoCapture};
+use dockview_platform::mf::{enumerate_video_devices, MfSession};
+use dockview_platform::recorder::{RecorderStatus, ReplayRecorder, ReplaySettings};
 
 use windows::core::HSTRING;
 use windows::Win32::Media::MediaFoundation::{
@@ -79,7 +79,7 @@ fn main() -> windows::core::Result<()> {
         println!(
             "t={:>2}s capture={:?}  recorder={:?}  video={:>5.1}s audio={:>5.1}s {:>6.1} MB  encoded={}  dropped={}",
             start.elapsed().as_secs(),
-            matches!(capture.status(), dockview_core::capture::CaptureStatus::Running { .. }),
+            matches!(capture.status(), dockview_platform::capture::CaptureStatus::Running { .. }),
             recorder.status(),
             recorder.buffered_seconds(),
             recorder.buffered_audio_seconds(),

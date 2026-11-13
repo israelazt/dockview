@@ -22,28 +22,28 @@ use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use dockview_core::audio::{
+use dockview_domain::device::{match_audio_to_video, pick_microphone, AudioDevice, VideoDevice};
+use dockview_domain::device_names;
+use dockview_domain::diagnostics::{diagnose, Finding, Snapshot, VideoState};
+use dockview_domain::frame::FrameSlot;
+use dockview_domain::scene::SceneLayer;
+use dockview_domain::stream::StreamInfo;
+use dockview_platform::audio::{
     default_capture_device, enumerate_audio_devices, AudioEngine, AudioStatus,
 };
-use dockview_core::capture::{CaptureOptions, CaptureStatus, VideoCapture};
-use dockview_core::compose::SceneCompositor;
-use dockview_core::device::{match_audio_to_video, pick_microphone, AudioDevice, VideoDevice};
-use dockview_core::device_names;
-use dockview_core::diagnostics::{diagnose, Finding, Snapshot, VideoState};
-use dockview_core::frame::FrameSlot;
-use dockview_core::mf::{enumerate_video_devices, MfSession};
-use dockview_core::recorder::ReplaySettings;
-use dockview_core::scene::SceneLayer;
-use dockview_core::screen::{
+use dockview_platform::capture::{CaptureOptions, CaptureStatus, VideoCapture};
+use dockview_platform::compose::SceneCompositor;
+use dockview_platform::mf::{enumerate_video_devices, MfSession};
+use dockview_platform::recorder::ReplaySettings;
+use dockview_platform::screen::{
     list_monitors, list_windows, CaptureTarget, MonitorInfo, ScreenCapture, ScreenOptions,
     ScreenStatus, WindowInfo,
 };
-use dockview_core::settings::{
+use dockview_platform::settings::{
     self, AppSettings, LangMode, RenderPreset, ThemeMode, VideoModePref,
 };
-use dockview_core::stream::StreamInfo;
-use dockview_core::tap_capture::{CaptureSource, TapCapture as MicCapture};
-use dockview_core::testsrc::TestSource;
+use dockview_platform::tap_capture::{CaptureSource, TapCapture as MicCapture};
+use dockview_platform::testsrc::TestSource;
 use windows::Win32::Foundation::HWND;
 use windows::Win32::UI::WindowsAndMessaging::{
     SetWindowDisplayAffinity, WDA_EXCLUDEFROMCAPTURE, WDA_NONE,

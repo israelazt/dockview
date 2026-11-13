@@ -7,11 +7,11 @@
 use std::path::PathBuf;
 use std::time::Instant;
 
-use dockview_core::encode::{
+use dockview_platform::encode::{
     frame_duration_100ns, sequence_header, EncodeSettings, EncodedFrame, H264Encoder, Mp4Remuxer,
 };
-use dockview_core::mf::MfSession;
-use dockview_core::testsrc::{nv12_bars, overlay_stripe};
+use dockview_platform::mf::MfSession;
+use dockview_platform::testsrc::{nv12_bars, overlay_stripe};
 
 use windows::core::HSTRING;
 use windows::Win32::Media::MediaFoundation::{

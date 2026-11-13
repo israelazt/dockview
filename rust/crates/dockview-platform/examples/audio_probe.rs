@@ -6,9 +6,9 @@
 use std::thread;
 use std::time::{Duration, Instant};
 
-use dockview_core::audio::{enumerate_audio_devices, AudioEngine};
-use dockview_core::device::match_audio_to_video;
-use dockview_core::mf::{enumerate_video_devices, MfSession};
+use dockview_domain::device::match_audio_to_video;
+use dockview_platform::audio::{enumerate_audio_devices, AudioEngine};
+use dockview_platform::mf::{enumerate_video_devices, MfSession};
 
 fn main() {
     let seconds: u64 = std::env::args()

@@ -3,16 +3,16 @@
 //! Sources both scenes use keep running and glide to their new place; the ones
 //! only the new scene has are started first and fade in; the ones only the old
 //! scene had stay alive until the change is over and fade out. The maths is in
-//! `dockview_core::transition`; this module owns the sources and feeds the
+//! `dockview_domain::transition`; this module owns the sources and feeds the
 //! compositor on every turn of the event loop.
 
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use dockview_core::compose::{Layer, SceneCompositor};
-use dockview_core::frame::FrameSlot;
-use dockview_core::scene::{Scene, SceneLayer};
-use dockview_core::transition::{Easing, Transition, DEFAULT_DURATION};
+use dockview_domain::frame::FrameSlot;
+use dockview_domain::scene::{Scene, SceneLayer};
+use dockview_domain::transition::{Easing, Transition, DEFAULT_DURATION};
+use dockview_platform::compose::{Layer, SceneCompositor};
 
 use crate::i18n;
 use crate::ui::toast::ToastKind;
@@ -39,7 +39,7 @@ impl App {
             Some(base) => base.clone(),
             None => SceneLayer::new(
                 self.main_source_ref()?,
-                dockview_core::scene::NormRect::FULL,
+                dockview_domain::scene::NormRect::FULL,
             ),
         };
         let mut overlays: Vec<&Overlay> = self.overlays.iter().collect();

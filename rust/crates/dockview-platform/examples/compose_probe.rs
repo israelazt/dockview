@@ -20,13 +20,13 @@ use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use dockview_core::capture::{CaptureOptions, VideoCapture};
-use dockview_core::compose::{Fit, Layer, NormRect, SceneCompositor, SceneStatus};
-use dockview_core::frame::FrameSlot;
-use dockview_core::mf::{enumerate_video_devices, MfSession};
-use dockview_core::recorder::{RecorderStatus, ReplayRecorder, ReplaySettings};
-use dockview_core::recording::RecordingState;
-use dockview_core::screen::{
+use dockview_domain::frame::FrameSlot;
+use dockview_platform::capture::{CaptureOptions, VideoCapture};
+use dockview_platform::compose::{Fit, Layer, NormRect, SceneCompositor, SceneStatus};
+use dockview_platform::mf::{enumerate_video_devices, MfSession};
+use dockview_platform::recorder::{RecorderStatus, ReplayRecorder, ReplaySettings};
+use dockview_platform::recording::RecordingState;
+use dockview_platform::screen::{
     list_monitors, list_windows, CaptureTarget, ScreenCapture, ScreenOptions,
 };
 

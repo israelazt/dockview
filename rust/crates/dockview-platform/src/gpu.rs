@@ -19,9 +19,9 @@ use windows::Win32::Graphics::Direct3D11::{
 };
 use windows::Win32::Graphics::Dxgi::Common::{DXGI_FORMAT_NV12, DXGI_SAMPLE_DESC};
 
-pub use crate::geometry::even;
+pub use dockview_domain::geometry::even;
 
-use crate::frame::{Frame, FrameSlot, PixelFormat};
+use dockview_domain::frame::{Frame, FrameSlot, PixelFormat};
 
 /// A Windows rectangle from an origin and a size.
 pub fn rect(x: u32, y: u32, w: u32, h: u32) -> RECT {

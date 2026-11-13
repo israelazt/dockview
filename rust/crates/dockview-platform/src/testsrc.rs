@@ -8,8 +8,8 @@ use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use crate::frame::{Frame, FrameSlot, PixelFormat};
 use crate::worker::Worker;
+use dockview_domain::frame::{Frame, FrameSlot, PixelFormat};
 
 /// How long dropping the source waits for its thread.
 const STOP_TIMEOUT: Duration = Duration::from_secs(2);

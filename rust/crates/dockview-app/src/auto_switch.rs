@@ -10,7 +10,7 @@
 //!
 //! No windows and no settings in here: it only decides, and the app acts.
 
-use dockview_core::diagnostics::{switch_helped, FallbackWatch};
+use dockview_domain::diagnostics::{switch_helped, FallbackWatch};
 
 /// Seconds after an automatic switch before its effect is judged.
 pub const CHECK_SECS: u32 = 7;

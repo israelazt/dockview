@@ -5,7 +5,7 @@ use super::tooltip::*;
 use super::*;
 use crate::i18n::Lang;
 use crate::theme::{Theme, ThemeMode};
-use dockview_core::settings::{LangMode, RecordingQuality, RenderPreset, VideoModePref};
+use dockview_platform::settings::{LangMode, RecordingQuality, RenderPreset, VideoModePref};
 
 fn model() -> Model {
     Model {

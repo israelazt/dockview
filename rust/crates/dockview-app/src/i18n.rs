@@ -8,7 +8,7 @@ pub enum Lang {
     Es,
 }
 
-pub use dockview_core::settings::LangMode;
+pub use dockview_platform::settings::LangMode;
 
 /// Resolving the stored preference against the detected system language.
 pub trait LangModeExt {

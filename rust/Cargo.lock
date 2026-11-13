@@ -328,21 +328,11 @@ name = "dockview"
 version = "0.1.0"
 dependencies = [
  "cosmic-text",
- "dockview-core",
+ "dockview-domain",
+ "dockview-platform",
  "png",
  "windows",
  "winit",
-]
-
-[[package]]
-name = "dockview-core"
-version = "0.1.0"
-dependencies = [
- "dockview-domain",
- "serde",
- "serde_json",
- "wasapi",
- "windows",
 ]
 
 [[package]]
@@ -351,6 +341,17 @@ version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "dockview-platform"
+version = "0.1.0"
+dependencies = [
+ "dockview-domain",
+ "serde",
+ "serde_json",
+ "wasapi",
+ "windows",
 ]
 
 [[package]]

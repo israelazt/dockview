@@ -20,8 +20,8 @@ use windows::Win32::System::Com::{
     CoInitializeEx, CoTaskMemFree, CoUninitialize, COINIT_MULTITHREADED,
 };
 
-use crate::device::VideoDevice;
-use crate::stream::StreamInfo;
+use dockview_domain::device::VideoDevice;
+use dockview_domain::stream::StreamInfo;
 
 /// Frame rate assumed when a media type does not report a valid one.
 const DEFAULT_FPS: u32 = 30;

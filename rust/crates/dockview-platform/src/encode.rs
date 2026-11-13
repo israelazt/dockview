@@ -547,8 +547,8 @@ impl Mp4Remuxer {
             // inserts the encoder.
             let mut audio_streams = Vec::with_capacity(audio_tracks);
             for _ in 0..audio_tracks {
-                let rate = crate::audio_sync::SAMPLE_RATE;
-                let channels = crate::audio_sync::CHANNELS as u32;
+                let rate = dockview_domain::audio_sync::SAMPLE_RATE;
+                let channels = dockview_domain::audio_sync::CHANNELS as u32;
                 let aac = MFCreateMediaType()?;
                 aac.SetGUID(&MF_MT_MAJOR_TYPE, &MFMediaType_Audio)?;
                 aac.SetGUID(&MF_MT_SUBTYPE, &MFAudioFormat_AAC)?;
@@ -633,7 +633,7 @@ impl Mp4Remuxer {
             return Ok(());
         }
         let bytes = pcm.len() * 2;
-        let frames = (pcm.len() / crate::audio_sync::CHANNELS) as i64;
+        let frames = (pcm.len() / dockview_domain::audio_sync::CHANNELS) as i64;
         // SAFETY: the buffer is filled while locked and sized to the data.
         unsafe {
             let buffer = MFCreateMemoryBuffer(bytes as u32)?;
@@ -645,7 +645,7 @@ impl Mp4Remuxer {
             let sample = MFCreateSample()?;
             sample.AddBuffer(&buffer)?;
             sample.SetSampleTime(start_100ns)?;
-            sample.SetSampleDuration(crate::pcm::frames_to_ticks(frames))?;
+            sample.SetSampleDuration(dockview_domain::pcm::frames_to_ticks(frames))?;
             self.writer.WriteSample(stream, &sample)
         }
     }

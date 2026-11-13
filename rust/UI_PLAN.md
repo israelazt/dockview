@@ -86,7 +86,7 @@ Se abre con la tecla `I` o desde la fila «Estadísticas» del popover (`--stats
 - **Video:** modo del dispositivo, datos que necesita ese modo por USB, frames recibidos, mostrados y saltados.
 - **Rendimiento:** latencia interna de la app (desde que llega el frame hasta que se entrega a la pantalla; no incluye la capturadora ni el USB), CPU de la app, tiempo de GPU por frame (consultas de temporización de D3D11) y memoria.
 - **Pantalla:** frecuencia del monitor, tamaño de la ventana, búfer de audio.
-- **Diagnóstico** en lenguaje claro (`dockview-core/src/diagnostics.rs`): sin dispositivo, dispositivo perdido, modo que necesita USB 3, dispositivo que entrega menos frames de los anunciados, frames saltados, CPU alta, GPU lenta y audio perdido.
+- **Diagnóstico** en lenguaje claro (`dockview-domain/src/diagnostics.rs`): sin dispositivo, dispositivo perdido, modo que necesita USB 3, dispositivo que entrega menos frames de los anunciados, frames saltados, CPU alta, GPU lenta y audio perdido.
 
 Todo se mide localmente; no hay telemetría ni se envía nada.
 

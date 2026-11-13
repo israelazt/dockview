@@ -44,10 +44,10 @@ pub use crate::targets::{
     list_monitors, list_windows, window_exists, CaptureTarget, MonitorInfo, WindowInfo,
 };
 
-use crate::frame::FrameSlot;
-use crate::geometry::{fit_in, output_size};
 use crate::gpu::{create_device, rect, Nv12Target};
 use crate::worker::{StatusCell, Worker};
+use dockview_domain::frame::FrameSlot;
+use dockview_domain::geometry::{fit_in, output_size};
 
 /// Options for a capture.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -420,7 +420,7 @@ fn run(
 mod tests {
     use std::time::Instant;
 
-    use crate::frame::PixelFormat;
+    use dockview_domain::frame::PixelFormat;
 
     use super::*;
 

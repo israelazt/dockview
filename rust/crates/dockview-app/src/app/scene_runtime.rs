@@ -13,11 +13,11 @@
 use std::sync::Arc;
 use std::time::Instant;
 
-use dockview_core::capture::{CaptureOptions, CaptureStatus, VideoCapture};
-use dockview_core::compose::{Layer, SceneCompositor};
-use dockview_core::frame::FrameSlot;
-use dockview_core::scene::{NormRect, Scene, SceneLayer, SourceRef};
-use dockview_core::screen::{
+use dockview_domain::frame::FrameSlot;
+use dockview_domain::scene::{NormRect, Scene, SceneLayer, SourceRef};
+use dockview_platform::capture::{CaptureOptions, CaptureStatus, VideoCapture};
+use dockview_platform::compose::{Layer, SceneCompositor};
+use dockview_platform::screen::{
     list_monitors, list_windows, CaptureTarget, ScreenCapture, ScreenOptions, ScreenStatus,
 };
 

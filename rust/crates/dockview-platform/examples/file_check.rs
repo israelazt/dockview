@@ -4,7 +4,7 @@
 //!
 //! Run with: `cargo run --release -p dockview-core --example file_check -- <file.mp4>`
 
-use dockview_core::mf::MfSession;
+use dockview_platform::mf::MfSession;
 use windows::core::HSTRING;
 use windows::Win32::Media::MediaFoundation::{
     IMFAttributes, IMFSample, MFAudioFormat_PCM, MFCreateMediaType, MFCreateSourceReaderFromURL,

@@ -1,5 +1,5 @@
 [package]
-name = "dockview-core"
+name = "dockview-platform"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
