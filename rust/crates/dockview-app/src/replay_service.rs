@@ -11,13 +11,13 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Instant;
 
+use dockview_domain::audio_status::AudioStatus;
 use dockview_domain::frame::FrameSlot;
 use dockview_domain::pcm::AudioTap;
-use dockview_platform::audio::AudioStatus;
-use dockview_platform::recorder::{RecorderStatus, ReplayRecorder, ReplaySettings, SaveHandle};
-use dockview_platform::recording::{
-    disk_free_bytes, EndReason, RecordingState, DISK_START_MIN_BYTES,
-};
+use dockview_domain::recording::{EndReason, RecordingState, DISK_START_MIN_BYTES};
+use dockview_domain::recording::{RecorderStatus, ReplaySettings, SaveHandle};
+use dockview_platform::recorder::ReplayRecorder;
+use dockview_platform::recording::disk_free_bytes;
 use dockview_platform::tap_capture::{CaptureSource, TapCapture as MicCapture};
 
 use crate::i18n::Key;

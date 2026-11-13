@@ -21,8 +21,9 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use dockview_domain::frame::FrameSlot;
-use dockview_platform::recorder::{RecorderStatus, ReplayRecorder, ReplaySettings};
-use dockview_platform::recording::RecordingState;
+use dockview_domain::recording::RecordingState;
+use dockview_domain::recording::{RecorderStatus, ReplaySettings};
+use dockview_platform::recorder::ReplayRecorder;
 use dockview_platform::screen::{
     list_monitors, list_windows, CaptureTarget, ScreenCapture, ScreenOptions, ScreenStatus,
 };

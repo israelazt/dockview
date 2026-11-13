@@ -23,15 +23,16 @@ use std::time::{Duration, Instant};
 
 use crate::encode::{sequence_header, EncodeSettings, H264Encoder, Mp4Remuxer};
 use crate::mf::MfSession;
-use crate::recording::{
-    audio_track_count, disk_free_bytes, disk_level, part_path, ActiveRecording, DiskLevel,
-    EndReason, RecordingInfo, RecordingOutcome, RecordingState, DISK_START_MIN_BYTES,
-    DISK_STOP_BYTES,
-};
+use crate::recording::{disk_free_bytes, ActiveRecording};
 use crate::worker::Worker;
 use dockview_domain::encoded::EncodedFrame;
 use dockview_domain::frame::{Frame, FrameSlot, FrameTap, PixelFormat};
 use dockview_domain::pcm::{frames_to_ticks, AudioTap, PcmRing};
+use dockview_domain::recording::{
+    audio_track_count, disk_level, part_path, DiskLevel, EndReason, RecordingInfo,
+    RecordingOutcome, RecordingState, DISK_START_MIN_BYTES, DISK_STOP_BYTES,
+};
+use dockview_domain::recording::{RecorderStatus, ReplaySettings, SaveHandle, SavedClip};
 use dockview_domain::replay::ReplayRing;
 
 /// Frames the tap may hold before it starts dropping (about 130 ms at 60 fps).
@@ -42,38 +43,6 @@ const AUDIO_TAP_CAPACITY: usize = 64;
 const POLL: Duration = Duration::from_millis(100);
 /// How long `Drop` waits for the recorder thread.
 const STOP_TIMEOUT: Duration = Duration::from_secs(3);
-
-/// What to record.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct ReplaySettings {
-    /// Footage to keep, in seconds.
-    pub keep_seconds: f64,
-    /// Video bitrate in megabits per second.
-    pub bitrate_mbps: u32,
-    /// Nominal frame rate (sets the keyframe interval and frame duration).
-    pub fps: u32,
-}
-
-impl Default for ReplaySettings {
-    fn default() -> Self {
-        Self {
-            keep_seconds: 120.0,
-            bitrate_mbps: 40,
-            fps: 60,
-        }
-    }
-}
-
-/// State of the recorder.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum RecorderStatus {
-    /// Waiting for the first frame.
-    Starting,
-    Recording,
-    /// This PC cannot record (no hardware encoder, or an unsupported format).
-    Unsupported(String),
-    Failed(String),
-}
 
 /// A request for the recording, picked up by the recorder thread.
 enum RecCommand {
@@ -142,31 +111,15 @@ impl Shared {
     }
 }
 
-/// A finished clip.
-#[derive(Debug, Clone, PartialEq)]
-pub struct SavedClip {
-    pub path: PathBuf,
-    pub frames: usize,
-    pub seconds: f64,
-    pub bytes: u64,
+/// Waiting for a save, which blocks the thread: for tests and tools, never for
+/// the interface.
+pub trait SaveHandleExt {
+    /// Blocks until the save finishes, or `None` after `timeout`.
+    fn wait(&self, timeout: Duration) -> Option<Result<SavedClip, String>>;
 }
 
-/// Result of a save running in the background.
-pub struct SaveHandle {
-    result: Arc<Mutex<Option<Result<SavedClip, String>>>>,
-}
-
-impl SaveHandle {
-    /// The outcome once the save has finished.
-    pub fn poll(&self) -> Option<Result<SavedClip, String>> {
-        self.result
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .clone()
-    }
-
-    /// Blocks until the save finishes (for tests and tools).
-    pub fn wait(&self, timeout: Duration) -> Option<Result<SavedClip, String>> {
+impl SaveHandleExt for SaveHandle {
+    fn wait(&self, timeout: Duration) -> Option<Result<SavedClip, String>> {
         let deadline = Instant::now() + timeout;
         loop {
             if let Some(result) = self.poll() {
@@ -427,9 +380,7 @@ impl ReplayRecorder {
     /// Saves (at least) the last `seconds` to `path` on a background thread.
     pub fn save(&self, seconds: f64, path: PathBuf) -> SaveHandle {
         let result = Arc::new(Mutex::new(None));
-        let handle = SaveHandle {
-            result: Arc::clone(&result),
-        };
+        let handle = SaveHandle::new(Arc::clone(&result));
 
         // Copy what we need now, so the recorder keeps running while the file
         // is written.

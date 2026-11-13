@@ -9,10 +9,11 @@ use std::time::{Duration, Instant};
 
 use dockview_domain::device::match_audio_to_video;
 use dockview_domain::frame::FrameSlot;
+use dockview_domain::recording::{RecorderStatus, ReplaySettings};
 use dockview_platform::audio::{enumerate_audio_devices, AudioEngine};
 use dockview_platform::capture::{CaptureOptions, VideoCapture};
 use dockview_platform::mf::{enumerate_video_devices, MfSession};
-use dockview_platform::recorder::{RecorderStatus, ReplayRecorder, ReplaySettings};
+use dockview_platform::recorder::{ReplayRecorder, SaveHandleExt};
 
 use windows::core::HSTRING;
 use windows::Win32::Media::MediaFoundation::{

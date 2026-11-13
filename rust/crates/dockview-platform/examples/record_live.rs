@@ -10,11 +10,12 @@ use std::time::{Duration, Instant};
 
 use dockview_domain::device::match_audio_to_video;
 use dockview_domain::frame::FrameSlot;
+use dockview_domain::recording::RecordingState;
+use dockview_domain::recording::{RecorderStatus, ReplaySettings};
 use dockview_platform::audio::{enumerate_audio_devices, AudioEngine};
 use dockview_platform::capture::{CaptureOptions, VideoCapture};
 use dockview_platform::mf::{enumerate_video_devices, MfSession};
-use dockview_platform::recorder::{RecorderStatus, ReplayRecorder, ReplaySettings};
-use dockview_platform::recording::RecordingState;
+use dockview_platform::recorder::ReplayRecorder;
 use dockview_platform::tap_capture::{CaptureSource, TapCapture as MicCapture};
 
 use windows::Win32::Foundation::FILETIME;

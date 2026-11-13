@@ -15,6 +15,7 @@ use wasapi::{
 };
 
 use crate::worker::Worker;
+use dockview_domain::audio_status::AudioStatus;
 use dockview_domain::audio_sync::{
     plan_correction, target_frames, AudioRing, BYTES_PER_FRAME, CHANNELS, SAMPLE_RATE,
 };
@@ -27,17 +28,6 @@ const DRIFT_CHECK_INTERVAL: Duration = Duration::from_millis(500);
 const EVENT_TIMEOUT_MS: u32 = 100;
 /// How long `Drop` waits for the audio threads before detaching them.
 const STOP_TIMEOUT: Duration = Duration::from_secs(2);
-
-/// Lifecycle of an [`AudioEngine`].
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum AudioStatus {
-    Starting,
-    Running,
-    /// The capture device went away or stopped delivering.
-    Disconnected(String),
-    Failed(String),
-    Stopped,
-}
 
 struct Shared {
     ring: Mutex<AudioRing>,
