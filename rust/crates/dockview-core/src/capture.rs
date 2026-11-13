@@ -7,9 +7,8 @@
 //! * Frames go through a single-slot mailbox, never a queue.
 
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
-use std::thread::{self, JoinHandle};
-use std::time::{Duration, Instant};
+use std::sync::Arc;
+use std::time::Duration;
 
 use windows::core::{Error, Result};
 use windows::Win32::Foundation::E_FAIL;
@@ -24,6 +23,7 @@ use windows::Win32::Media::MediaFoundation::{
 use crate::frame::{Frame, FrameSlot, PixelFormat};
 use crate::mf::{first_video_stream, open_source, read_native_types, unpack_pair, MfSession};
 use crate::stream::{select_best, select_best_compressed, CaptureProfile, StreamInfo};
+use crate::worker::{StatusCell, Worker};
 
 /// How long `Drop` waits for the capture thread before detaching it. A source
 /// with no signal can leave `ReadSample` blocked indefinitely.
@@ -63,65 +63,35 @@ pub struct CaptureOptions {
 
 /// Handle to a running capture thread. Dropping it stops the capture.
 pub struct VideoCapture {
-    stop: Arc<AtomicBool>,
-    status: Arc<Mutex<CaptureStatus>>,
-    thread: Option<JoinHandle<()>>,
+    status: Arc<StatusCell<CaptureStatus>>,
+    /// Dropped last: stops the thread, which may stay blocked in `ReadSample`
+    /// and is then left to end on its own.
+    _worker: Worker,
 }
 
 impl VideoCapture {
     /// Starts capturing from the device identified by `symbolic_link`.
     pub fn start(symbolic_link: String, options: CaptureOptions, slot: Arc<FrameSlot>) -> Self {
-        let stop = Arc::new(AtomicBool::new(false));
-        let status = Arc::new(Mutex::new(CaptureStatus::Starting));
-
-        let thread = {
-            let (stop, status) = (Arc::clone(&stop), Arc::clone(&status));
-            thread::Builder::new()
-                .name("video-capture".into())
-                .spawn(move || run(&symbolic_link, options, &slot, &stop, &status))
-                .ok()
-        };
-        if thread.is_none() {
-            set_status(
-                &status,
-                CaptureStatus::Failed("could not spawn capture thread".into()),
-            );
+        let status = Arc::new(StatusCell::new(CaptureStatus::Starting));
+        let mut worker = Worker::new(STOP_TIMEOUT);
+        let thread_status = Arc::clone(&status);
+        let started = worker.spawn("video-capture", move |stop| {
+            run(&symbolic_link, options, &slot, stop, &thread_status);
+        });
+        if !started {
+            status.set(CaptureStatus::Failed(
+                "could not spawn capture thread".into(),
+            ));
         }
-
         Self {
-            stop,
             status,
-            thread,
+            _worker: worker,
         }
     }
 
     pub fn status(&self) -> CaptureStatus {
-        self.status
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .clone()
+        self.status.get()
     }
-}
-
-impl Drop for VideoCapture {
-    fn drop(&mut self) {
-        self.stop.store(true, Ordering::Relaxed);
-        let Some(thread) = self.thread.take() else {
-            return;
-        };
-        let deadline = Instant::now() + STOP_TIMEOUT;
-        while !thread.is_finished() && Instant::now() < deadline {
-            thread::sleep(Duration::from_millis(10));
-        }
-        if thread.is_finished() {
-            let _ = thread.join();
-        }
-        // Otherwise detach: the thread exits on its own once ReadSample returns.
-    }
-}
-
-fn set_status(status: &Mutex<CaptureStatus>, value: CaptureStatus) {
-    *status.lock().unwrap_or_else(|e| e.into_inner()) = value;
 }
 
 /// Thread entry point: runs the capture and records how it ended.
@@ -130,7 +100,7 @@ fn run(
     options: CaptureOptions,
     slot: &FrameSlot,
     stop: &AtomicBool,
-    status: &Mutex<CaptureStatus>,
+    status: &StatusCell<CaptureStatus>,
 ) {
     let end = match capture(symbolic_link, options, slot, stop, status) {
         Ok(End::Stopped) => CaptureStatus::Stopped,
@@ -142,7 +112,7 @@ fn run(
             reason: e.message(),
         },
     };
-    set_status(status, end);
+    status.set(end);
 }
 
 enum End {
@@ -168,7 +138,7 @@ fn capture(
     options: CaptureOptions,
     slot: &FrameSlot,
     stop: &AtomicBool,
-    status: &Mutex<CaptureStatus>,
+    status: &StatusCell<CaptureStatus>,
 ) -> std::result::Result<End, Failure> {
     // Declared first so it is dropped last, after the reader and the source.
     let _session = MfSession::start()?;
@@ -210,7 +180,7 @@ unsafe fn read_frames(
     options: CaptureOptions,
     slot: &FrameSlot,
     stop: &AtomicBool,
-    status: &Mutex<CaptureStatus>,
+    status: &StatusCell<CaptureStatus>,
 ) -> std::result::Result<End, Failure> {
     let stream = first_video_stream();
 
@@ -244,14 +214,11 @@ unsafe fn read_frames(
     reader.SetCurrentMediaType(stream, None, &requested)?;
 
     let mut layout = current_layout(reader, stream, output)?;
-    set_status(
-        status,
-        CaptureStatus::Running {
-            native: best,
-            output,
-            has_compressed,
-        },
-    );
+    status.set(CaptureStatus::Running {
+        native: best,
+        output,
+        has_compressed,
+    });
 
     while !stop.load(Ordering::Relaxed) {
         let mut flags = 0u32;

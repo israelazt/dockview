@@ -14,7 +14,7 @@ use std::ffi::c_void;
 use std::mem::ManuallyDrop;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use std::thread::{self, JoinHandle};
+use std::thread;
 use std::time::{Duration, Instant};
 
 use windows::core::{factory, Interface, BOOL};
@@ -56,6 +56,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 
 use crate::frame::{Frame, FrameSlot, PixelFormat};
+use crate::worker::{StatusCell, Worker};
 
 /// What to capture. The numbers are the raw `HMONITOR` / `HWND` handles.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -551,64 +552,37 @@ unsafe impl Sync for Gpu {}
 
 /// Captures a monitor or a window into a [`FrameSlot`] while it is alive.
 pub struct ScreenCapture {
-    stop: Arc<AtomicBool>,
-    status: Arc<Mutex<ScreenStatus>>,
-    thread: Option<JoinHandle<()>>,
+    status: Arc<StatusCell<ScreenStatus>>,
+    _worker: Worker,
 }
+
+/// How long dropping a capture waits for its thread.
+const STOP_TIMEOUT: Duration = Duration::from_secs(3);
 
 impl ScreenCapture {
     pub fn start(target: CaptureTarget, options: ScreenOptions, slot: Arc<FrameSlot>) -> Self {
-        let stop = Arc::new(AtomicBool::new(false));
-        let status = Arc::new(Mutex::new(ScreenStatus::Starting));
-        let thread = {
-            let (stop, status) = (Arc::clone(&stop), Arc::clone(&status));
-            thread::Builder::new()
-                .name("screen-capture".into())
-                .spawn(move || {
-                    if let Err(e) = run(target, options, &slot, &stop, &status) {
-                        set_status(&status, ScreenStatus::Failed(e.message()));
-                    }
-                })
-                .ok()
-        };
-        if thread.is_none() {
-            set_status(
-                &status,
-                ScreenStatus::Failed("could not start the capture thread".into()),
-            );
+        let status = Arc::new(StatusCell::new(ScreenStatus::Starting));
+        let mut worker = Worker::new(STOP_TIMEOUT);
+        let thread_status = Arc::clone(&status);
+        let started = worker.spawn("screen-capture", move |stop| {
+            if let Err(e) = run(target, options, &slot, stop, &thread_status) {
+                thread_status.set(ScreenStatus::Failed(e.message()));
+            }
+        });
+        if !started {
+            status.set(ScreenStatus::Failed(
+                "could not start the capture thread".into(),
+            ));
         }
         Self {
-            stop,
             status,
-            thread,
+            _worker: worker,
         }
     }
 
     pub fn status(&self) -> ScreenStatus {
-        self.status
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .clone()
+        self.status.get()
     }
-}
-
-impl Drop for ScreenCapture {
-    fn drop(&mut self) {
-        self.stop.store(true, Ordering::Relaxed);
-        if let Some(thread) = self.thread.take() {
-            let deadline = Instant::now() + Duration::from_secs(3);
-            while !thread.is_finished() && Instant::now() < deadline {
-                thread::sleep(Duration::from_millis(5));
-            }
-            if thread.is_finished() {
-                let _ = thread.join();
-            }
-        }
-    }
-}
-
-fn set_status(status: &Mutex<ScreenStatus>, value: ScreenStatus) {
-    *status.lock().unwrap_or_else(|e| e.into_inner()) = value;
 }
 
 fn run(
@@ -616,7 +590,7 @@ fn run(
     options: ScreenOptions,
     slot: &Arc<FrameSlot>,
     stop: &AtomicBool,
-    status: &Arc<Mutex<ScreenStatus>>,
+    status: &Arc<StatusCell<ScreenStatus>>,
 ) -> windows::core::Result<()> {
     // SAFETY: first WinRT initialisation on this thread (already-initialised
     // is fine and ignored).
@@ -720,14 +694,11 @@ fn run(
                         &slot,
                         timestamp,
                     ) {
-                        Ok(()) => set_status(
-                            &status,
-                            ScreenStatus::Running {
-                                width: converter.out_w,
-                                height: converter.out_h,
-                            },
-                        ),
-                        Err(e) => set_status(&status, ScreenStatus::Failed(e.message())),
+                        Ok(()) => status.set(ScreenStatus::Running {
+                            width: converter.out_w,
+                            height: converter.out_h,
+                        }),
+                        Err(e) => status.set(ScreenStatus::Failed(e.message())),
                     }
                 }
                 Ok(())
@@ -739,10 +710,7 @@ fn run(
     let closed = {
         let status = Arc::clone(status);
         TypedEventHandler::<GraphicsCaptureItem, windows::core::IInspectable>::new(move |_, _| {
-            set_status(
-                &status,
-                ScreenStatus::Ended("the captured window closed".into()),
-            );
+            status.set(ScreenStatus::Ended("the captured window closed".into()));
             Ok(())
         })
     };
@@ -764,10 +732,7 @@ fn run(
         thread::sleep(Duration::from_millis(50));
         if let CaptureTarget::Window(handle) = target {
             if !window_exists(handle) {
-                set_status(
-                    status,
-                    ScreenStatus::Ended("the captured window closed".into()),
-                );
+                status.set(ScreenStatus::Ended("the captured window closed".into()));
             }
         }
     }

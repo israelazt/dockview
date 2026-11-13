@@ -72,7 +72,7 @@ Cada paso: sin cambio visible, comprobado con los mismos tests y, en la interfaz
 
 | Paso | Qué | Valor | Esfuerzo / riesgo |
 |---|---|---|---|
-| D-1 | `Worker` común (hilo, parada, estado, cierre) en el núcleo | Quita 6 copias; base para fuentes nuevas | Bajo |
+| D-1 ✅ | `Worker` común (hilo, parada, estado, cierre) en el núcleo | Quita 7 copias; base para fuentes nuevas | Bajo |
 | D-2 | Módulo `gpu` compartido (dispositivo, textura NV12, lectura al `Frame`) | Quita ≈ 120 líneas duplicadas | Bajo-medio |
 | D-3 | Partir `recorder.rs` en `recorder/` | Un archivo por responsabilidad | Medio (mucho movimiento, pocos cambios) |
 | D-4 | Extraer `Sources` de `App` (fuentes, audio y enrutado) | Mayor reducción de `main.rs`; permite probar el enrutado | Medio-alto |
@@ -82,6 +82,11 @@ Cada paso: sin cambio visible, comprobado con los mismos tests y, en la interfaz
 | D-8 | Dividir las funciones de dibujo grandes y mover `Stats` fuera de `ui` | Interfaz más fácil de ampliar | Bajo-medio |
 
 **Orden recomendado:** D-1, D-2, D-7 (rápidos y sin riesgo), luego D-4 y D-5 con D-6 (el núcleo del desacoplamiento), y D-3 y D-8 cuando estorben. Cada uno se puede intercalar con funciones nuevas sin bloquearlas.
+
+### Resultado de D-1 (2026-11-12)
+`dockview-core/src/worker.rs`: `Worker` (uno o varios hilos con una bandera de parada y un plazo de cierre; al soltarlo espera y, si un hilo sigue bloqueado en el controlador, lo deja terminar solo) y `StatusCell<T>` (estado compartido que no se envenena). Migrados `TestSource`, `VideoCapture`, `ScreenCapture`, `SceneCompositor`, `TapCapture`, `ReplayRecorder` y `AudioEngine`: siete `Drop` y tres `set_status` menos. 5 tests nuevos. Comprobado con los 351 tests y con la app real (capturadora + pantalla en la esquina + grabación; cierre en 326 ms, vídeo bien cerrado).
+
+Cambio pequeño de comportamiento: `TestSource` esperaba a su hilo sin límite; ahora espera como máximo 2 s como las demás. `AudioEngine`, `TapCapture` y `ReplayRecorder` siguen con su estado propio dentro de `Shared`, porque guarda además otras cosas (ganancia, nivel, anillos).
 
 ## Lo que no conviene tocar
 - La separación en dos crates y el sentido de las dependencias.

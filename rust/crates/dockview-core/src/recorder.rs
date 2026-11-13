@@ -9,7 +9,7 @@ use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
-use std::thread::{self, JoinHandle};
+use std::thread;
 use std::time::{Duration, Instant};
 
 use crate::encode::{sequence_header, EncodeSettings, EncodedFrame, H264Encoder, Mp4Remuxer};
@@ -22,6 +22,7 @@ use crate::recording::{
     DISK_STOP_BYTES,
 };
 use crate::replay::ReplayRing;
+use crate::worker::Worker;
 
 /// Frames the tap may hold before it starts dropping (about 130 ms at 60 fps).
 const TAP_CAPACITY: usize = 8;
@@ -176,8 +177,8 @@ pub struct ReplayRecorder {
     audio_tap: Arc<AudioTap>,
     mic_tap: Arc<AudioTap>,
     shared: Arc<Shared>,
-    stop: Arc<AtomicBool>,
-    thread: Option<JoinHandle<()>>,
+    /// Dropped after `Drop::drop` has detached the tap: stops the thread.
+    _worker: Worker,
 }
 
 impl ReplayRecorder {
@@ -193,27 +194,30 @@ impl ReplayRecorder {
         *shared.ring.lock().unwrap_or_else(|e| e.into_inner()) =
             Some(ReplayRing::new(settings.keep_seconds));
         shared.set_status(RecorderStatus::Starting);
-        let stop = Arc::new(AtomicBool::new(false));
 
-        let thread = {
-            let (tap, audio, mic, shared, stop) = (
-                Arc::clone(&tap),
-                Arc::clone(&audio_tap),
-                Arc::clone(&mic_tap),
-                Arc::clone(&shared),
-                Arc::clone(&stop),
+        let mut worker = Worker::new(STOP_TIMEOUT);
+        let (thread_tap, thread_audio, thread_mic, thread_shared) = (
+            Arc::clone(&tap),
+            Arc::clone(&audio_tap),
+            Arc::clone(&mic_tap),
+            Arc::clone(&shared),
+        );
+        let started = worker.spawn("replay-recorder", move |stop| {
+            run(
+                &thread_tap,
+                &thread_audio,
+                &thread_mic,
+                &thread_shared,
+                stop,
+                settings,
             );
-            thread::Builder::new()
-                .name("replay-recorder".into())
-                .spawn(move || run(&tap, &audio, &mic, &shared, &stop, settings))
-                .ok()
-        };
-        if thread.is_none() {
+        });
+        if started {
+            slot.set_tap(Some(Arc::clone(&tap)));
+        } else {
             shared.set_status(RecorderStatus::Failed(
                 "could not start the recorder".into(),
             ));
-        } else {
-            slot.set_tap(Some(Arc::clone(&tap)));
         }
         Self {
             slot,
@@ -221,8 +225,7 @@ impl ReplayRecorder {
             audio_tap,
             mic_tap,
             shared,
-            stop,
-            thread,
+            _worker: worker,
         }
     }
 
@@ -471,17 +474,9 @@ impl ReplayRecorder {
 
 impl Drop for ReplayRecorder {
     fn drop(&mut self) {
+        // No more frames for the thread; then the worker (dropped right after)
+        // raises the stop flag and waits for it.
         self.slot.set_tap(None);
-        self.stop.store(true, Ordering::Relaxed);
-        if let Some(thread) = self.thread.take() {
-            let deadline = Instant::now() + STOP_TIMEOUT;
-            while !thread.is_finished() && Instant::now() < deadline {
-                thread::sleep(Duration::from_millis(5));
-            }
-            if thread.is_finished() {
-                let _ = thread.join();
-            }
-        }
     }
 }
 

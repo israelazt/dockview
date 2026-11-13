@@ -7,7 +7,6 @@
 
 use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
-use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 use wasapi::{
@@ -20,6 +19,7 @@ use crate::audio_sync::{
 };
 use crate::device::AudioDevice;
 use crate::pcm::AudioTap;
+use crate::worker::Worker;
 
 /// How often the render thread re-evaluates drift.
 const DRIFT_CHECK_INTERVAL: Duration = Duration::from_millis(500);
@@ -64,9 +64,8 @@ impl Shared {
 
 /// Runs the audio pipeline. Dropping it stops both threads.
 pub struct AudioEngine {
-    stop: Arc<AtomicBool>,
     shared: Arc<Shared>,
-    threads: Vec<JoinHandle<()>>,
+    _worker: Worker,
 }
 
 impl AudioEngine {
@@ -74,7 +73,6 @@ impl AudioEngine {
     /// output. `volume` is 0.0–1.0; `offset_ms` is the initial sync offset
     /// (positive delays the audio).
     pub fn start(capture_device_id: String, volume: f32, offset_ms: i32) -> Self {
-        let stop = Arc::new(AtomicBool::new(false));
         let shared = Arc::new(Shared {
             ring: Mutex::new(AudioRing::new()),
             volume: AtomicU32::new(volume.clamp(0.0, 1.0).to_bits()),
@@ -83,30 +81,23 @@ impl AudioEngine {
             tap: Mutex::new(None),
         });
 
-        let spawn = |name: &str, body: fn(&Shared, &AtomicBool, &str), id: String| {
-            let (shared, stop) = (Arc::clone(&shared), Arc::clone(&stop));
-            thread::Builder::new()
-                .name(name.into())
-                .spawn(move || body(&shared, &stop, &id))
-                .ok()
-        };
-        let threads = [
-            spawn("audio-capture", capture_thread, capture_device_id),
-            spawn("audio-render", render_thread, String::new()),
-        ]
-        .into_iter()
-        .flatten()
-        .collect::<Vec<_>>();
-
-        if threads.len() < 2 {
+        let mut worker = Worker::new(STOP_TIMEOUT);
+        let capture_shared = Arc::clone(&shared);
+        let render_shared = Arc::clone(&shared);
+        let capture_started = worker.spawn("audio-capture", move |stop| {
+            capture_thread(&capture_shared, stop, &capture_device_id);
+        });
+        let render_started = worker.spawn("audio-render", move |stop| {
+            render_thread(&render_shared, stop, "");
+        });
+        if !(capture_started && render_started) {
             shared.set_status(AudioStatus::Failed("could not spawn audio threads".into()));
-            stop.store(true, Ordering::Relaxed);
+            worker.request_stop();
         }
 
         Self {
-            stop,
             shared,
-            threads,
+            _worker: worker,
         }
     }
 
@@ -138,21 +129,6 @@ impl AudioEngine {
     /// Audio currently buffered, in milliseconds (diagnostic).
     pub fn buffered_ms(&self) -> u32 {
         (self.shared.ring().frames() as u64 * 1000 / u64::from(SAMPLE_RATE)) as u32
-    }
-}
-
-impl Drop for AudioEngine {
-    fn drop(&mut self) {
-        self.stop.store(true, Ordering::Relaxed);
-        let deadline = Instant::now() + STOP_TIMEOUT;
-        for thread in self.threads.drain(..) {
-            while !thread.is_finished() && Instant::now() < deadline {
-                thread::sleep(Duration::from_millis(5));
-            }
-            if thread.is_finished() {
-                let _ = thread.join();
-            }
-        }
     }
 }
 

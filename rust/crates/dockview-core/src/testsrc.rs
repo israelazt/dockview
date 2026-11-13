@@ -5,10 +5,14 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::thread::{self, JoinHandle};
+use std::thread;
 use std::time::{Duration, Instant};
 
 use crate::frame::{Frame, FrameSlot, PixelFormat};
+use crate::worker::Worker;
+
+/// How long dropping the source waits for its thread.
+const STOP_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// Bar colours, left to right (white, yellow, cyan, green, magenta, red, blue, black).
 const BARS: [(u8, u8, u8); 8] = [
@@ -96,30 +100,16 @@ pub fn overlay_stripe(frame: &mut Frame, tick: u64) {
 
 /// Background thread that publishes the test pattern at a fixed frame rate.
 pub struct TestSource {
-    stop: Arc<AtomicBool>,
-    thread: Option<JoinHandle<()>>,
+    _worker: Worker,
 }
 
 impl TestSource {
     pub fn start(slot: Arc<FrameSlot>, width: u32, height: u32, fps: u32) -> Self {
-        let stop = Arc::new(AtomicBool::new(false));
-        let thread = {
-            let stop = Arc::clone(&stop);
-            thread::Builder::new()
-                .name("test-source".into())
-                .spawn(move || run(&slot, width, height, fps, &stop))
-                .ok()
-        };
-        Self { stop, thread }
-    }
-}
-
-impl Drop for TestSource {
-    fn drop(&mut self) {
-        self.stop.store(true, Ordering::Relaxed);
-        if let Some(thread) = self.thread.take() {
-            let _ = thread.join();
-        }
+        let mut worker = Worker::new(STOP_TIMEOUT);
+        worker.spawn("test-source", move |stop| {
+            run(&slot, width, height, fps, stop);
+        });
+        Self { _worker: worker }
     }
 }
 

@@ -14,7 +14,7 @@
 use std::mem::ManuallyDrop;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use std::thread::{self, JoinHandle};
+use std::thread;
 use std::time::{Duration, Instant};
 
 use windows::core::{Interface, BOOL};
@@ -43,6 +43,7 @@ use windows::Win32::Media::{timeBeginPeriod, timeEndPeriod};
 
 use crate::frame::{Frame, FrameSlot, PixelFormat};
 use crate::screen::fit_in;
+use crate::worker::{StatusCell, Worker};
 
 pub use crate::scene::{Fit, NormRect};
 
@@ -605,10 +606,12 @@ pub enum SceneStatus {
 /// change).
 pub struct SceneCompositor {
     layers: Arc<Mutex<(Vec<Layer>, bool)>>,
-    stop: Arc<AtomicBool>,
-    status: Arc<Mutex<SceneStatus>>,
-    thread: Option<JoinHandle<()>>,
+    status: Arc<StatusCell<SceneStatus>>,
+    _worker: Worker,
 }
+
+/// How long dropping the compositor waits for its thread.
+const STOP_TIMEOUT: Duration = Duration::from_secs(3);
 
 /// How long the thread waits for the bottom layer before it looks at the
 /// others (the camera can be the only thing moving).
@@ -621,40 +624,32 @@ pub const OUTPUT_FPS: u32 = 60;
 impl SceneCompositor {
     pub fn start(layers: Vec<Layer>, out: Arc<FrameSlot>, width: u32, height: u32) -> Self {
         let layers = Arc::new(Mutex::new((layers, true)));
-        let stop = Arc::new(AtomicBool::new(false));
-        let status = Arc::new(Mutex::new(SceneStatus::Starting));
-        let thread = {
-            let (layers, stop, status) =
-                (Arc::clone(&layers), Arc::clone(&stop), Arc::clone(&status));
-            thread::Builder::new()
-                .name("scene-compositor".into())
-                .spawn(move || {
-                    // SAFETY: plain timer-resolution requests, undone below.
-                    unsafe {
-                        timeBeginPeriod(1);
-                    }
-                    let result = run(&layers, &out, width, height, &stop, &status);
-                    // SAFETY: matches the call above.
-                    unsafe {
-                        timeEndPeriod(1);
-                    }
-                    if let Err(e) = result {
-                        set_status(&status, SceneStatus::Failed(e.message()));
-                    }
-                })
-                .ok()
-        };
-        if thread.is_none() {
-            set_status(
-                &status,
-                SceneStatus::Failed("could not start the compositor thread".into()),
-            );
+        let status = Arc::new(StatusCell::new(SceneStatus::Starting));
+        let mut worker = Worker::new(STOP_TIMEOUT);
+        let (thread_layers, thread_status) = (Arc::clone(&layers), Arc::clone(&status));
+        let started = worker.spawn("scene-compositor", move |stop| {
+            // SAFETY: plain timer-resolution requests, undone below.
+            unsafe {
+                timeBeginPeriod(1);
+            }
+            let result = run(&thread_layers, &out, width, height, stop, &thread_status);
+            // SAFETY: matches the call above.
+            unsafe {
+                timeEndPeriod(1);
+            }
+            if let Err(e) = result {
+                thread_status.set(SceneStatus::Failed(e.message()));
+            }
+        });
+        if !started {
+            status.set(SceneStatus::Failed(
+                "could not start the compositor thread".into(),
+            ));
         }
         Self {
             layers,
-            stop,
             status,
-            thread,
+            _worker: worker,
         }
     }
 
@@ -664,30 +659,8 @@ impl SceneCompositor {
     }
 
     pub fn status(&self) -> SceneStatus {
-        self.status
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .clone()
+        self.status.get()
     }
-}
-
-impl Drop for SceneCompositor {
-    fn drop(&mut self) {
-        self.stop.store(true, Ordering::Relaxed);
-        if let Some(thread) = self.thread.take() {
-            let deadline = Instant::now() + Duration::from_secs(3);
-            while !thread.is_finished() && Instant::now() < deadline {
-                thread::sleep(Duration::from_millis(5));
-            }
-            if thread.is_finished() {
-                let _ = thread.join();
-            }
-        }
-    }
-}
-
-fn set_status(status: &Mutex<SceneStatus>, value: SceneStatus) {
-    *status.lock().unwrap_or_else(|e| e.into_inner()) = value;
 }
 
 fn run(
@@ -696,10 +669,10 @@ fn run(
     width: u32,
     height: u32,
     stop: &AtomicBool,
-    status: &Mutex<SceneStatus>,
+    status: &StatusCell<SceneStatus>,
 ) -> windows::core::Result<()> {
     let mut compositor = Compositor::new(width, height)?;
-    set_status(status, SceneStatus::Running);
+    status.set(SceneStatus::Running);
     let started = Instant::now();
     let mut seen: Vec<u64> = Vec::new();
     let mut last_picture = Instant::now();

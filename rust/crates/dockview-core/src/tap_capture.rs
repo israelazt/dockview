@@ -12,7 +12,6 @@
 
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
-use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 use wasapi::{initialize_mta, AudioClient, DeviceEnumerator, Direction, StreamMode, WasapiError};
@@ -20,6 +19,7 @@ use wasapi::{initialize_mta, AudioClient, DeviceEnumerator, Direction, StreamMod
 use crate::audio::{format, init_stream, AudioStatus};
 use crate::audio_sync::BYTES_PER_FRAME;
 use crate::pcm::AudioTap;
+use crate::worker::Worker;
 
 const EVENT_TIMEOUT_MS: u32 = 100;
 const STOP_TIMEOUT: Duration = Duration::from_secs(2);
@@ -53,43 +53,36 @@ impl Shared {
 /// Listens to a [`CaptureSource`] while it is alive. Dropping it releases the
 /// device.
 pub struct TapCapture {
-    stop: Arc<AtomicBool>,
     shared: Arc<Shared>,
-    thread: Option<JoinHandle<()>>,
+    _worker: Worker,
 }
 
 impl TapCapture {
     /// Starts listening to `source`. Blocks go to `tap`.
     pub fn start(source: CaptureSource, gain: f32, tap: Arc<AudioTap>) -> Self {
-        let stop = Arc::new(AtomicBool::new(false));
         let shared = Arc::new(Shared {
             status: Mutex::new(AudioStatus::Starting),
             gain: AtomicU32::new(clamp_gain(gain).to_bits()),
             level: AtomicU32::new(0.0f32.to_bits()),
             tap,
         });
-        let thread = {
-            let (shared, stop) = (Arc::clone(&shared), Arc::clone(&stop));
-            thread::Builder::new()
-                .name("audio-tap-capture".into())
-                .spawn(move || {
-                    if let Err(e) = capture_loop(&shared, &stop, &source) {
-                        if !stop.load(Ordering::Relaxed) {
-                            shared.set_status(AudioStatus::Disconnected(e.to_string()));
-                        }
-                    }
-                })
-                .ok()
-        };
-        if thread.is_none() {
+        let mut worker = Worker::new(STOP_TIMEOUT);
+        let thread_shared = Arc::clone(&shared);
+        let started = worker.spawn("audio-tap-capture", move |stop| {
+            if let Err(e) = capture_loop(&thread_shared, stop, &source) {
+                if !stop.load(Ordering::Relaxed) {
+                    thread_shared.set_status(AudioStatus::Disconnected(e.to_string()));
+                }
+            }
+        });
+        if !started {
             shared.set_status(AudioStatus::Failed(
                 "could not start the audio capture".into(),
             ));
         }
         Self {
-            stop,
             shared,
-            thread,
+            _worker: worker,
         }
     }
 
@@ -110,21 +103,6 @@ impl TapCapture {
         self.shared
             .gain
             .store(clamp_gain(gain).to_bits(), Ordering::Relaxed);
-    }
-}
-
-impl Drop for TapCapture {
-    fn drop(&mut self) {
-        self.stop.store(true, Ordering::Relaxed);
-        if let Some(thread) = self.thread.take() {
-            let deadline = Instant::now() + STOP_TIMEOUT;
-            while !thread.is_finished() && Instant::now() < deadline {
-                thread::sleep(Duration::from_millis(5));
-            }
-            if thread.is_finished() {
-                let _ = thread.join();
-            }
-        }
     }
 }
 
