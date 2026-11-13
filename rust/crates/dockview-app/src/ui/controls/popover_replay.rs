@@ -131,7 +131,7 @@ impl Controls {
             let (cx, cy) = button.center();
             ui.icon(icon, cx, cy, 15.0 * (1.0 - 0.1 * press), t.text);
         }
-        let value = crate::i18n::duration_label(m.replay.keep_seconds);
+        let value = dockview_domain::i18n::duration_label(m.replay.keep_seconds);
         let value_style = TextStyle::new(15.0, Weight::Medium).tabular();
         let value_w = ui.measure(&value, value_style).0;
         let value_h = ui.measure("Ag", value_style).1;
@@ -187,7 +187,7 @@ impl Controls {
         y += 4.0;
         let per_hour = tr(m.lang, Key::QualityHint).replace(
             "{size}",
-            &crate::i18n::size_label(recording_bytes_per_hour(r.bitrate_mbps)),
+            &dockview_domain::i18n::size_label(recording_bytes_per_hour(r.bitrate_mbps)),
         );
         ui.text(&per_hour, pane.x, y, HINT, t.text_dim);
         y + 16.0 + 14.0
@@ -244,8 +244,8 @@ impl Controls {
         let enabled = r.is_on();
         let (fill, label_color) = if enabled {
             let on_accent = match t.appearance {
-                crate::theme::Appearance::Dark => Color::hex(0x04141F, 1.0),
-                crate::theme::Appearance::Light => Color::hex(0xFFFFFF, 1.0),
+                dockview_domain::theme::Appearance::Dark => Color::hex(0x04141F, 1.0),
+                dockview_domain::theme::Appearance::Light => Color::hex(0xFFFFFF, 1.0),
             };
             (t.accent, on_accent)
         } else {
@@ -328,7 +328,7 @@ fn replay_layout(ui: &mut Ui, m: &Model) -> ReplayLayout {
         ReplayState::Recording => format!(
             "{} · {} · {:.0} MB",
             tr(lang, Key::ReplayRecording),
-            crate::i18n::duration_label(r.buffered_seconds.floor() as u32),
+            dockview_domain::i18n::duration_label(r.buffered_seconds.floor() as u32),
             r.buffered_mb
         ),
     };
@@ -340,7 +340,7 @@ fn replay_layout(ui: &mut Ui, m: &Model) -> ReplayLayout {
     };
     let hint = format!(
         "{} {}",
-        tr(lang, memory_key).replace("{size}", &crate::i18n::size_label(r.memory_bytes)),
+        tr(lang, memory_key).replace("{size}", &dockview_domain::i18n::size_label(r.memory_bytes)),
         tr(lang, Key::ReplayHint).replace("{hotkey}", &r.hotkey)
     );
     let hint_lines = wrap_text(ui, &hint, HINT, inner_w);

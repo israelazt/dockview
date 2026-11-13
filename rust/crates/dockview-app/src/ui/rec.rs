@@ -4,7 +4,7 @@
 
 use super::text::Weight;
 use super::{Rect, TextStyle, Ui};
-use crate::theme::Theme;
+use dockview_domain::theme::Theme;
 
 const MARGIN: f32 = 18.0;
 const HEIGHT: f32 = 34.0;

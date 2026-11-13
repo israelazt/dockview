@@ -8,7 +8,7 @@ pub enum Lang {
     Es,
 }
 
-pub use dockview_domain::settings::LangMode;
+pub use crate::settings::LangMode;
 
 /// Resolving the stored preference against the detected system language.
 pub trait LangModeExt {
@@ -36,14 +36,6 @@ impl Lang {
         } else {
             Self::En
         }
-    }
-
-    /// The language of the Windows display (UI) language.
-    #[cfg(windows)]
-    pub fn detect_system() -> Self {
-        use windows::Win32::Globalization::GetUserDefaultUILanguage;
-        // SAFETY: simple query with no arguments.
-        Self::from_langid(unsafe { GetUserDefaultUILanguage() })
     }
 }
 

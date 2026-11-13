@@ -8,10 +8,10 @@ use dockview_domain::device_names;
 use dockview_domain::frame::FrameSlot;
 use dockview_domain::scene::{Scene, SourceRef, MAX_SCENE_LAYERS};
 
-use crate::i18n;
-use crate::i18n::LangModeExt;
-use crate::ui::controls::{LayerView, SceneAction, ScenesView};
 use crate::ui::toast::ToastKind;
+use dockview_domain::i18n;
+use dockview_domain::i18n::LangModeExt;
+use dockview_domain::view::{LayerView, SceneAction, ScenesView};
 
 use super::scene_runtime::Overlay;
 use super::App;

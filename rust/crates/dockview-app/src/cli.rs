@@ -12,8 +12,8 @@
 
 use std::path::PathBuf;
 
-use crate::i18n::LangMode;
-use crate::theme::ThemeMode;
+use dockview_domain::i18n::LangMode;
+use dockview_domain::theme::ThemeMode;
 
 /// A source to draw in the corner of the picture.
 #[derive(Debug, Clone, PartialEq)]

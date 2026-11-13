@@ -3,9 +3,9 @@
 use super::popover_settings::*;
 use super::tooltip::*;
 use super::*;
-use crate::i18n::Lang;
-use crate::theme::{Theme, ThemeMode};
+use dockview_domain::i18n::Lang;
 use dockview_domain::settings::{LangMode, RecordingQuality, RenderPreset, VideoModePref};
+use dockview_domain::theme::{Theme, ThemeMode};
 
 fn model() -> Model {
     Model {

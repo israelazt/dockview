@@ -158,8 +158,8 @@ impl App {
             .map_or_else(clips::default_folder, std::path::PathBuf::from)
     }
 
-    pub(super) fn replay_view(&self) -> ui::controls::ReplayView {
-        use ui::controls::ReplayView;
+    pub(super) fn replay_view(&self) -> dockview_domain::view::ReplayView {
+        use dockview_domain::view::ReplayView;
         let mut view = ReplayView::off(hotkey::LABEL);
         view.record_hotkey = hotkey::RECORD_LABEL.to_owned();
         view.keep_seconds = self.settings.replay_seconds;

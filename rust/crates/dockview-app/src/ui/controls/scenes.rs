@@ -8,7 +8,8 @@ use super::{
     fit_text, Controls, Hit, Model, PopoverKind, Rect, Ui, BODY, ICON_CHECK, LABEL_HEIGHT,
     POPOVER_GAP, POPOVER_PAD, POPOVER_WIDTH, ROW_HEIGHT, SECTION, SECTION_GAP,
 };
-use crate::i18n::{tr, Key};
+use dockview_domain::i18n::{tr, Key};
+use dockview_domain::view::SceneAction;
 
 const ICON_SCENES: char = '\u{e52a}';
 const ICON_PLUS: char = '\u{e13d}';
@@ -52,41 +53,6 @@ impl SceneHit {
     pub fn in_popover(self) -> bool {
         self != Self::Button
     }
-}
-
-/// A change asked for in the scenes popover.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SceneAction {
-    /// Use this scene, or with `None` the plain source.
-    Activate(Option<usize>),
-    /// Make a scene out of the current source and use it.
-    New,
-    Delete(usize),
-    /// Show or hide a layer of the active scene.
-    ToggleLayer(usize),
-    RemoveLayer(usize),
-    /// Add the capture card, monitor or window at this position of its list.
-    AddCapture(usize),
-    AddMonitor(usize),
-    AddWindow(usize),
-}
-
-/// One layer as the popover shows it.
-#[derive(Debug, Clone, PartialEq)]
-pub struct LayerView {
-    pub name: String,
-    pub visible: bool,
-}
-
-/// The scenes and the layers of the one in use.
-#[derive(Debug, Clone, PartialEq, Default)]
-pub struct ScenesView {
-    pub names: Vec<String>,
-    pub active: Option<usize>,
-    /// The first one is the base.
-    pub layers: Vec<LayerView>,
-    /// Whether another layer fits in the active scene.
-    pub can_add: bool,
 }
 
 /// The text of a tooltip in the popover.
@@ -458,6 +424,8 @@ impl Controls {
 mod tests {
     use super::super::tests::Rig;
     use super::super::Action;
+    use dockview_domain::view::{LayerView, ScenesView};
+
     use super::*;
     use dockview_domain::scene::MAX_SCENE_LAYERS;
 
@@ -685,7 +653,7 @@ mod tests {
 
     #[test]
     fn tips_exist_in_both_languages_and_follow_the_layer() {
-        use crate::i18n::Lang;
+        use dockview_domain::i18n::Lang;
         let mut m = Rig::new(true).model;
         m.scenes = view(Some(0));
         assert_eq!(tooltip_key(SceneHit::Eye(0), &m), Some(Key::TipLayerHide));

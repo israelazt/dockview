@@ -1,11 +1,11 @@
-//! What the controls display (`Model`) and what they ask for (`Action`).
+//! The view model: what the screen shows (`Model`) and what the user asks for
+//! (`Action`). The application builds the model; the interface draws it and
+//! returns actions. Neither knows the other.
 
-use dockview_domain::settings::{LangMode, RecordingQuality, RenderPreset, VideoModePref};
+use crate::settings::{LangMode, RecordingQuality, RenderPreset, VideoModePref};
 
 use crate::i18n::Lang;
 use crate::theme::{Theme, ThemeMode};
-
-use super::scenes::{SceneAction, ScenesView};
 
 /// How healthy the video source is, for the status dot.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -216,4 +216,39 @@ pub enum Action {
     SetQuality(RecordingQuality),
     /// A change in the scenes popover.
     Scene(SceneAction),
+}
+
+/// A change asked for in the scenes popover.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SceneAction {
+    /// Use this scene, or with `None` the plain source.
+    Activate(Option<usize>),
+    /// Make a scene out of the current source and use it.
+    New,
+    Delete(usize),
+    /// Show or hide a layer of the active scene.
+    ToggleLayer(usize),
+    RemoveLayer(usize),
+    /// Add the capture card, monitor or window at this position of its list.
+    AddCapture(usize),
+    AddMonitor(usize),
+    AddWindow(usize),
+}
+
+/// One layer as the popover shows it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LayerView {
+    pub name: String,
+    pub visible: bool,
+}
+
+/// The scenes and the layers of the one in use.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ScenesView {
+    pub names: Vec<String>,
+    pub active: Option<usize>,
+    /// The first one is the base.
+    pub layers: Vec<LayerView>,
+    /// Whether another layer fits in the active scene.
+    pub can_add: bool,
 }

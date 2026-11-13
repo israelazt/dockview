@@ -2,7 +2,7 @@
 
 use dockview_domain::settings::{LangMode, RenderPreset, VideoModePref};
 
-use crate::theme::ThemeMode;
+use dockview_domain::theme::ThemeMode;
 
 use super::super::text::Weight;
 use super::super::TextStyle;

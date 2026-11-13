@@ -9,7 +9,7 @@ pub mod stats;
 pub mod text;
 pub mod toast;
 
-use crate::theme::Color;
+use dockview_domain::theme::Color;
 use text::{Face, TextSystem, Weight};
 
 /// One corner of a UI quad. Physical pixels.
@@ -296,7 +296,7 @@ impl Default for Ui {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::theme::Theme;
+    use dockview_domain::theme::Theme;
 
     fn ui() -> Ui {
         let mut ui = Ui::new();

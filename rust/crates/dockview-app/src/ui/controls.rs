@@ -12,7 +12,6 @@ use dockview_domain::settings::{recording_bytes_per_hour, RecordingQuality, MAX_
 mod consts;
 mod interaction;
 mod math;
-mod model;
 mod pill;
 mod popover_replay;
 mod popover_settings;
@@ -25,18 +24,17 @@ mod widgets;
 
 use consts::*;
 pub use consts::{IDLE_HIDE_SECS, SYNC_STEP_MS, WHEEL_VOLUME_STEP};
+use dockview_domain::view::*;
 use math::*;
-pub use model::*;
 use scenes::SceneHit;
-pub use scenes::{LayerView, SceneAction, ScenesView};
 use widgets::*;
 
 use super::input::Pointer;
 use super::stats::wrap_text;
 use super::text::Weight;
 use super::{Rect, TextStyle, Ui};
-use crate::i18n::{tr, Key};
-use crate::theme::{Color, Theme};
+use dockview_domain::i18n::{tr, Key};
+use dockview_domain::theme::{Color, Theme};
 
 /// Identifies an interactive (or occluding) region.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

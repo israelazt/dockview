@@ -133,7 +133,10 @@ pub(super) fn tooltip_for(hit: Hit, m: &Model) -> Option<String> {
     };
     Some(
         tr(m.lang, key)
-            .replace("{seconds}", &crate::i18n::duration_label(r.keep_seconds))
+            .replace(
+                "{seconds}",
+                &dockview_domain::i18n::duration_label(r.keep_seconds),
+            )
             .replace("{hotkey}", hotkey),
     )
 }

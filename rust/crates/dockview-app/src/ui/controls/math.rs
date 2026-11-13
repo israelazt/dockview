@@ -1,6 +1,6 @@
 //! Small pure helpers for fades, easing and colour.
 
-use crate::theme::Color;
+use dockview_domain::theme::Color;
 
 use super::consts::FADE_SECS;
 

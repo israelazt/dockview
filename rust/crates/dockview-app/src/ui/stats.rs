@@ -5,9 +5,9 @@ use dockview_domain::diagnostics::Finding;
 
 use super::text::Weight;
 use super::{Rect, TextStyle, Ui};
-use crate::i18n::{tr, Key, Lang};
 use crate::telemetry::Stats;
-use crate::theme::Theme;
+use dockview_domain::i18n::{tr, Key, Lang};
+use dockview_domain::theme::Theme;
 
 const WIDTH: f32 = 372.0;
 const MARGIN: f32 = 16.0;
@@ -317,7 +317,7 @@ fn fit(ui: &mut Ui, text: &str, style: TextStyle, max_w: f32) -> String {
     "…".to_owned()
 }
 
-fn tone_color(finding: Finding, theme: &Theme) -> crate::theme::Color {
+fn tone_color(finding: Finding, theme: &Theme) -> dockview_domain::theme::Color {
     match finding {
         Finding::Healthy => theme.live,
         Finding::NoVideo | Finding::VideoLost | Finding::AudioLost => theme.error,

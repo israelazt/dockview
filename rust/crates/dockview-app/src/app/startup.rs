@@ -51,7 +51,7 @@ impl App {
             ui_gpu: None,
             ui_scale: 1.0,
             system_appearance: Appearance::Dark,
-            system_lang: Lang::detect_system(),
+            system_lang: dockview_platform::system_lang::detect_system_lang(),
             exit_requested: false,
             controls: Controls::new(preview),
             pointer: Pointer::default(),

@@ -12,8 +12,8 @@ use dockview_domain::diagnostics::VideoState;
 use dockview_platform::capture::CaptureStatus;
 use dockview_platform::screen::{MonitorInfo, ScreenStatus, WindowInfo};
 
-use crate::i18n::{self, Lang};
-use crate::ui::controls::{CurrentSource, StatusKind};
+use dockview_domain::i18n::{self, Lang};
+use dockview_domain::view::{CurrentSource, StatusKind};
 
 /// Delay before trying to reopen a capture device that went away.
 pub const RECONNECT_DELAY: Duration = Duration::from_secs(2);

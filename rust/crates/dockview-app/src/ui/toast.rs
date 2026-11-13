@@ -2,7 +2,7 @@
 
 use super::text::Weight;
 use super::{Rect, TextStyle, Ui};
-use crate::theme::Theme;
+use dockview_domain::theme::Theme;
 
 /// How long a message stays, in seconds.
 pub const LIFETIME_SECS: f32 = 4.0;
