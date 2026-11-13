@@ -63,8 +63,8 @@ use crate::keys::{self, KeyCommand};
 use crate::render::{self, Filter, Renderer};
 use crate::replay_service::{RecordToggle, ReplayService};
 use crate::sources::{
-    find_window, monitor_label, status_kind, video_state_of_capture, video_state_of_screen,
-    AudioRoute, Reconnect, SourceKind,
+    find_window, monitor_label, pick_audio, pick_video, startup_scene, status_kind,
+    video_state_of_capture, video_state_of_screen, AudioRoute, Reconnect, SourceKind, StartupScene,
 };
 use crate::telemetry::{Rates, Stats, Telemetry};
 use crate::theme::{Appearance, Theme, ThemeModeExt};

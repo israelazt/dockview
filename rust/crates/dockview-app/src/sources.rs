@@ -8,6 +8,7 @@
 use std::time::{Duration, Instant};
 
 use dockview_core::capture::CaptureStatus;
+use dockview_core::device::{AudioDevice, VideoDevice};
 use dockview_core::diagnostics::VideoState;
 use dockview_core::screen::{MonitorInfo, ScreenStatus, WindowInfo};
 
@@ -140,6 +141,70 @@ pub fn video_state_of_screen(status: &ScreenStatus) -> VideoState {
         ScreenStatus::Running { .. } => VideoState::Running,
         ScreenStatus::Starting => VideoState::Connecting,
         ScreenStatus::Ended(_) | ScreenStatus::Failed(_) => VideoState::Lost,
+    }
+}
+
+/// Which video device to start with: the one the command line asked for by
+/// name (any part of it, ignoring case), else the one used last time, else the
+/// first.
+pub fn pick_video(
+    devices: &[VideoDevice],
+    wanted_name: Option<&str>,
+    last_link: Option<&str>,
+) -> Option<usize> {
+    let by_name = wanted_name.map(str::to_lowercase).and_then(|wanted| {
+        devices
+            .iter()
+            .position(|d| d.friendly_name.to_lowercase().contains(&wanted))
+    });
+    by_name
+        .or_else(|| {
+            devices
+                .iter()
+                .position(|d| last_link == Some(d.symbolic_link.as_str()))
+        })
+        .or_else(|| (!devices.is_empty()).then_some(0))
+}
+
+/// Which audio device to start with: the one used last time, else the one that
+/// belongs to the video device (`matched`), else the first.
+pub fn pick_audio(
+    devices: &[AudioDevice],
+    last_id: Option<&str>,
+    matched: Option<usize>,
+) -> Option<usize> {
+    devices
+        .iter()
+        .position(|d| last_id == Some(d.device_id.as_str()))
+        .or(matched.filter(|&i| i < devices.len()))
+        .or_else(|| (!devices.is_empty()).then_some(0))
+}
+
+/// Which scene the app starts in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StartupScene {
+    /// The corner picture asked for on the command line (`--pip`).
+    FromCommandLine,
+    /// The scene used last time (its position in the saved list).
+    Saved(usize),
+    /// No scene: the plain main source.
+    None,
+}
+
+/// The command line wins; otherwise the saved scene comes back, unless the
+/// command line chose a different main source or this is the UI preview.
+pub fn startup_scene(
+    pip_asked: bool,
+    chose_main_source: bool,
+    ui_preview: bool,
+    saved: Option<usize>,
+) -> StartupScene {
+    if pip_asked {
+        StartupScene::FromCommandLine
+    } else if chose_main_source || ui_preview {
+        StartupScene::None
+    } else {
+        saved.map_or(StartupScene::None, StartupScene::Saved)
     }
 }
 
@@ -301,5 +366,59 @@ mod tests {
         assert_eq!(status_kind(VideoState::Connecting), StatusKind::Connecting);
         assert_eq!(status_kind(VideoState::Lost), StatusKind::Problem);
         assert_eq!(status_kind(VideoState::NoDevice), StatusKind::Idle);
+    }
+
+    fn video(name: &str, link: &str) -> VideoDevice {
+        VideoDevice {
+            friendly_name: name.into(),
+            symbolic_link: link.into(),
+        }
+    }
+
+    fn audio(id: &str) -> AudioDevice {
+        AudioDevice {
+            friendly_name: id.to_uppercase(),
+            device_id: id.into(),
+        }
+    }
+
+    #[test]
+    fn the_video_device_is_picked_by_name_then_last_used_then_first() {
+        let devices = [video("UGREEN 25173", "a"), video("Integrated Camera", "b")];
+        // The command line wins, matching part of the name in any case.
+        assert_eq!(pick_video(&devices, Some("camera"), Some("a")), Some(1));
+        // A name that matches nothing falls through to the last one used.
+        assert_eq!(pick_video(&devices, Some("nothing"), Some("b")), Some(1));
+        assert_eq!(pick_video(&devices, None, Some("b")), Some(1));
+        // A last device that is gone falls through to the first.
+        assert_eq!(pick_video(&devices, None, Some("gone")), Some(0));
+        assert_eq!(pick_video(&devices, None, None), Some(0));
+        assert_eq!(pick_video(&[], Some("x"), Some("y")), None);
+    }
+
+    #[test]
+    fn the_audio_device_is_last_used_then_the_one_matching_the_video_then_first() {
+        let devices = [audio("a"), audio("b"), audio("c")];
+        assert_eq!(pick_audio(&devices, Some("c"), Some(1)), Some(2));
+        assert_eq!(pick_audio(&devices, Some("gone"), Some(1)), Some(1));
+        assert_eq!(pick_audio(&devices, None, None), Some(0));
+        assert_eq!(pick_audio(&[], Some("a"), Some(0)), None);
+        // A matched index past the end of the list is ignored.
+        assert_eq!(pick_audio(&devices, None, Some(9)), Some(0));
+    }
+
+    #[test]
+    fn the_startup_scene_follows_the_command_line_then_the_saved_one() {
+        let scene = startup_scene;
+        assert_eq!(
+            scene(true, true, true, Some(2)),
+            StartupScene::FromCommandLine
+        );
+        assert_eq!(scene(false, false, false, Some(2)), StartupScene::Saved(2));
+        assert_eq!(scene(false, false, false, None), StartupScene::None);
+        // Choosing another main source on the command line skips the saved scene.
+        assert_eq!(scene(false, true, false, Some(2)), StartupScene::None);
+        // So does the preview, which must look the same on every machine.
+        assert_eq!(scene(false, false, true, Some(2)), StartupScene::None);
     }
 }

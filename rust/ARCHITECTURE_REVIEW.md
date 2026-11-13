@@ -170,6 +170,9 @@ Comprobado con 386 tests y con la app real (capturadora + pantalla en la esquina
 - **Verificación píxel a píxel:** las 8 capturas comparables (pastilla, ajustes, replay y escenas, en oscuro/inglés y claro/español) son idénticas antes y después. Las herramientas están en `rust/tools/` (`ui_shots.ps1` y `ui_compare.py`) para cualquier cambio futuro de interfaz. Se ignoran el rótulo de resolución/fps de la pastilla (se mide en vivo) y las vistas de fuentes y estadísticas (muestran las ventanas reales y números en vivo).
 - Para que las capturas fueran repetibles, en `--ui-preview` el patrón de prueba genera 1 fotograma por segundo (solo afecta a esa vista previa).
 
+### Arranque de la app (2026-11-12)
+`App::new` dejó de decidir: `pick_video`, `pick_audio` (último usado, el que empareja con el vídeo, o el primero; ignora un índice fuera de rango) y `startup_scene` (la de la línea de comandos, la guardada o ninguna) son funciones puras con 3 tests en `sources.rs`. El final del arranque, que estaba escrito dos veces (con y sin patrón de prueba), es `finish_startup`. Comprobado con la app real arrancando sin argumentos (restaura el último dispositivo) y con `--video C7`.
+
 ## Lo que no conviene tocar
 - La separación en dos crates y el sentido de las dependencias.
 - `Model` y `Action` como frontera entre la lógica y la interfaz: funcionan bien.

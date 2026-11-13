@@ -90,67 +90,55 @@ impl App {
             }
             app.open_requested_popover();
             app.start_cli_scene();
-            app.start_replay_services();
-            if app.cli.mic {
-                app.set_mic(true);
-            }
-            if app.cli.record {
-                app.toggle_record();
-            }
+            app.finish_startup();
             return app;
         }
 
         // Restore the last devices, else the first video device and the audio
         // device whose name matches it.
-        let by_name = app
-            .cli
-            .video
-            .as_deref()
-            .map(str::to_lowercase)
-            .and_then(|wanted| {
-                app.video_devices
-                    .iter()
-                    .position(|d| d.friendly_name.to_lowercase().contains(&wanted))
-            });
-        let video = by_name
-            .or_else(|| {
-                app.video_devices.iter().position(|d| {
-                    app.settings.last_video_device_symbolic_link.as_deref()
-                        == Some(&d.symbolic_link)
-                })
-            })
-            .or_else(|| next_index(None, app.video_devices.len()));
-        let audio = app
-            .audio_devices
-            .iter()
-            .position(|d| app.settings.last_audio_device_id.as_deref() == Some(&d.device_id))
-            .or_else(|| app.match_audio(video))
-            .or_else(|| next_index(None, app.audio_devices.len()));
+        let video = pick_video(
+            &app.video_devices,
+            app.cli.video.as_deref(),
+            app.settings.last_video_device_symbolic_link.as_deref(),
+        );
+        let matched_audio = app.match_audio(video);
+        let audio = pick_audio(
+            &app.audio_devices,
+            app.settings.last_audio_device_id.as_deref(),
+            matched_audio,
+        );
 
         app.select_video(video);
         app.select_audio(audio);
         app.refresh_sources();
         app.restore_screen();
-        // A scene from the command line, or else the one used last time (unless
-        // the command line chose a different main source).
         let chose_main =
             app.cli.video.is_some() || app.cli.screen.is_some() || app.cli.capture_window.is_some();
-        if app.cli.pip.is_some() {
-            app.start_cli_scene();
-        } else if !chose_main && !app.cli.ui_preview {
-            if let Some(index) = app.settings.active_scene {
-                app.activate_scene(Some(index));
-            }
+        match startup_scene(
+            app.cli.pip.is_some(),
+            chose_main,
+            app.cli.ui_preview,
+            app.settings.active_scene,
+        ) {
+            StartupScene::FromCommandLine => app.start_cli_scene(),
+            StartupScene::Saved(index) => app.activate_scene(Some(index)),
+            StartupScene::None => {}
         }
         app.open_requested_popover();
-        app.start_replay_services();
-        if app.cli.mic {
-            app.set_mic(true);
-        }
-        if app.cli.record {
-            app.toggle_record();
-        }
+        app.finish_startup();
         app
+    }
+
+    /// The last steps of starting: the hotkeys and the replay buffer, then the
+    /// microphone and the recording if the command line asked for them.
+    fn finish_startup(&mut self) {
+        self.start_replay_services();
+        if self.cli.mic {
+            self.set_mic(true);
+        }
+        if self.cli.record {
+            self.toggle_record();
+        }
     }
 
     /// Opens the popover asked for on the command line (for screenshots).
