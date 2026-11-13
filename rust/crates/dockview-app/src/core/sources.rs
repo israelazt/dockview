@@ -93,10 +93,13 @@ impl Core {
             }
             return;
         }
-        let wanted = self
-            .cli
-            .screen
-            .or_else(|| self.settings.last_monitor.map(|i| i as usize));
+        let wanted = self.cli.screen.or_else(|| {
+            monitor_to_restore(
+                &self.monitors,
+                self.settings.last_monitor_name.as_deref(),
+                self.settings.last_monitor,
+            )
+        });
         if let Some(monitor) = wanted.and_then(|i| self.monitors.get(i)) {
             let handle = monitor.handle;
             self.start_screen(CaptureTarget::Monitor(handle), SourceKind::Monitor(handle));
@@ -138,6 +141,7 @@ impl Core {
         if from_screen {
             self.source_kind = SourceKind::Capture;
             self.settings.last_monitor = None;
+            self.settings.last_monitor_name = None;
             self.set_capture_exclusion(self.wants_exclusion());
         }
         self.video_size = (0, 0);

@@ -45,6 +45,8 @@ pub enum AppEvent {
     AudioLost,
     /// The capture card's sound is playing again.
     AudioBack,
+    /// The settings could not be written to disk.
+    SettingsNotSaved,
 }
 
 /// What to tell the user when a recording (or one of its files) ends, if

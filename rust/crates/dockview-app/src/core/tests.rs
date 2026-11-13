@@ -32,11 +32,11 @@ fn toggling_the_studio_mode_flips_it_and_saves_it() {
 
     rig.core.apply(Action::ToggleStudio);
     assert!(rig.core.model().studio);
-    assert!(rig.saved().expect("saved").studio_open);
+    assert!(rig.saved_soon().expect("saved").studio_open);
 
     rig.core.apply(Action::ToggleStudio);
     assert!(!rig.core.model().studio);
-    assert!(!rig.saved().expect("saved").studio_open);
+    assert!(!rig.saved_soon().expect("saved").studio_open);
 }
 
 #[test]
@@ -130,7 +130,7 @@ fn the_volume_reaches_the_speakers_and_is_saved() {
 
     let playback = rig.sources.lock().unwrap().last_playback();
     assert_eq!(playback.lock().unwrap().volume, 0.3);
-    assert_eq!(rig.saved().expect("saved").volume, 0.3);
+    assert_eq!(rig.saved_soon().expect("saved").volume, 0.3);
 }
 
 #[test]
@@ -221,7 +221,7 @@ fn full_screen_is_asked_of_the_window_and_remembered() {
     rig.core.on_key(crate::keys::KeyCommand::ToggleFullscreen);
 
     assert_eq!(rig.host.lock().unwrap().fullscreen, [true]);
-    assert!(rig.saved().expect("saved").was_fullscreen);
+    assert!(rig.saved_soon().expect("saved").was_fullscreen);
 }
 
 #[test]
@@ -261,7 +261,7 @@ fn capturing_a_monitor_listens_to_the_sound_of_the_pc() {
     let mut rig = Rig::new();
     rig.sources.lock().unwrap().monitors = vec![MonitorInfo {
         handle: 7,
-        device_name: r"\.\DISPLAY1".into(),
+        device_name: r"\\.\DISPLAY1".into(),
         width: 1920,
         height: 1080,
         primary: true,
@@ -528,4 +528,165 @@ fn an_audio_input_that_comes_back_alone_is_used_again() {
     let playback = rig.sources.lock().unwrap().last_playback();
     assert_eq!(playback.lock().unwrap().device_id, "audio:ugreen");
     assert!(rig.core.model().audio_selected.is_some());
+}
+
+// -- Saving the settings -------------------------------------------------
+
+fn attempts(rig: &Rig) -> usize {
+    rig.save_attempts.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+#[test]
+fn dragging_a_slider_is_one_or_two_writes_not_one_per_step() {
+    let mut rig = Rig::new();
+    for step in 1..=60 {
+        rig.core.apply(Action::SetVolume(step as f32 / 100.0));
+    }
+    assert_eq!(
+        attempts(&rig),
+        0,
+        "nothing is written in the middle of a drag"
+    );
+
+    rig.advance(Duration::from_millis(600));
+    assert_eq!(attempts(&rig), 1);
+    assert_eq!(rig.saved().expect("saved").volume, 0.6);
+
+    // More changes right after wait for the pause to pass.
+    rig.core.apply(Action::SetVolume(0.9));
+    rig.advance(Duration::from_millis(100));
+    assert_eq!(attempts(&rig), 1);
+    rig.advance(Duration::from_millis(500));
+    assert_eq!(attempts(&rig), 2);
+    assert_eq!(rig.saved().expect("saved").volume, 0.9);
+
+    // And nothing is written when nothing changed.
+    rig.advance(Duration::from_secs(5));
+    assert_eq!(attempts(&rig), 2);
+}
+
+#[test]
+fn closing_the_window_writes_at_once() {
+    let mut rig = Rig::new();
+    rig.core.apply(Action::SetVolume(0.3));
+    assert!(rig.saved().is_none());
+
+    rig.core.save_settings();
+    assert_eq!(rig.saved().expect("saved").volume, 0.3);
+}
+
+#[test]
+fn a_change_is_not_lost_when_the_program_ends_before_the_next_tick() {
+    let mut rig = Rig::new();
+    rig.core.apply(Action::SetVolume(0.7));
+    let store = std::sync::Arc::clone(&rig.store);
+    drop(rig);
+    assert_eq!(store.last_saved().expect("saved").volume, 0.7);
+}
+
+#[test]
+fn a_failed_write_is_told_once_and_tried_again_until_it_works() {
+    use std::sync::atomic::Ordering;
+    let mut rig = Rig::new();
+    rig.store_fails.store(true, Ordering::Relaxed);
+    rig.core.apply(Action::SetVolume(0.5));
+
+    rig.advance(Duration::from_millis(600));
+    assert_eq!(rig.core.take_events(), [AppEvent::SettingsNotSaved]);
+    for _ in 0..4 {
+        rig.advance(Duration::from_millis(600));
+    }
+    assert!(attempts(&rig) >= 4, "it keeps trying");
+    assert!(rig.core.take_events().is_empty(), "but tells the user once");
+    assert!(rig.saved().is_none());
+
+    rig.store_fails.store(false, Ordering::Relaxed);
+    rig.advance(Duration::from_millis(600));
+    assert_eq!(rig.saved().expect("saved").volume, 0.5);
+
+    // A new failure later is news again.
+    rig.store_fails.store(true, Ordering::Relaxed);
+    rig.core.apply(Action::SetVolume(0.6));
+    rig.advance(Duration::from_millis(600));
+    assert_eq!(rig.core.take_events(), [AppEvent::SettingsNotSaved]);
+}
+
+// -- The monitor that was being captured ---------------------------------
+
+fn monitor(handle: isize, name: &str) -> MonitorInfo {
+    MonitorInfo {
+        handle,
+        device_name: name.into(),
+        width: 1920,
+        height: 1080,
+        primary: handle == 1,
+    }
+}
+
+#[test]
+fn the_captured_monitor_is_remembered_by_name_and_found_again_in_another_order() {
+    use dockview_domain::sources::CaptureTarget;
+    let mut rig = Rig::new();
+    rig.sources.lock().unwrap().monitors =
+        vec![monitor(1, r"\\.\DISPLAY1"), monitor(2, r"\\.\DISPLAY2")];
+    rig.core.refresh_sources();
+    rig.core.apply(Action::SelectMonitor(1));
+    let saved = rig.saved_soon().expect("saved");
+    assert_eq!(saved.last_monitor_name.as_deref(), Some(r"\\.\DISPLAY2"));
+
+    // Next run: Windows lists the screens in the other order.
+    let next = Rig::builder()
+        .settings(saved)
+        .monitors(vec![
+            monitor(2, r"\\.\DISPLAY2"),
+            monitor(1, r"\\.\DISPLAY1"),
+        ])
+        .build();
+    let sources = next.sources.lock().unwrap();
+    assert_eq!(
+        sources.last_screen().lock().unwrap().target,
+        CaptureTarget::Monitor(2)
+    );
+}
+
+#[test]
+fn a_monitor_that_is_no_longer_there_leaves_the_card_on_screen() {
+    let saved = AppSettings {
+        last_monitor_name: Some(r"\\.\DISPLAY2".into()),
+        ..AppSettings::default()
+    };
+    let rig = Rig::builder()
+        .video(&[("UGREEN 25173", "link:ugreen")])
+        .audio(&[("HDMI (UGREEN 25173)", "audio:ugreen")])
+        .settings(saved)
+        .monitors(vec![monitor(1, r"\\.\DISPLAY1")])
+        .build();
+    assert!(rig.sources.lock().unwrap().screens.is_empty());
+    assert_eq!(rig.sources.lock().unwrap().captures.len(), 1);
+}
+
+#[test]
+fn a_file_from_before_monitor_names_still_restores_by_position() {
+    use dockview_domain::sources::CaptureTarget;
+    let old = AppSettings {
+        last_monitor: Some(1),
+        ..AppSettings::default()
+    };
+    let rig = Rig::builder()
+        .settings(old)
+        .monitors(vec![
+            monitor(1, r"\\.\DISPLAY1"),
+            monitor(2, r"\\.\DISPLAY2"),
+        ])
+        .build();
+    assert_eq!(
+        rig.sources
+            .lock()
+            .unwrap()
+            .last_screen()
+            .lock()
+            .unwrap()
+            .target,
+        CaptureTarget::Monitor(2)
+    );
 }

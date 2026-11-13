@@ -96,12 +96,18 @@ Pruebas manuales pendientes de 2-9 (anotar el resultado en `CAPTURE_PLAN.md`):
 
 | Tarea | Qué | Listo cuando |
 |---|---|---|
-| 3-1 | `platform/settings_store.rs`: guardado atómico (escribir `settings.json.tmp`, sincronizar, renombrar encima) | Tests: contenido correcto, no queda el temporal, un temporal viejo no estorba |
-| 3-2 | `domain`: `AppSettings::try_from_json -> Result`; `from_json` se apoya en él | Tests de JSON válido, vacío y roto |
-| 3-3 | `platform`: un archivo que existe pero no se puede leer se copia a `settings.corrupt.json` antes de devolver los valores por defecto | Test: el archivo roto se conserva |
-| 3-4 | `domain` + `platform`: `SettingsStore::save` devuelve `Result`; `Core` registra el fallo y avisa una sola vez (`AppEvent::SettingsNotSaved`, textos en/es) | Tests con un almacén que falla |
-| 3-5 | `app`: guardado agrupado: las acciones marcan los ajustes como «sucios» y `tick_at` guarda como mucho cada 500 ms; cerrar la ventana guarda siempre | Tests con el `Rig`: arrastrar el volumen 60 veces produce 1 o 2 guardados; al cerrar no se pierde nada |
-| 3-6 | `domain`: recordar el monitor por su nombre de dispositivo (`\\.\DISPLAY1`) en vez de por posición; los archivos viejos con `lastMonitor` numérico siguen cargando | Tests de compatibilidad y de monitores reordenados |
+| 3-1 ✅ | `platform/settings_store.rs`: guardado atómico (escribir `settings.json.tmp`, sincronizar, renombrar encima) | Tests: contenido correcto, no queda el temporal, un temporal viejo no estorba |
+| 3-2 ✅ | `domain`: `AppSettings::try_from_json -> Result`; `from_json` se apoya en él | Tests de JSON válido, vacío y roto |
+| 3-3 ✅ | `platform`: un archivo que existe pero no se puede leer se copia a `settings.corrupt.json` antes de devolver los valores por defecto | Test: el archivo roto se conserva |
+| 3-4 ✅ | `domain` + `platform`: `SettingsStore::save` devuelve `Result`; `Core` registra el fallo y avisa una sola vez (`AppEvent::SettingsNotSaved`, textos en/es) | Tests con un almacén que falla |
+| 3-5 ✅ | `app`: guardado agrupado: las acciones marcan los ajustes como «sucios» y `tick_at` guarda como mucho cada 500 ms; cerrar la ventana guarda siempre | Tests con el `Rig`: arrastrar el volumen 60 veces produce 1 o 2 guardados; al cerrar no se pierde nada |
+| 3-6 ✅ | `domain`: recordar el monitor por su nombre de dispositivo (`\\.\DISPLAY1`) en vez de por posición; los archivos viejos con `lastMonitor` numérico siguen cargando | Tests de compatibilidad y de monitores reordenados |
+
+**Hecho (2026-11-13).** Diferencias con lo previsto:
+- 3-3: el archivo roto se copia a `settings.corrupt.json` (también si no es texto válido), salvo si está vacío, para no pisar una copia anterior con datos.
+- 3-4: además del aviso `SettingsNotSaved`, un guardado fallido sigue pendiente y se reintenta cada 500 ms; el aviso sale una vez por avería.
+- 3-5: `save_settings()` pasó a ser el guardado inmediato (la ventana lo llama al cerrar) y los cambios internos usan `settings_changed()`. `Core` también guarda al soltarse (`Drop`), así que un cambio de última hora no se pierde.
+- 3-6: se conserva `lastMonitor` (posición) solo para leer archivos viejos; manda `lastMonitorName`. Un monitor que ya no está **no** se sustituye por otro: se queda la capturadora.
 
 **Pausa 3:** revisar un `settings.json` real antes y después.
 

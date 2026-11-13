@@ -214,8 +214,13 @@ pub struct AppSettings {
     pub last_mic_device_id: Option<String>,
     /// The monitor (by position in the list, 0 is the primary) that was being
     /// captured when the program closed; `None` means the capture card.
+    /// Older files only know this; `last_monitor_name` wins when both exist.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_monitor: Option<u32>,
+    /// Windows' name of that monitor (for example `\\.\DISPLAY2`). Unlike the
+    /// position it survives plugging in or out another screen.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_monitor_name: Option<String>,
     /// Audio sync offset in milliseconds (-300..=300).
     pub audio_offset_ms: i32,
     /// Master volume (0.0..=1.0).
@@ -261,6 +266,7 @@ impl Default for AppSettings {
             last_audio_device_id: None,
             last_mic_device_id: None,
             last_monitor: None,
+            last_monitor_name: None,
             audio_offset_ms: 0,
             volume: 1.0,
             was_fullscreen: false,
@@ -310,14 +316,18 @@ impl AppSettings {
 }
 
 impl AppSettings {
-    /// Reads settings from JSON text. A damaged or empty text yields the
-    /// defaults; this never fails, and out-of-range values are clamped.
-    pub fn from_json(json: &str) -> Self {
+    /// Reads settings from JSON text, clamping out-of-range values. A damaged
+    /// or empty text is an error, so the caller can tell it from a real file.
+    pub fn try_from_json(json: &str) -> Result<Self, serde_json::Error> {
         // Editors such as Notepad (and PowerShell 5.1) prepend a UTF-8 byte
         // order mark, which JSON parsers reject.
-        serde_json::from_str::<Self>(json.trim_start_matches('\u{feff}'))
-            .unwrap_or_default()
-            .sanitized()
+        serde_json::from_str::<Self>(json.trim_start_matches('\u{feff}')).map(Self::sanitized)
+    }
+
+    /// Like [`AppSettings::try_from_json`], but a damaged or empty text yields
+    /// the defaults: this never fails.
+    pub fn from_json(json: &str) -> Self {
+        Self::try_from_json(json).unwrap_or_default()
     }
 
     pub fn to_json(&self) -> Result<String, serde_json::Error> {
@@ -330,8 +340,9 @@ impl AppSettings {
 pub trait SettingsStore {
     /// The saved settings, or the defaults when there are none. Never fails.
     fn load(&self) -> AppSettings;
-    /// Saves the settings. A failure is not fatal: they reset on the next run.
-    fn save(&self, settings: &AppSettings);
+    /// Saves the settings. A failure is not fatal (they reset on the next run)
+    /// but the caller should tell the user.
+    fn save(&self, settings: &AppSettings) -> Result<(), String>;
 }
 
 /// A store that keeps the settings in memory, for tests and previews.
@@ -356,8 +367,9 @@ impl SettingsStore for MemoryStore {
         self.last_saved().unwrap_or_default()
     }
 
-    fn save(&self, settings: &AppSettings) {
+    fn save(&self, settings: &AppSettings) -> Result<(), String> {
         *self.saved.lock().unwrap_or_else(|e| e.into_inner()) = Some(settings.clone());
+        Ok(())
     }
 }
 
@@ -365,6 +377,16 @@ impl SettingsStore for MemoryStore {
 mod tests {
     use super::*;
     use crate::scene::SourceRef;
+
+    #[test]
+    fn damaged_json_is_an_error_when_asked_and_the_defaults_otherwise() {
+        for bad in ["", "   ", "{invalid}", "[1, 2]", "{\"volume\": \"loud\"}"] {
+            assert!(AppSettings::try_from_json(bad).is_err(), "{bad:?}");
+            assert_eq!(AppSettings::from_json(bad), AppSettings::default());
+        }
+        let ok = AppSettings::try_from_json("\u{feff}{\"volume\": 7.0}").unwrap();
+        assert_eq!(ok.volume, 1.0, "out of range values are still clamped");
+    }
 
     #[test]
     fn json_with_a_byte_order_mark_or_garbage_is_read_safely() {
@@ -385,7 +407,7 @@ mod tests {
             volume: 0.5,
             ..AppSettings::default()
         };
-        store.save(&settings);
+        store.save(&settings).unwrap();
         assert_eq!(store.load(), settings);
         assert_eq!(
             AppSettings::from_json(&settings.to_json().unwrap()),
@@ -405,6 +427,7 @@ mod tests {
         assert!(s.last_audio_device_id.is_none());
         assert!(s.last_mic_device_id.is_none());
         assert!(s.last_monitor.is_none());
+        assert!(s.last_monitor_name.is_none());
     }
 
     #[test]
@@ -414,6 +437,7 @@ mod tests {
             last_audio_device_id: Some("{0.0.1.00000000}.{abc}".into()),
             last_mic_device_id: Some("{0.0.1.00000000}.{mic}".into()),
             last_monitor: Some(1),
+            last_monitor_name: Some(r"\\.\DISPLAY2".into()),
             audio_offset_ms: -150,
             volume: 0.75,
             was_fullscreen: true,

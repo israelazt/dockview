@@ -122,6 +122,22 @@ pub fn reconcile<T: PartialEq>(
     }
 }
 
+/// Which monitor to capture again at start-up: the one with the saved name, or
+/// for a file from before names were saved, the saved position. A monitor that
+/// is gone is not replaced by another one.
+pub fn monitor_to_restore(
+    monitors: &[MonitorInfo],
+    name: Option<&str>,
+    legacy_index: Option<u32>,
+) -> Option<usize> {
+    match name {
+        Some(name) => monitors.iter().position(|m| m.device_name == name),
+        None => legacy_index
+            .map(|i| i as usize)
+            .filter(|&i| i < monitors.len()),
+    }
+}
+
 /// The window whose title is `title`: an exact match (ignoring case) first,
 /// then one that contains the text. Never one of our own (`own_pid`).
 pub fn find_window<'a>(
@@ -324,6 +340,32 @@ mod tests {
         let r = reconcile(&[], &[card("a")], None, |d: &VideoDevice| &d.symbolic_link);
         assert!(r.changed);
         assert_eq!(r.selected, None);
+    }
+
+    #[test]
+    fn a_saved_monitor_is_found_by_name_even_when_the_order_changed() {
+        let monitors = [monitor(1, true), monitor(2, false), monitor(3, false)];
+        assert_eq!(
+            monitor_to_restore(&monitors, Some(&monitors[2].device_name), Some(0)),
+            Some(2)
+        );
+    }
+
+    #[test]
+    fn a_monitor_that_is_gone_is_not_replaced_by_another() {
+        let monitors = [monitor(1, true)];
+        assert_eq!(
+            monitor_to_restore(&monitors, Some(r"\\.\DISPLAY9"), Some(0)),
+            None
+        );
+    }
+
+    #[test]
+    fn an_old_file_with_only_a_position_still_works() {
+        let monitors = [monitor(1, true), monitor(2, false)];
+        assert_eq!(monitor_to_restore(&monitors, None, Some(1)), Some(1));
+        assert_eq!(monitor_to_restore(&monitors, None, Some(5)), None);
+        assert_eq!(monitor_to_restore(&monitors, None, None), None);
     }
 
     #[test]

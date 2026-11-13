@@ -32,6 +32,7 @@ pub fn toast_for(event: AppEvent) -> (Key, ToastKind) {
         AppEvent::SourceFailed => (Key::ToastSourceFailed, ToastKind::Error),
         AppEvent::AudioLost => (Key::ToastAudioLost, ToastKind::Error),
         AppEvent::AudioBack => (Key::ToastAudioBack, ToastKind::Success),
+        AppEvent::SettingsNotSaved => (Key::ToastSettingsNotSaved, ToastKind::Error),
     }
 }
 
@@ -70,6 +71,7 @@ mod tests {
             SourceFailed,
             AudioLost,
             AudioBack,
+            SettingsNotSaved,
         ] {
             let (key, _) = toast_for(event);
             assert!(!i18n::tr(i18n::Lang::En, key).is_empty(), "{event:?}");

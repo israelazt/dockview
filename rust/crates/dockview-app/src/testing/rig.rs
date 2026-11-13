@@ -1,5 +1,6 @@
 //! A `Core` built on fakes, with handles to everything the fakes recorded.
 
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -7,6 +8,7 @@ use dockview_domain::device::{AudioDevice, DeviceLists, VideoDevice};
 use dockview_domain::frame::FrameSlot;
 use dockview_domain::i18n::Lang;
 use dockview_domain::settings::{AppSettings, MemoryStore, SettingsStore};
+use dockview_domain::sources::MonitorInfo;
 use dockview_domain::stats::Stats;
 
 use super::replay::{self, FakeMachine};
@@ -16,14 +18,24 @@ use crate::cli::Cli;
 use crate::{Core, Ports};
 
 /// A store the test keeps a second handle to, to see what was saved.
-pub struct SharedStore(pub Arc<MemoryStore>);
+pub struct SharedStore {
+    pub store: Arc<MemoryStore>,
+    /// While set, saving fails (a full or read-only disk).
+    pub fails: Arc<AtomicBool>,
+    /// How many times saving was tried, whether it worked or not.
+    pub attempts: Arc<AtomicUsize>,
+}
 
 impl SettingsStore for SharedStore {
     fn load(&self) -> AppSettings {
-        self.0.load()
+        self.store.load()
     }
-    fn save(&self, settings: &AppSettings) {
-        self.0.save(settings);
+    fn save(&self, settings: &AppSettings) -> Result<(), String> {
+        self.attempts.fetch_add(1, Ordering::Relaxed);
+        if self.fails.load(Ordering::Relaxed) {
+            return Err("disk full".into());
+        }
+        self.store.save(settings)
     }
 }
 
@@ -40,6 +52,10 @@ pub struct Rig {
     pub stats: Arc<Mutex<Vec<Stats>>>,
     /// Where the settings are saved.
     pub store: Arc<MemoryStore>,
+    /// Set it to make saving fail.
+    pub store_fails: Arc<AtomicBool>,
+    /// How many times the settings were tried to be saved.
+    pub save_attempts: Arc<AtomicUsize>,
     pub system: Arc<FakeSystem>,
     /// The time the rig says it is, moved by [`Rig::advance`].
     pub now: Instant,
@@ -50,6 +66,7 @@ pub struct RigBuilder {
     settings: AppSettings,
     video: Vec<VideoDevice>,
     audio: Vec<AudioDevice>,
+    monitors: Vec<MonitorInfo>,
     cli: Cli,
 }
 
@@ -83,6 +100,12 @@ impl RigBuilder {
         self
     }
 
+    /// The screens Windows lists.
+    pub fn monitors(mut self, monitors: Vec<MonitorInfo>) -> Self {
+        self.monitors = monitors;
+        self
+    }
+
     pub fn cli(mut self, cli: Cli) -> Self {
         self.cli = cli;
         self
@@ -92,6 +115,7 @@ impl RigBuilder {
     pub fn build(self) -> Rig {
         let replay = replay::world();
         let (machine, sources) = FakeSources::new();
+        sources.lock().unwrap().monitors = self.monitors;
         sources.lock().unwrap().devices = DeviceLists {
             video: self.video,
             audio: self.audio,
@@ -100,9 +124,15 @@ impl RigBuilder {
         let stats = FakeStats::default();
         let stats_log = Arc::clone(&stats.0);
         let store = Arc::new(MemoryStore::new());
+        let store_fails = Arc::new(AtomicBool::new(false));
+        let save_attempts = Arc::new(AtomicUsize::new(0));
         let system = Arc::new(FakeSystem::default());
         let ports = Ports {
-            settings: Box::new(SharedStore(Arc::clone(&store))),
+            settings: Box::new(SharedStore {
+                store: Arc::clone(&store),
+                fails: Arc::clone(&store_fails),
+                attempts: Arc::clone(&save_attempts),
+            }),
             replay: Box::new(FakeMachine(Arc::clone(&replay))),
             sources: Box::new(machine),
             system: Arc::clone(&system) as Arc<_>,
@@ -123,6 +153,8 @@ impl RigBuilder {
             host,
             stats: stats_log,
             store,
+            store_fails,
+            save_attempts,
             system,
             now: Instant::now(),
         }
@@ -136,6 +168,7 @@ impl Rig {
             settings: AppSettings::default(),
             video: Vec::new(),
             audio: Vec::new(),
+            monitors: Vec::new(),
             cli: Cli::default(),
         }
     }
@@ -164,6 +197,13 @@ impl Rig {
     /// The settings as they were last saved.
     pub fn saved(&self) -> Option<AppSettings> {
         self.store.last_saved()
+    }
+
+    /// Lets the batched save go out (it waits up to half a second) and returns
+    /// the settings as saved.
+    pub fn saved_soon(&mut self) -> Option<AppSettings> {
+        self.advance(Duration::from_millis(600));
+        self.saved()
     }
 }
 

@@ -33,6 +33,7 @@ impl Core {
         }
         self.update_stats(now);
         self.poll_replay();
+        self.flush_settings(now);
     }
 
     /// What happened since the last call, to be shown to the user.

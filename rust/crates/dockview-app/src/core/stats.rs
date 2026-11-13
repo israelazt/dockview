@@ -108,7 +108,7 @@ impl Core {
                 self.settings.video_mode = VideoModePref::Auto;
             }
         }
-        self.save_settings();
+        self.settings_changed();
         self.select_video(self.video_index);
     }
 }

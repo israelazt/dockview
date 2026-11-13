@@ -102,7 +102,7 @@ impl Core {
                 self.add_layer(source);
             }
         }
-        self.save_settings();
+        self.settings_changed();
     }
 
     /// A scene made of the current source, which becomes the active one.

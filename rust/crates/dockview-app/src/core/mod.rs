@@ -57,14 +57,16 @@ use crate::cli::Cli;
 use crate::keys::KeyCommand;
 use crate::replay_service::{RecordToggle, ReplayService};
 use crate::sources::{
-    audio_is_lost, find_window, monitor_label, pick_audio, pick_video, reconcile, startup_scene,
-    status_kind, video_state_of_capture, video_state_of_screen, AudioRoute, Reconnect, SourceKind,
-    StartupScene,
+    audio_is_lost, find_window, monitor_label, monitor_to_restore, pick_audio, pick_video,
+    reconcile, startup_scene, status_kind, video_state_of_capture, video_state_of_screen,
+    AudioRoute, Reconnect, SourceKind, StartupScene,
 };
 use crate::telemetry::{Rates, Telemetry};
 
 /// How often the lists of monitors and windows are refreshed while shown.
 pub const SOURCES_REFRESH: Duration = Duration::from_millis(1500);
+/// The least time between two writes of the settings file.
+const SETTINGS_SAVE_INTERVAL: Duration = Duration::from_millis(500);
 /// Volume change per key press.
 const VOLUME_STEP: f32 = 0.05;
 /// Audio offset change per key press, in milliseconds.
@@ -160,4 +162,19 @@ pub struct Core {
     audio_lost: bool,
     /// What the application asks of the window (the real one, or none in tests).
     host: Box<dyn Host>,
+    /// The settings changed and are not on disk yet.
+    settings_dirty: bool,
+    /// The last write failed (so the user is told once, not at every try).
+    settings_failed: bool,
+    /// When the settings were last written.
+    settings_saved_at: Instant,
+}
+
+impl Drop for Core {
+    /// Whatever was changed last is not lost when the program ends.
+    fn drop(&mut self) {
+        if self.settings_dirty {
+            self.save_settings();
+        }
+    }
 }

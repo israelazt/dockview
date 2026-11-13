@@ -65,6 +65,9 @@ impl Core {
             sources_refreshed: Instant::now(),
             audio_reconnect: Reconnect::new(),
             audio_lost: false,
+            settings_dirty: false,
+            settings_failed: false,
+            settings_saved_at: Instant::now(),
         };
 
         if test_pattern {

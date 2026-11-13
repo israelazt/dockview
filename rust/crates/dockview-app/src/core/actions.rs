@@ -13,7 +13,7 @@ impl Core {
         if let Some(audio) = &self.audio {
             audio.set_volume(self.settings.volume);
         }
-        self.save_settings();
+        self.settings_changed();
     }
 
     pub(super) fn change_offset(&mut self, delta_ms: i32) {
@@ -22,28 +22,60 @@ impl Core {
         if let Some(audio) = &self.audio {
             audio.set_offset_ms(self.settings.audio_offset_ms);
         }
-        self.save_settings();
+        self.settings_changed();
     }
 
     pub(super) fn cycle_preset(&mut self) {
         self.settings.render_preset = next_preset(self.settings.render_preset);
         self.host.set_render_preset(self.settings.render_preset);
-        self.save_settings();
+        self.settings_changed();
     }
 
     /// Enters or leaves full screen.
     pub fn set_fullscreen(&mut self, on: bool) {
         self.fullscreen = on;
         self.host.set_fullscreen(on);
-        self.save_settings();
+        self.settings_changed();
     }
 
+    /// Something in the settings changed. It is written on a following tick,
+    /// at most twice a second, so dragging a slider is not a write per pixel.
+    pub(super) fn settings_changed(&mut self) {
+        self.settings_dirty = true;
+    }
+
+    /// Writes the settings now. The window calls it when it closes.
     pub fn save_settings(&mut self) {
         if self.cli.ui_preview {
+            self.settings_dirty = false;
             return;
         }
         self.settings.was_fullscreen = self.fullscreen;
-        self.store.save(&self.settings);
+        match self.store.save(&self.settings) {
+            Ok(()) => {
+                self.settings_dirty = false;
+                self.settings_failed = false;
+            }
+            Err(reason) => {
+                // Still dirty: it is tried again. The user hears of it once.
+                eprintln!("could not save the settings: {reason}");
+                if !self.settings_failed {
+                    self.settings_failed = true;
+                    self.emit(AppEvent::SettingsNotSaved);
+                }
+            }
+        }
+    }
+
+    /// Writes the settings if they changed and it has been long enough since
+    /// the last write.
+    pub(super) fn flush_settings(&mut self, now: Instant) {
+        if self.settings_dirty
+            && now.saturating_duration_since(self.settings_saved_at) >= SETTINGS_SAVE_INTERVAL
+        {
+            self.save_settings();
+            self.settings_saved_at = now;
+        }
     }
 
     pub(super) fn theme_mode(&self) -> ThemeMode {
@@ -154,9 +186,10 @@ impl Core {
             }
             Action::SelectMonitor(index) => {
                 if let Some(monitor) = self.monitors.get(index) {
-                    let handle = monitor.handle;
+                    let (handle, name) = (monitor.handle, monitor.device_name.clone());
                     self.start_screen(CaptureTarget::Monitor(handle), SourceKind::Monitor(handle));
                     self.settings.last_monitor = Some(index as u32);
+                    self.settings.last_monitor_name = Some(name);
                 }
             }
             Action::SelectWindow(index) => {
@@ -169,6 +202,7 @@ impl Core {
                         },
                     );
                     self.settings.last_monitor = None;
+                    self.settings.last_monitor_name = None;
                 }
             }
             Action::ToggleRecord => {
@@ -233,7 +267,7 @@ impl Core {
             }
             Action::ToggleStudio => {
                 self.settings.studio_open = !self.settings.studio_open;
-                self.save_settings();
+                self.settings_changed();
                 return;
             }
             Action::SetVideoMode(mode) => {
@@ -256,7 +290,7 @@ impl Core {
                 self.cli.lang = None;
             }
         }
-        self.save_settings();
+        self.settings_changed();
     }
 
     /// Carries out what a key asked for.
@@ -282,12 +316,12 @@ impl Core {
                 if let Some(audio) = self.match_audio(next) {
                     self.select_audio(Some(audio));
                 }
-                self.save_settings();
+                self.settings_changed();
             }
             KeyCommand::NextAudio => {
                 let next = next_index(self.audio_index, self.audio_devices.len());
                 self.select_audio(next);
-                self.save_settings();
+                self.settings_changed();
             }
         }
     }

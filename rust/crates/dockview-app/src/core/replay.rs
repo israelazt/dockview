@@ -60,7 +60,7 @@ impl Core {
         if self.replay.toggle_record() == RecordToggle::NeedsBuffer {
             self.settings.replay_enabled = true;
             self.sync_replay();
-            self.save_settings();
+            self.settings_changed();
             self.replay.wait_for_buffer();
         }
     }
