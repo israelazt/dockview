@@ -222,6 +222,8 @@ pub struct AppSettings {
     pub volume: f32,
     /// Whether the window was last in fullscreen mode.
     pub was_fullscreen: bool,
+    /// Whether the Studio side panel was open.
+    pub studio_open: bool,
     /// Render quality preset.
     pub render_preset: RenderPreset,
     /// Interface theme preference.
@@ -262,6 +264,7 @@ impl Default for AppSettings {
             audio_offset_ms: 0,
             volume: 1.0,
             was_fullscreen: false,
+            studio_open: false,
             render_preset: RenderPreset::default(),
             theme: ThemeMode::default(),
             language: LangMode::default(),
@@ -396,6 +399,7 @@ mod tests {
         assert_eq!(s.audio_offset_ms, 0);
         assert_eq!(s.volume, 1.0);
         assert!(!s.was_fullscreen);
+        assert!(!s.studio_open);
         assert_eq!(s.render_preset, RenderPreset::Balanced);
         assert!(s.last_video_device_symbolic_link.is_none());
         assert!(s.last_audio_device_id.is_none());
@@ -413,6 +417,7 @@ mod tests {
             audio_offset_ms: -150,
             volume: 0.75,
             was_fullscreen: true,
+            studio_open: true,
             render_preset: RenderPreset::Quality,
             theme: ThemeMode::Light,
             language: LangMode::Es,
@@ -570,6 +575,18 @@ mod tests {
     fn the_listed_lengths_are_sorted_and_include_the_default() {
         assert!(REPLAY_STEPS.windows(2).all(|w| w[0] < w[1]));
         assert!(REPLAY_STEPS.contains(&DEFAULT_REPLAY_SECONDS));
+    }
+
+    #[test]
+    fn a_file_without_studio_open_loads_with_the_panel_closed() {
+        let s: AppSettings =
+            serde_json::from_str(r#"{"volume": 0.5, "wasFullscreen": true}"#).unwrap();
+        assert!(!s.studio_open);
+        let on: AppSettings = serde_json::from_str(r#"{"studioOpen": true}"#).unwrap();
+        assert!(on.studio_open);
+        assert!(serde_json::to_string(&on)
+            .unwrap()
+            .contains(r#""studioOpen":true"#));
     }
 
     #[test]

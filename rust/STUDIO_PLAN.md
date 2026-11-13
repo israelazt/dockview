@@ -47,7 +47,7 @@ Verificación estándar de cada bloque: `ui_shots.ps1` + `ui_compare.py` contra 
 | A-1 ✅ | `domain`: `Model.studio: bool`, `Action::ToggleStudio` y `Model::studio_visible()` (pantalla completa lo oculta); `Core` ya lo alterna (sin guardarlo aún) | Tests de la regla de pantalla completa |
 | A-2 ✅ | `domain/layout.rs`: `studio_layout(ventana, escala, apertura 0..1) -> {video, panel}`; el panel mide 320 px lógicos y nunca más del 45 % de la ventana | Tests: ventana pequeña, grande, HiDPI, cerrado = todo el video |
 | A-3 ✅ | `platform`: `letterbox_in(rect, video)` y `Renderer::set_video_area(Option<Rect>)`; sin rectángulo = igual que hoy | Tests de `letterbox_in`; capturas idénticas |
-| A-4 | `settings`: campo `studioOpen` opcional, compatible con archivos viejos | Test de cargar un `settings.json` anterior |
+| A-4 ✅ | `settings`: campo `studioOpen` opcional, compatible con archivos viejos | Test de cargar un `settings.json` anterior |
 | A-5 | `app`: `Core` guarda/restaura el modo y atiende `ToggleStudio` (aún sin interfaz que lo pida) | Test en `Core` con ajustes en memoria |
 
 **Pausa A:** revisar que nada cambió a la vista y que el diseño de A-2 sirve.
