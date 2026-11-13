@@ -79,7 +79,7 @@ Cada paso: sin cambio visible, comprobado con los mismos tests y, en la interfaz
 | D-5 | Extraer `ReplayService` (replay, grabación, micrófono) y `StatsService` | `App` queda como coordinador | Medio-alto |
 | D-6 | Capa de eventos entre servicios y la interfaz | Quita el `toast` de la lógica; base del bus de plugins | Medio |
 | D-7 ✅ | Macro de textos en `i18n.rs` | De cuatro ediciones a una | Bajo |
-| D-8 | Dividir las funciones de dibujo grandes y mover `Stats` fuera de `ui` | Interfaz más fácil de ampliar | Bajo-medio |
+| D-8 ✅ | Dividir las funciones de dibujo grandes y mover `Stats` fuera de `ui` | Interfaz más fácil de ampliar | Bajo-medio |
 
 **Orden recomendado:** D-1, D-2, D-7 (rápidos y sin riesgo), luego D-4 y D-5 con D-6 (el núcleo del desacoplamiento), y D-3 y D-8 cuando estorben. Cada uno se puede intercalar con funciones nuevas sin bloquearlas.
 
@@ -163,6 +163,12 @@ Efecto menor: `--capture-window` ahora prefiere un título exacto antes que uno 
 - `screen.rs` baja de 705 a 461 líneas y `compose.rs` de 751 a 593; lo que queda en ellos depende de la GPU y de los hilos.
 
 Comprobado con 386 tests y con la app real (capturadora + pantalla en la esquina y una pantalla como fuente principal, grabando).
+
+### Resultado del punto E: las funciones de dibujo (2026-11-12)
+- `draw_replay_popover` (339 líneas) pasa a una medición previa (`ReplayLayout`) y una función por sección (título, estado, duración, pista, calidad, micrófono, guardar, carpeta). `draw_pill` (204) igual: `PillMetrics` y una función por grupo (estado, volumen, sincronía, replay, acciones). `draw_popover` (152): listas de dispositivos y opciones separadas, con `DeviceList` y `Choice` en lugar de tuplas.
+- Dos widgets nuevos quitan el código repetido: `wash` (el resaltado al pasar el puntero, que estaba copiado unas diez veces) y `toggle_row` (una fila con icono, título e interruptor; el replay la usaba dos veces).
+- **Verificación píxel a píxel:** las 8 capturas comparables (pastilla, ajustes, replay y escenas, en oscuro/inglés y claro/español) son idénticas antes y después. Las herramientas están en `rust/tools/` (`ui_shots.ps1` y `ui_compare.py`) para cualquier cambio futuro de interfaz. Se ignoran el rótulo de resolución/fps de la pastilla (se mide en vivo) y las vistas de fuentes y estadísticas (muestran las ventanas reales y números en vivo).
+- Para que las capturas fueran repetibles, en `--ui-preview` el patrón de prueba genera 1 fotograma por segundo (solo afecta a esa vista previa).
 
 ## Lo que no conviene tocar
 - La separación en dos crates y el sentido de las dependencias.

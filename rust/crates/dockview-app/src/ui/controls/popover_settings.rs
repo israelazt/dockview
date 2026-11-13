@@ -2,6 +2,24 @@
 
 use super::*;
 
+/// One list of devices in the popover.
+struct DeviceList<'a> {
+    title: Key,
+    devices: &'a [String],
+    selected: Option<usize>,
+    hit: fn(usize) -> Hit,
+}
+
+/// One row of segmented choices (for example light / dark / auto).
+struct Choice<'a> {
+    title: Key,
+    labels: &'a [&'a str],
+    selected: usize,
+    /// Where the sliding indicator is now (it glides to `selected`).
+    position: f32,
+    hit: fn(usize) -> Hit,
+}
+
 impl Controls {
     pub(super) fn draw_popover(&mut self, ui: &mut Ui, m: &Model, pill: Rect) {
         let t = &m.theme;
@@ -20,9 +38,16 @@ impl Controls {
 
         let inner_x = x + POPOVER_PAD;
         let inner_w = POPOVER_WIDTH - POPOVER_PAD * 2.0;
+        let slide = self.slide_selections(m);
         let mut y = y + POPOVER_PAD;
+        y = self.device_sections(ui, m, inner_x, y, inner_w);
+        y = self.option_sections(ui, m, slide, inner_x, y, inner_w);
+        self.stats_row(ui, m, inner_x, y, inner_w);
+    }
 
-        // Indicator positions: start at the current choice, then slide.
+    /// Where each segmented choice's indicator is now: it starts at the current
+    /// choice, then slides to a new one. Order: preset, theme, language, mode.
+    fn slide_selections(&mut self, m: &Model) -> [f32; 4] {
         let targets = [
             PRESETS.iter().position(|v| *v == m.preset).unwrap_or(1) as f32,
             THEMES.iter().position(|v| *v == m.theme_mode).unwrap_or(0) as f32,
@@ -37,123 +62,126 @@ impl Controls {
             *position = self.approach(*position, target, SLIDE_RATE);
         }
         self.segments = Some(slide);
+        slide
+    }
 
-        y = self.device_section(
-            ui,
-            m,
-            Key::Video,
-            &m.video_devices,
-            m.video_selected,
-            Hit::Video,
-            inner_x,
-            y,
-            inner_w,
-        );
-        y += SECTION_GAP;
-        y = self.device_section(
-            ui,
-            m,
-            Key::Audio,
-            &m.audio_devices,
-            m.audio_selected,
-            Hit::Audio,
-            inner_x,
-            y,
-            inner_w,
-        );
-        y += SECTION_GAP;
-        y = self.device_section(
-            ui,
-            m,
-            Key::Microphone,
-            &m.mic_devices,
-            m.mic_selected,
-            Hit::MicDevice,
-            inner_x,
-            y,
-            inner_w,
-        );
-        y += SECTION_GAP;
+    /// The three device lists: video, audio and microphone. Returns the y after
+    /// the last one, with its gap.
+    fn device_sections(&mut self, ui: &mut Ui, m: &Model, x: f32, mut y: f32, w: f32) -> f32 {
+        let lists = [
+            DeviceList {
+                title: Key::Video,
+                devices: &m.video_devices,
+                selected: m.video_selected,
+                hit: Hit::Video,
+            },
+            DeviceList {
+                title: Key::Audio,
+                devices: &m.audio_devices,
+                selected: m.audio_selected,
+                hit: Hit::Audio,
+            },
+            DeviceList {
+                title: Key::Microphone,
+                devices: &m.mic_devices,
+                selected: m.mic_selected,
+                hit: Hit::MicDevice,
+            },
+        ];
+        for list in lists {
+            y = self.device_section(
+                ui,
+                m,
+                list.title,
+                list.devices,
+                list.selected,
+                list.hit,
+                x,
+                y,
+                w,
+            );
+            y += SECTION_GAP;
+        }
+        y
+    }
 
+    /// The segmented choices: video mode, image quality, theme and language.
+    /// Returns the y after the last one, with its gap.
+    fn option_sections(
+        &mut self,
+        ui: &mut Ui,
+        m: &Model,
+        slide: [f32; 4],
+        x: f32,
+        mut y: f32,
+        w: f32,
+    ) -> f32 {
         let lang = m.lang;
         let modes = [tr(lang, Key::Auto), tr(lang, Key::ModeCompressed)];
-        let mode_selected = VIDEO_MODES
-            .iter()
-            .position(|v| *v == m.video_mode)
-            .unwrap_or(0);
-        y = self.segmented_section(
-            ui,
-            m,
-            Key::VideoMode,
-            &modes,
-            mode_selected,
-            slide[3],
-            Hit::VideoMode,
-            inner_x,
-            y,
-            inner_w,
-        );
-        y += SECTION_GAP;
         let presets = [
             tr(lang, Key::PresetPerformance),
             tr(lang, Key::PresetBalanced),
             tr(lang, Key::PresetHigh),
         ];
-        let preset_selected = PRESETS.iter().position(|p| *p == m.preset).unwrap_or(1);
-        y = self.segmented_section(
-            ui,
-            m,
-            Key::ImageQuality,
-            &presets,
-            preset_selected,
-            slide[0],
-            Hit::Preset,
-            inner_x,
-            y,
-            inner_w,
-        );
-        y += SECTION_GAP;
-
         let themes = [
             tr(lang, Key::Auto),
             tr(lang, Key::Dark),
             tr(lang, Key::Light),
         ];
-        let theme_selected = THEMES.iter().position(|v| *v == m.theme_mode).unwrap_or(0);
-        y = self.segmented_section(
-            ui,
-            m,
-            Key::Theme,
-            &themes,
-            theme_selected,
-            slide[1],
-            Hit::Theme,
-            inner_x,
-            y,
-            inner_w,
-        );
-        y += SECTION_GAP;
-
         let langs = [
             tr(lang, Key::Auto),
             tr(lang, Key::English),
             tr(lang, Key::Spanish),
         ];
-        let lang_selected = LANGS.iter().position(|v| *v == m.lang_mode).unwrap_or(0);
-        y = self.segmented_section(
-            ui,
-            m,
-            Key::Language,
-            &langs,
-            lang_selected,
-            slide[2],
-            Hit::Lang,
-            inner_x,
-            y,
-            inner_w,
-        );
-        y += SECTION_GAP;
-        self.stats_row(ui, m, inner_x, y, inner_w);
+        let sections = [
+            Choice {
+                title: Key::VideoMode,
+                labels: &modes,
+                selected: VIDEO_MODES
+                    .iter()
+                    .position(|v| *v == m.video_mode)
+                    .unwrap_or(0),
+                position: slide[3],
+                hit: Hit::VideoMode,
+            },
+            Choice {
+                title: Key::ImageQuality,
+                labels: &presets,
+                selected: PRESETS.iter().position(|p| *p == m.preset).unwrap_or(1),
+                position: slide[0],
+                hit: Hit::Preset,
+            },
+            Choice {
+                title: Key::Theme,
+                labels: &themes,
+                selected: THEMES.iter().position(|v| *v == m.theme_mode).unwrap_or(0),
+                position: slide[1],
+                hit: Hit::Theme,
+            },
+            Choice {
+                title: Key::Language,
+                labels: &langs,
+                selected: LANGS.iter().position(|v| *v == m.lang_mode).unwrap_or(0),
+                position: slide[2],
+                hit: Hit::Lang,
+            },
+        ];
+        for choice in sections {
+            y = self.segmented_section(
+                ui,
+                m,
+                choice.title,
+                choice.labels,
+                choice.selected,
+                choice.position,
+                choice.hit,
+                x,
+                y,
+                w,
+            );
+            y += SECTION_GAP;
+        }
+        y
     }
 
     /// The row that toggles the statistics panel.
@@ -161,11 +189,7 @@ impl Controls {
         let t = &m.theme;
         let row = Rect::new(x, y, w, ROW_HEIGHT);
         self.register(Hit::Stats, row);
-        let (hover, press) = self.amounts(Hit::Stats);
-        let alpha = t.hover.a * (hover + 0.9 * press);
-        if alpha > 0.002 {
-            ui.rect(row, 9.0, t.hover.with_alpha(alpha.min(1.0)));
-        }
+        self.wash(ui, m, Hit::Stats, row, 9.0, 1.0);
         let cy = y + ROW_HEIGHT / 2.0;
         ui.icon(ICON_ACTIVITY, x + 20.0, cy, 15.0, t.text_dim);
         let line_h = ui.measure("Ag", BODY).1;

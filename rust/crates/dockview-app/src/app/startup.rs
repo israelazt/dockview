@@ -76,11 +76,14 @@ impl App {
         app.controls.set_animations(animations);
 
         if test_pattern {
+            // The preview exists for screenshots, which must be the same every
+            // time: one picture a second keeps the moving stripe at its start.
+            let fps = if preview { 1 } else { 30 };
             app.source = Source::Test(TestSource::start(
                 Arc::clone(&app.input_slot),
                 1920,
                 1080,
-                30,
+                fps,
             ));
             if preview {
                 app.install_preview_devices();

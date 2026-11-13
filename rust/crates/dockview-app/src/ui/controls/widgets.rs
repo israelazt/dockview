@@ -27,6 +27,52 @@ impl Controls {
         ui.icon(icon, cx, cy, size * (1.0 - 0.1 * press), m.theme.text);
     }
 
+    /// The soft highlight under a control while the pointer is over it or
+    /// pressing it. `hover_weight` scales the hover part (rows use less than
+    /// buttons). Returns the hover and press amounts for the caller to use.
+    pub(super) fn wash(
+        &mut self,
+        ui: &mut Ui,
+        m: &Model,
+        hit: Hit,
+        rect: Rect,
+        radius: f32,
+        hover_weight: f32,
+    ) -> (f32, f32) {
+        let (hover, press) = self.amounts(hit);
+        let alpha = m.theme.hover.a * (hover * hover_weight + 0.9 * press);
+        if alpha > 0.002 {
+            ui.rect(rect, radius, m.theme.hover.with_alpha(alpha.min(1.0)));
+        }
+        (hover, press)
+    }
+
+    /// A row with an icon, a title and an on/off switch at the right; the whole
+    /// row toggles. `area` is the row itself (the highlight is a little larger).
+    pub(super) fn toggle_row(&mut self, ui: &mut Ui, m: &Model, area: Rect, row: ToggleRow) {
+        let t = &m.theme;
+        self.register(row.hit, area);
+        let highlight = Rect::new(area.x - 6.0, area.y - 2.0, area.w + 12.0, area.h + 4.0);
+        self.wash(ui, m, row.hit, highlight, 10.0, 0.6);
+        let cy = area.y + area.h / 2.0;
+        let line_h = ui.measure("Ag", BODY).1;
+        ui.icon(row.icon, area.x + 10.0, cy, 17.0, row.icon_color);
+        ui.text(
+            tr(m.lang, row.title),
+            area.x + 30.0,
+            cy - line_h / 2.0,
+            TextStyle::new(14.0, Weight::SemiBold),
+            t.text,
+        );
+        self.switch(
+            ui,
+            m,
+            Rect::new(area.x + area.w - 42.0, cy - 11.0, 42.0, 22.0),
+            row.on,
+            row.knob,
+        );
+    }
+
     /// An on/off switch. The knob glides when `on` changes.
     pub(super) fn switch(&mut self, ui: &mut Ui, m: &Model, track: Rect, on: bool, knob: Hit) {
         let t = &m.theme;
@@ -114,11 +160,7 @@ impl Controls {
             let row = Rect::new(x, y, w, ROW_HEIGHT);
             self.register(hit(i), row);
             let is_selected = selected == Some(i);
-            let (hover, press) = self.amounts(hit(i));
-            let alpha = t.hover.a * (hover + 0.9 * press);
-            if alpha > 0.002 {
-                ui.rect(row, 9.0, t.hover.with_alpha(alpha.min(1.0)));
-            }
+            self.wash(ui, m, hit(i), row, 9.0, 1.0);
             let label = fit_text(ui, name, BODY, w - 20.0 - 28.0);
             let line_h = ui.measure("Ag", BODY).1;
             let color = if is_selected { t.text } else { t.text_dim };
@@ -202,6 +244,18 @@ impl Controls {
         }
         y + ROW_HEIGHT
     }
+}
+
+/// What differs between the rows built by [`Controls::toggle_row`].
+pub(super) struct ToggleRow {
+    pub icon: char,
+    pub icon_color: Color,
+    pub title: Key,
+    pub on: bool,
+    /// Hit target of the whole row.
+    pub hit: Hit,
+    /// Hit target of the switch's knob (it animates).
+    pub knob: Hit,
 }
 
 pub(super) fn divider_at(ui: &mut Ui, theme: &Theme, x: f32, cy: f32) -> f32 {
