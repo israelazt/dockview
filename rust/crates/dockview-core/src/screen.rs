@@ -15,32 +15,24 @@ use std::mem::ManuallyDrop;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use windows::core::{factory, Interface, BOOL};
 use windows::Foundation::{TimeSpan, TypedEventHandler};
 use windows::Graphics::Capture::{Direct3D11CaptureFramePool, GraphicsCaptureItem};
 use windows::Graphics::DirectX::Direct3D11::IDirect3DDevice;
 use windows::Graphics::DirectX::DirectXPixelFormat;
-use windows::Win32::Foundation::{HMODULE, HWND, LPARAM, RECT};
-use windows::Win32::Graphics::Direct3D::D3D_DRIVER_TYPE_HARDWARE;
+use windows::Win32::Foundation::{HWND, LPARAM, RECT};
 use windows::Win32::Graphics::Direct3D11::{
-    D3D11CreateDevice, D3D11_VIDEO_COLOR_YCbCrA, ID3D11Device, ID3D11DeviceContext,
-    ID3D11Multithread, ID3D11Texture2D, ID3D11VideoContext, ID3D11VideoDevice,
-    ID3D11VideoProcessor, ID3D11VideoProcessorEnumerator, ID3D11VideoProcessorOutputView,
-    D3D11_BIND_RENDER_TARGET, D3D11_CPU_ACCESS_READ, D3D11_CREATE_DEVICE_BGRA_SUPPORT,
-    D3D11_CREATE_DEVICE_VIDEO_SUPPORT, D3D11_MAPPED_SUBRESOURCE, D3D11_MAP_READ, D3D11_SDK_VERSION,
-    D3D11_TEX2D_VPIV, D3D11_TEX2D_VPOV, D3D11_TEXTURE2D_DESC, D3D11_USAGE_DEFAULT,
-    D3D11_USAGE_STAGING, D3D11_VIDEO_COLOR, D3D11_VIDEO_COLOR_0,
+    ID3D11Device, ID3D11DeviceContext, ID3D11Texture2D, ID3D11VideoContext, ID3D11VideoDevice,
+    ID3D11VideoProcessor, ID3D11VideoProcessorEnumerator, D3D11_TEX2D_VPIV,
     D3D11_VIDEO_FRAME_FORMAT_PROGRESSIVE, D3D11_VIDEO_PROCESSOR_COLOR_SPACE,
     D3D11_VIDEO_PROCESSOR_CONTENT_DESC, D3D11_VIDEO_PROCESSOR_INPUT_VIEW_DESC,
-    D3D11_VIDEO_PROCESSOR_INPUT_VIEW_DESC_0, D3D11_VIDEO_PROCESSOR_OUTPUT_VIEW_DESC,
-    D3D11_VIDEO_PROCESSOR_OUTPUT_VIEW_DESC_0, D3D11_VIDEO_PROCESSOR_STREAM,
+    D3D11_VIDEO_PROCESSOR_INPUT_VIEW_DESC_0, D3D11_VIDEO_PROCESSOR_STREAM,
     D3D11_VIDEO_USAGE_PLAYBACK_NORMAL, D3D11_VPIV_DIMENSION_TEXTURE2D,
-    D3D11_VPOV_DIMENSION_TEXTURE2D,
 };
 use windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_CLOAKED};
-use windows::Win32::Graphics::Dxgi::Common::{DXGI_FORMAT_NV12, DXGI_RATIONAL, DXGI_SAMPLE_DESC};
+use windows::Win32::Graphics::Dxgi::Common::DXGI_RATIONAL;
 use windows::Win32::Graphics::Dxgi::IDXGIDevice;
 use windows::Win32::Graphics::Gdi::{
     EnumDisplayMonitors, GetMonitorInfoW, HDC, HMONITOR, MONITORINFO, MONITORINFOEXW,
@@ -55,7 +47,8 @@ use windows::Win32::UI::WindowsAndMessaging::{
     IsWindow, IsWindowVisible, GWL_EXSTYLE, GW_OWNER, WS_EX_TOOLWINDOW,
 };
 
-use crate::frame::{Frame, FrameSlot, PixelFormat};
+use crate::frame::FrameSlot;
+use crate::gpu::{create_device, even, rect, Nv12Target};
 use crate::worker::{StatusCell, Worker};
 
 /// What to capture. The numbers are the raw `HMONITOR` / `HWND` handles.
@@ -123,11 +116,6 @@ pub enum ScreenStatus {
 // Pure helpers
 // ---------------------------------------------------------------------------
 
-/// The nearest even number not above `n` (NV12 needs even sizes).
-pub fn even(n: u32) -> u32 {
-    n & !1
-}
-
 /// Output size for a source of `width`×`height`: scaled down to at most
 /// `max_height` (never up), keeping the shape, and both sides even.
 pub fn output_size(width: u32, height: u32, max_height: u32) -> (u32, u32) {
@@ -149,15 +137,6 @@ pub fn fit_in(content_w: u32, content_h: u32, out_w: u32, out_h: u32) -> (u32, u
     let w = even((f64::from(content_w) * scale).round() as u32).clamp(2, out_w);
     let h = even((f64::from(content_h) * scale).round() as u32).clamp(2, out_h);
     (even((out_w - w) / 2), even((out_h - h) / 2), w, h)
-}
-
-fn rect(x: u32, y: u32, w: u32, h: u32) -> RECT {
-    RECT {
-        left: x as i32,
-        top: y as i32,
-        right: (x + w) as i32,
-        bottom: (y + h) as i32,
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -287,57 +266,15 @@ pub fn window_exists(handle: isize) -> bool {
 
 /// Converts captured BGRA textures to NV12 on the GPU and reads them back.
 struct Converter {
-    context: ID3D11DeviceContext,
     video_device: ID3D11VideoDevice,
     video_context: ID3D11VideoContext,
     enumerator: ID3D11VideoProcessorEnumerator,
     processor: ID3D11VideoProcessor,
-    output_view: ID3D11VideoProcessorOutputView,
-    output: ID3D11Texture2D,
-    staging: ID3D11Texture2D,
+    target: Nv12Target,
     out_w: u32,
     out_h: u32,
     /// The picture size the destination rectangle was last computed for.
     laid_out_for: Option<(u32, u32)>,
-}
-
-fn nv12_texture(
-    device: &ID3D11Device,
-    width: u32,
-    height: u32,
-    staging: bool,
-) -> windows::core::Result<ID3D11Texture2D> {
-    let desc = D3D11_TEXTURE2D_DESC {
-        Width: width,
-        Height: height,
-        MipLevels: 1,
-        ArraySize: 1,
-        Format: DXGI_FORMAT_NV12,
-        SampleDesc: DXGI_SAMPLE_DESC {
-            Count: 1,
-            Quality: 0,
-        },
-        Usage: if staging {
-            D3D11_USAGE_STAGING
-        } else {
-            D3D11_USAGE_DEFAULT
-        },
-        BindFlags: if staging {
-            0
-        } else {
-            D3D11_BIND_RENDER_TARGET.0 as u32
-        },
-        CPUAccessFlags: if staging {
-            D3D11_CPU_ACCESS_READ.0 as u32
-        } else {
-            0
-        },
-        MiscFlags: 0,
-    };
-    let mut texture: Option<ID3D11Texture2D> = None;
-    // SAFETY: valid description and out-pointer.
-    unsafe { device.CreateTexture2D(&desc, None, Some(&mut texture))? };
-    texture.ok_or_else(|| windows::core::Error::from(windows::Win32::Foundation::E_FAIL))
 }
 
 impl Converter {
@@ -369,23 +306,8 @@ impl Converter {
             let enumerator = video_device.CreateVideoProcessorEnumerator(&content)?;
             let processor = video_device.CreateVideoProcessor(&enumerator, 0)?;
 
-            let output = nv12_texture(device, out_w, out_h, false)?;
-            let staging = nv12_texture(device, out_w, out_h, true)?;
-            let view_desc = D3D11_VIDEO_PROCESSOR_OUTPUT_VIEW_DESC {
-                ViewDimension: D3D11_VPOV_DIMENSION_TEXTURE2D,
-                Anonymous: D3D11_VIDEO_PROCESSOR_OUTPUT_VIEW_DESC_0 {
-                    Texture2D: D3D11_TEX2D_VPOV { MipSlice: 0 },
-                },
-            };
-            let mut output_view: Option<ID3D11VideoProcessorOutputView> = None;
-            video_device.CreateVideoProcessorOutputView(
-                &output,
-                &enumerator,
-                &view_desc,
-                Some(&mut output_view),
-            )?;
-            let output_view = output_view
-                .ok_or_else(|| windows::core::Error::from(windows::Win32::Foundation::E_FAIL))?;
+            let target =
+                Nv12Target::new(device, context, &video_device, &enumerator, out_w, out_h)?;
 
             // RGB in (full range) -> BT.709 video in (limited range, 16..235),
             // the same colours the capture card's NV12 uses.
@@ -397,20 +319,7 @@ impl Converter {
             };
             video_context.VideoProcessorSetStreamColorSpace(&processor, 0, &input_space);
             video_context.VideoProcessorSetOutputColorSpace(&processor, &output_space);
-            let full = rect(0, 0, out_w, out_h);
-            video_context.VideoProcessorSetOutputTargetRect(&processor, true, Some(&full));
-            // Black bars, in video levels.
-            let black = D3D11_VIDEO_COLOR {
-                Anonymous: D3D11_VIDEO_COLOR_0 {
-                    YCbCr: D3D11_VIDEO_COLOR_YCbCrA {
-                        Y: 16.0 / 255.0,
-                        Cb: 0.5,
-                        Cr: 0.5,
-                        A: 1.0,
-                    },
-                },
-            };
-            video_context.VideoProcessorSetOutputBackgroundColor(&processor, true, &black);
+            target.prepare(&video_context, &processor);
             video_context.VideoProcessorSetStreamFrameFormat(
                 &processor,
                 0,
@@ -418,14 +327,11 @@ impl Converter {
             );
 
             Ok(Self {
-                context: context.clone(),
                 video_device,
                 video_context,
                 enumerator,
                 processor,
-                output_view,
-                output,
-                staging,
+                target,
                 out_w,
                 out_h,
                 laid_out_for: None,
@@ -488,7 +394,7 @@ impl Converter {
             };
             let result = self.video_context.VideoProcessorBlt(
                 &self.processor,
-                &self.output_view,
+                self.target.view(),
                 0,
                 std::slice::from_ref(&stream),
             );
@@ -496,39 +402,7 @@ impl Converter {
             drop(ManuallyDrop::into_inner(stream.pInputSurface));
             result?;
 
-            self.context.CopyResource(&self.staging, &self.output);
-            let mut mapped = D3D11_MAPPED_SUBRESOURCE::default();
-            self.context
-                .Map(&self.staging, 0, D3D11_MAP_READ, 0, Some(&mut mapped))?;
-            let (w, h) = (self.out_w as usize, self.out_h as usize);
-            let expected = PixelFormat::Nv12.buffer_len(w, h);
-            let mut frame = slot
-                .take_spare()
-                .filter(|f| {
-                    f.format == PixelFormat::Nv12
-                        && f.width == self.out_w
-                        && f.height == self.out_h
-                        && f.data.len() == expected
-                })
-                .unwrap_or_else(|| Frame {
-                    width: self.out_w,
-                    height: self.out_h,
-                    stride: self.out_w,
-                    format: PixelFormat::Nv12,
-                    data: vec![0; expected],
-                    timestamp: 0,
-                    arrived: Instant::now(),
-                });
-            // The luma rows, then the chroma rows right after them.
-            let pitch = mapped.RowPitch as usize;
-            let base = mapped.pData as *const u8;
-            for row in 0..h + h / 2 {
-                let line = std::slice::from_raw_parts(base.add(row * pitch), w);
-                frame.data[row * w..(row + 1) * w].copy_from_slice(line);
-            }
-            self.context.Unmap(&self.staging, 0);
-            frame.timestamp = timestamp;
-            slot.publish(frame);
+            self.target.publish(slot, timestamp)?;
         }
         Ok(())
     }
@@ -613,31 +487,8 @@ fn run(
         options.max_height,
     );
 
-    let mut device: Option<ID3D11Device> = None;
-    let mut context: Option<ID3D11DeviceContext> = None;
-    // SAFETY: valid out-pointers, default adapter.
-    unsafe {
-        D3D11CreateDevice(
-            None,
-            D3D_DRIVER_TYPE_HARDWARE,
-            HMODULE::default(),
-            D3D11_CREATE_DEVICE_BGRA_SUPPORT | D3D11_CREATE_DEVICE_VIDEO_SUPPORT,
-            None,
-            D3D11_SDK_VERSION,
-            Some(&mut device),
-            None,
-            Some(&mut context),
-        )?;
-    }
-    let (Some(device), Some(context)) = (device, context) else {
-        return Err(windows::Win32::Foundation::E_FAIL.into());
-    };
-    // The capture delivers frames on its own threads.
-    let multithread: ID3D11Multithread = context.cast()?;
-    // SAFETY: plain setter.
-    unsafe {
-        let _ = multithread.SetMultithreadProtected(true);
-    }
+    // The capture delivers frames on its own threads; the device is protected.
+    let (device, context) = create_device()?;
     let dxgi: IDXGIDevice = device.cast()?;
     // SAFETY: wraps the DXGI device for WinRT.
     let winrt_device: IDirect3DDevice =
@@ -743,6 +594,10 @@ fn run(
 
 #[cfg(test)]
 mod tests {
+    use std::time::Instant;
+
+    use crate::frame::PixelFormat;
+
     use super::*;
 
     #[test]

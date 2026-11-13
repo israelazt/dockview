@@ -13,6 +13,7 @@ pub mod diagnostics;
 #[cfg(windows)]
 pub mod encode;
 pub mod frame;
+pub mod gpu;
 #[cfg(windows)]
 pub mod mf;
 pub mod pcm;

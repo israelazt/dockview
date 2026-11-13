@@ -73,7 +73,7 @@ Cada paso: sin cambio visible, comprobado con los mismos tests y, en la interfaz
 | Paso | Qué | Valor | Esfuerzo / riesgo |
 |---|---|---|---|
 | D-1 ✅ | `Worker` común (hilo, parada, estado, cierre) en el núcleo | Quita 7 copias; base para fuentes nuevas | Bajo |
-| D-2 | Módulo `gpu` compartido (dispositivo, textura NV12, lectura al `Frame`) | Quita ≈ 120 líneas duplicadas | Bajo-medio |
+| D-2 ✅ | Módulo `gpu` compartido (dispositivo, textura NV12, lectura al `Frame`) | Quita ≈ 120 líneas duplicadas | Bajo-medio |
 | D-3 | Partir `recorder.rs` en `recorder/` | Un archivo por responsabilidad | Medio (mucho movimiento, pocos cambios) |
 | D-4 | Extraer `Sources` de `App` (fuentes, audio y enrutado) | Mayor reducción de `main.rs`; permite probar el enrutado | Medio-alto |
 | D-5 | Extraer `ReplayService` (replay, grabación, micrófono) y `StatsService` | `App` queda como coordinador | Medio-alto |
@@ -87,6 +87,11 @@ Cada paso: sin cambio visible, comprobado con los mismos tests y, en la interfaz
 `dockview-core/src/worker.rs`: `Worker` (uno o varios hilos con una bandera de parada y un plazo de cierre; al soltarlo espera y, si un hilo sigue bloqueado en el controlador, lo deja terminar solo) y `StatusCell<T>` (estado compartido que no se envenena). Migrados `TestSource`, `VideoCapture`, `ScreenCapture`, `SceneCompositor`, `TapCapture`, `ReplayRecorder` y `AudioEngine`: siete `Drop` y tres `set_status` menos. 5 tests nuevos. Comprobado con los 351 tests y con la app real (capturadora + pantalla en la esquina + grabación; cierre en 326 ms, vídeo bien cerrado).
 
 Cambio pequeño de comportamiento: `TestSource` esperaba a su hilo sin límite; ahora espera como máximo 2 s como las demás. `AudioEngine`, `TapCapture` y `ReplayRecorder` siguen con su estado propio dentro de `Shared`, porque guarda además otras cosas (ganancia, nivel, anillos).
+
+### Resultado de D-2 (2026-11-12)
+`dockview-core/src/gpu.rs`: `create_device` (dispositivo con soporte de BGRA y de vídeo, protegido para varios hilos), `nv12_texture`, `Nv12Target` (textura de salida, su vista, la copia de lectura y `publish`, que devuelve la imagen como `Frame`), más `even`, `rect` y `failed`. `screen.rs` (`Converter`) y `compose.rs` (`Compositor`) dejaron de llevar cada uno su copia. 3 tests nuevos, uno con la GPU real.
+
+Se quedaron fuera a propósito `render.rs` y el ejemplo `screen_probe`: crean el dispositivo con otras opciones (sin soporte de vídeo, nivel de características fijo), así que compartirlo obligaría a parametrizarlo sin ganar nada. Comprobado con 354 tests y con la app real (capturadora + pantalla en la esquina + grabación, cierre en 512 ms, vídeo de 13,7 MB).
 
 ## Lo que no conviene tocar
 - La separación en dos crates y el sentido de las dependencias.
