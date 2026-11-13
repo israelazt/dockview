@@ -96,7 +96,7 @@ impl Core {
             lang_mode: self.lang_mode(),
             video_mode: self.settings.video_mode,
             stats_open: self.stats_open,
-            studio: self.studio,
+            studio: self.settings.studio_open,
             replay: self.replay_view(),
             mic_devices: self.mic_device_names(self.lang_mode().resolve(self.system_lang)),
             mic_selected: Some(self.mic_selected()),
@@ -232,7 +232,8 @@ impl Core {
                 return;
             }
             Action::ToggleStudio => {
-                self.studio = !self.studio;
+                self.settings.studio_open = !self.settings.studio_open;
+                self.save_settings();
                 return;
             }
             Action::SetVideoMode(mode) => {
