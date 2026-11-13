@@ -24,12 +24,7 @@ impl App {
         let latency_ms = self.telemetry.take_latency(self.stats.latency_ms);
 
         let native = self.native_mode();
-        let video = match &self.source {
-            Source::Test(_) => VideoState::Running,
-            Source::None => VideoState::NoDevice,
-            Source::Capture { capture, .. } => video_state_of_capture(&capture.status()),
-            Source::Screen(capture) => video_state_of_screen(&capture.status()),
-        };
+        let video = self.source.video_state();
         let monitor_hz = self
             .window
             .as_ref()

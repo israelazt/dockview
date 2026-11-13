@@ -10,9 +10,7 @@ impl App {
     }
 
     pub(super) fn change_volume(&mut self, delta: f32) {
-        self.settings.volume = (self.settings.volume + delta).clamp(0.0, 1.0);
-        // Snap away accumulated float error so 5% steps stay exact.
-        self.settings.volume = (self.settings.volume * 100.0).round() / 100.0;
+        self.settings.volume = settings::step_volume(self.settings.volume, delta);
         if let Some(audio) = &self.audio {
             audio.set_volume(self.settings.volume);
         }
@@ -20,8 +18,8 @@ impl App {
     }
 
     pub(super) fn change_offset(&mut self, delta_ms: i32) {
-        self.settings.audio_offset_ms = (self.settings.audio_offset_ms + delta_ms)
-            .clamp(-MAX_AUDIO_OFFSET_MS, MAX_AUDIO_OFFSET_MS);
+        self.settings.audio_offset_ms =
+            settings::step_audio_offset(self.settings.audio_offset_ms, delta_ms);
         if let Some(audio) = &self.audio {
             audio.set_offset_ms(self.settings.audio_offset_ms);
         }
@@ -54,36 +52,8 @@ impl App {
 
     /// Snapshot of everything the controls display.
     pub(super) fn model(&self) -> Model {
-        let status = match &self.source {
-            Source::Test(_) => StatusKind::Live,
-            Source::None => StatusKind::Idle,
-            Source::Capture { capture, .. } => match capture.status() {
-                CaptureStatus::Running { .. } | CaptureStatus::Stopped => StatusKind::Live,
-                CaptureStatus::Starting => StatusKind::Connecting,
-                CaptureStatus::Disconnected { .. } | CaptureStatus::Failed(_) => {
-                    StatusKind::Problem
-                }
-            },
-            Source::Screen(capture) => match capture.status() {
-                ScreenStatus::Running { .. } => StatusKind::Live,
-                ScreenStatus::Starting => StatusKind::Connecting,
-                ScreenStatus::Ended(_) | ScreenStatus::Failed(_) => StatusKind::Problem,
-            },
-        };
-        let resolution = if self.video_size.0 > 0 {
-            // The rate is unknown for the first second; show just the height.
-            if self.telemetry.shown_fps() >= 1.0 {
-                format!(
-                    "{}p · {:.0} fps",
-                    self.video_size.1,
-                    self.telemetry.shown_fps()
-                )
-            } else {
-                format!("{}p", self.video_size.1)
-            }
-        } else {
-            String::new()
-        };
+        let status = status_kind(self.source.video_state());
+        let resolution = resolution_label(self.video_size, self.telemetry.shown_fps());
         let appearance = self.theme_mode().resolve(self.system_appearance);
         let names = |devices: &[String]| devices.to_vec();
         Model {
@@ -215,10 +185,7 @@ impl App {
                 return; // the microphone always starts off; nothing to save
             }
             Action::SelectMic(index) => {
-                self.settings.last_mic_device_id = index
-                    .checked_sub(1)
-                    .and_then(|i| self.audio_devices.get(i))
-                    .map(|d| d.device_id.clone());
+                self.settings.last_mic_device_id = mic_device_id(index, &self.audio_devices);
                 if self.replay.mic_on() {
                     // Reopen on the new device.
                     self.set_mic(false);
@@ -287,38 +254,36 @@ impl App {
     }
 
     pub(super) fn on_key(&mut self, key: &Key) {
-        match key {
-            Key::Named(NamedKey::F11) => self.set_fullscreen(!self.fullscreen),
-            Key::Named(NamedKey::Escape) => {
+        let Some(command) = keys::command_for(key) else {
+            return;
+        };
+        match command {
+            KeyCommand::ToggleFullscreen => self.set_fullscreen(!self.fullscreen),
+            KeyCommand::Escape => {
                 if !self.controls.close_settings() && self.fullscreen {
                     self.set_fullscreen(false);
                 }
             }
-            Key::Named(NamedKey::ArrowUp) => self.change_volume(VOLUME_STEP),
-            Key::Named(NamedKey::ArrowDown) => self.change_volume(-VOLUME_STEP),
-            Key::Named(NamedKey::ArrowLeft) => self.change_offset(-OFFSET_STEP_MS),
-            Key::Named(NamedKey::ArrowRight) => self.change_offset(OFFSET_STEP_MS),
-            Key::Character(c) => match c.to_ascii_lowercase().as_str() {
-                "f" => self.set_fullscreen(!self.fullscreen),
-                "p" => self.cycle_preset(),
-                "i" => self.stats_open = !self.stats_open,
-                "v" => {
-                    let next = next_index(self.video_index, self.video_devices.len());
-                    self.select_video(next);
-                    // Follow the new video device with its matching audio.
-                    if let Some(audio) = self.match_audio(next) {
-                        self.select_audio(Some(audio));
-                    }
-                    self.save_settings();
+            KeyCommand::VolumeUp => self.change_volume(VOLUME_STEP),
+            KeyCommand::VolumeDown => self.change_volume(-VOLUME_STEP),
+            KeyCommand::SyncEarlier => self.change_offset(-OFFSET_STEP_MS),
+            KeyCommand::SyncLater => self.change_offset(OFFSET_STEP_MS),
+            KeyCommand::CyclePreset => self.cycle_preset(),
+            KeyCommand::ToggleStats => self.stats_open = !self.stats_open,
+            KeyCommand::NextVideo => {
+                let next = next_index(self.video_index, self.video_devices.len());
+                self.select_video(next);
+                // Follow the new video device with its matching audio.
+                if let Some(audio) = self.match_audio(next) {
+                    self.select_audio(Some(audio));
                 }
-                "a" => {
-                    let next = next_index(self.audio_index, self.audio_devices.len());
-                    self.select_audio(next);
-                    self.save_settings();
-                }
-                _ => {}
-            },
-            _ => {}
+                self.save_settings();
+            }
+            KeyCommand::NextAudio => {
+                let next = next_index(self.audio_index, self.audio_devices.len());
+                self.select_audio(next);
+                self.save_settings();
+            }
         }
     }
 }

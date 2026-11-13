@@ -39,7 +39,7 @@ use dockview_core::screen::{
     ScreenStatus, WindowInfo,
 };
 use dockview_core::settings::{
-    self, AppSettings, LangMode, RenderPreset, ThemeMode, VideoModePref, MAX_AUDIO_OFFSET_MS,
+    self, AppSettings, LangMode, RenderPreset, ThemeMode, VideoModePref,
 };
 use dockview_core::stream::StreamInfo;
 use dockview_core::tap_capture::{CaptureSource, TapCapture as MicCapture};
@@ -52,22 +52,23 @@ use winit::application::ApplicationHandler;
 use winit::dpi::{LogicalSize, PhysicalSize};
 use winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
-use winit::keyboard::{Key, NamedKey};
+use winit::keyboard::Key;
 use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use winit::window::{CursorIcon, Fullscreen, Theme as WindowTheme, Window, WindowId};
 
 use crate::auto_switch::{AutoSwitch, SwitchEvent};
 use crate::cli::Cli;
 use crate::i18n::{self, Lang, LangModeExt};
+use crate::keys::{self, KeyCommand};
 use crate::render::{self, Filter, Renderer};
 use crate::replay_service::{RecordToggle, ReplayService};
 use crate::sources::{
-    find_window, monitor_label, video_state_of_capture, video_state_of_screen, AudioRoute,
-    Reconnect, SourceKind,
+    find_window, monitor_label, status_kind, video_state_of_capture, video_state_of_screen,
+    AudioRoute, Reconnect, SourceKind,
 };
 use crate::telemetry::{Rates, Telemetry};
 use crate::theme::{Appearance, Theme, ThemeModeExt};
-use crate::ui::controls::{Action, Controls, Model, RecState, SourcesView, StatusKind};
+use crate::ui::controls::{Action, Controls, Model, RecState, SourcesView};
 use crate::ui::gpu::UiGpu;
 use crate::ui::input::Pointer;
 use crate::ui::stats::{Stats, StatsPanel};
@@ -75,7 +76,8 @@ use crate::ui::toast::{ToastHost, ToastKind};
 use crate::ui::{self, Ui};
 use crate::{clips, hotkey, perf, stats_log};
 use helpers::{
-    appearance_of, filter_for, next_index, next_preset, on_helper_thread, system_animations_enabled,
+    appearance_of, filter_for, mic_device_id, mic_index_of, next_index, next_preset,
+    on_helper_thread, resolution_label, system_animations_enabled,
 };
 use scene_runtime::Overlay;
 use scene_transition::ActiveTransition;

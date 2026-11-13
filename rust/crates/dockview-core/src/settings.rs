@@ -186,6 +186,18 @@ pub fn step_replay_seconds(current: u32, delta: i32) -> u32 {
     REPLAY_STEPS[index]
 }
 
+/// The volume after moving it by `delta` (0.0 to 1.0), rounded to whole
+/// percents so repeated 5% steps stay exact instead of drifting.
+pub fn step_volume(current: f32, delta: f32) -> f32 {
+    let moved = (current + delta).clamp(0.0, 1.0);
+    (moved * 100.0).round() / 100.0
+}
+
+/// The audio sync offset after moving it by `delta_ms`, within the allowed range.
+pub fn step_audio_offset(current_ms: i32, delta_ms: i32) -> i32 {
+    (current_ms + delta_ms).clamp(-MAX_AUDIO_OFFSET_MS, MAX_AUDIO_OFFSET_MS)
+}
+
 /// Persisted application settings. Every field falls back to its default when
 /// missing from the file.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -640,5 +652,30 @@ mod tests {
         assert_eq!(s.scenes.len(), 1);
         assert_eq!(s.scenes[0].name, "buena");
         assert_eq!(s.active_scene, None);
+    }
+
+    #[test]
+    fn volume_steps_stay_exact_and_inside_the_range() {
+        let mut volume = 0.0;
+        for _ in 0..7 {
+            volume = step_volume(volume, 0.05);
+        }
+        assert_eq!(volume, 0.35, "no float drift after seven steps");
+        assert_eq!(step_volume(0.98, 0.05), 1.0);
+        assert_eq!(step_volume(0.02, -0.05), 0.0);
+    }
+
+    #[test]
+    fn the_sync_offset_stops_at_both_ends() {
+        assert_eq!(step_audio_offset(0, 10), 10);
+        assert_eq!(step_audio_offset(-20, 10), -10);
+        assert_eq!(
+            step_audio_offset(MAX_AUDIO_OFFSET_MS - 5, 10),
+            MAX_AUDIO_OFFSET_MS
+        );
+        assert_eq!(
+            step_audio_offset(-MAX_AUDIO_OFFSET_MS + 5, -10),
+            -MAX_AUDIO_OFFSET_MS
+        );
     }
 }

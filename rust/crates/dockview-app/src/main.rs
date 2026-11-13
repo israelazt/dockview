@@ -14,6 +14,7 @@ mod clips;
 mod hotkey;
 #[allow(dead_code)] // some strings are used by the upcoming live controls
 mod i18n;
+mod keys;
 mod perf;
 mod render;
 mod replay_service;

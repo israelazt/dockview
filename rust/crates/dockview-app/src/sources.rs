@@ -12,7 +12,7 @@ use dockview_core::diagnostics::VideoState;
 use dockview_core::screen::{MonitorInfo, ScreenStatus, WindowInfo};
 
 use crate::i18n::{self, Lang};
-use crate::ui::controls::CurrentSource;
+use crate::ui::controls::{CurrentSource, StatusKind};
 
 /// Delay before trying to reopen a capture device that went away.
 pub const RECONNECT_DELAY: Duration = Duration::from_secs(2);
@@ -140,6 +140,16 @@ pub fn video_state_of_screen(status: &ScreenStatus) -> VideoState {
         ScreenStatus::Running { .. } => VideoState::Running,
         ScreenStatus::Starting => VideoState::Connecting,
         ScreenStatus::Ended(_) | ScreenStatus::Failed(_) => VideoState::Lost,
+    }
+}
+
+/// The status light of the controls for a diagnosis state.
+pub fn status_kind(state: VideoState) -> StatusKind {
+    match state {
+        VideoState::Running => StatusKind::Live,
+        VideoState::Connecting => StatusKind::Connecting,
+        VideoState::Lost => StatusKind::Problem,
+        VideoState::NoDevice => StatusKind::Idle,
     }
 }
 
@@ -283,5 +293,13 @@ mod tests {
             video_state_of_screen(&ScreenStatus::Failed("x".into())),
             VideoState::Lost
         );
+    }
+
+    #[test]
+    fn the_status_light_follows_the_video_state() {
+        assert_eq!(status_kind(VideoState::Running), StatusKind::Live);
+        assert_eq!(status_kind(VideoState::Connecting), StatusKind::Connecting);
+        assert_eq!(status_kind(VideoState::Lost), StatusKind::Problem);
+        assert_eq!(status_kind(VideoState::NoDevice), StatusKind::Idle);
     }
 }

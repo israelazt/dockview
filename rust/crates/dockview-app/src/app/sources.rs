@@ -3,6 +3,18 @@
 
 use super::*;
 
+impl Source {
+    /// What the diagnosis and the status light should know about this source.
+    pub(super) fn video_state(&self) -> VideoState {
+        match self {
+            Self::Test(_) => VideoState::Running,
+            Self::None => VideoState::NoDevice,
+            Self::Capture { capture, .. } => video_state_of_capture(&capture.status()),
+            Self::Screen(capture) => video_state_of_screen(&capture.status()),
+        }
+    }
+}
+
 impl App {
     /// Points the recorder's game-sound input at the right place: the capture
     /// card's audio, or the loopback of the PC (a monitor) or of one program (a

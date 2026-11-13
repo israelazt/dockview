@@ -47,11 +47,10 @@ impl App {
 
     /// Index in [`Self::mic_device_names`] of the chosen microphone.
     pub(super) fn mic_selected(&self) -> usize {
-        self.settings
-            .last_mic_device_id
-            .as_deref()
-            .and_then(|id| self.audio_devices.iter().position(|d| d.device_id == id))
-            .map_or(0, |i| i + 1)
+        mic_index_of(
+            self.settings.last_mic_device_id.as_deref(),
+            &self.audio_devices,
+        )
     }
 
     /// Starts or stops recording the session.

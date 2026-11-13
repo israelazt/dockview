@@ -141,6 +141,14 @@ Módulo sin hilos ni ventana con lo que `App` decidía a mano, ahora con 7 tests
 - `find_window`: buscar una ventana por título (exacto primero, luego «contiene», nunca la propia). También estaba duplicada (CLI y escenas).
 - `monitor_label`, `video_state_of_capture` y `video_state_of_screen`.
 
+### Reglas puras sacadas de `actions.rs` (2026-11-12)
+- `keys.rs`: qué hace cada tecla (`KeyCommand`), con tests; `on_key` solo ejecuta la orden.
+- `settings.rs` (núcleo): `step_volume` y `step_audio_offset`. El paso de volumen redondea a porcentajes enteros, y ahora hay un test de que siete pasos de 5 % dan exactamente 35 %.
+- `Source::video_state()`: el estado de la fuente se calculaba **dos veces** con el mismo `match` (en `model` y en `update_stats`); ahora hay uno, y `status_kind` lo convierte en la luz de estado.
+- `resolution_label`, `mic_device_id` y `mic_index_of` (con prueba de ida y vuelta) en `app/helpers.rs`.
+
+12 tests nuevos. Comprobado con teclas reales enviadas a la app: tres pulsaciones de ↓ dejan el volumen en 0,85 y dos de ← la sincronía en −20 ms.
+
 Efecto menor: `--capture-window` ahora prefiere un título exacto antes que uno que solo lo contiene, como ya hacían las escenas. Comprobado con 379 tests y con la app real (capturadora + pantalla en la esquina, y una pantalla como fuente principal).
 
 
