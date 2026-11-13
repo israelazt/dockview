@@ -66,12 +66,12 @@ use crate::sources::{
     find_window, monitor_label, status_kind, video_state_of_capture, video_state_of_screen,
     AudioRoute, Reconnect, SourceKind,
 };
-use crate::telemetry::{Rates, Telemetry};
+use crate::telemetry::{Rates, Stats, Telemetry};
 use crate::theme::{Appearance, Theme, ThemeModeExt};
 use crate::ui::controls::{Action, Controls, Model, RecState, SourcesView};
 use crate::ui::gpu::UiGpu;
 use crate::ui::input::Pointer;
-use crate::ui::stats::{Stats, StatsPanel};
+use crate::ui::stats::StatsPanel;
 use crate::ui::toast::{ToastHost, ToastKind};
 use crate::ui::{self, Ui};
 use crate::{clips, hotkey, perf, stats_log};

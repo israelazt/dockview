@@ -149,6 +149,8 @@ Módulo sin hilos ni ventana con lo que `App` decidía a mano, ahora con 7 tests
 
 12 tests nuevos. Comprobado con teclas reales enviadas a la app: tres pulsaciones de ↓ dejan el volumen en 0,85 y dos de ← la sincronía en −20 ms.
 
+`Stats` (el tipo de datos de las medidas) salió de `ui` y vive en `telemetry.rs`: `stats_log` ya no depende de la interfaz (era la única inversión de dependencias que señalaba la revisión).
+
 Efecto menor: `--capture-window` ahora prefiere un título exacto antes que uno que solo lo contiene, como ya hacían las escenas. Comprobado con 379 tests y con la app real (capturadora + pantalla en la esquina, y una pantalla como fuente principal).
 
 

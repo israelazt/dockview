@@ -9,7 +9,7 @@ use std::io::{self, BufWriter, Write};
 use std::path::Path;
 use std::time::Instant;
 
-use crate::ui::stats::Stats;
+use crate::telemetry::Stats;
 
 const HEADER: &str = "seconds,received_fps,shown_fps,skipped_per_s,latency_ms,cpu_core_percent,gpu_ms,memory_mb,audio_buffer_ms,mode\n";
 
