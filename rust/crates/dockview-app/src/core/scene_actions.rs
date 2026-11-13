@@ -13,8 +13,8 @@ use dockview_domain::i18n;
 use dockview_domain::i18n::LangModeExt;
 use dockview_domain::view::{LayerView, SceneAction, ScenesView};
 
-use super::scene_runtime::Overlay;
 use super::Core;
+use crate::scenes_service::Overlay;
 
 /// Scenes a user may keep.
 const MAX_SCENES: usize = 12;
@@ -25,6 +25,7 @@ impl Core {
         match source {
             SourceRef::Capture { symbolic_link } => {
                 let friendly = self
+                    .sources
                     .video_devices
                     .iter()
                     .find(|d| &d.symbolic_link == symbolic_link)
@@ -33,6 +34,7 @@ impl Core {
             }
             SourceRef::Monitor { device_name } => {
                 match self
+                    .sources
                     .monitors
                     .iter()
                     .position(|m| &m.device_name == device_name)
@@ -84,19 +86,23 @@ impl Core {
             SceneAction::ToggleLayer(index) => self.toggle_layer(index),
             SceneAction::RemoveLayer(index) => self.remove_layer(index),
             SceneAction::AddCapture(i) => {
-                let source = self.video_devices.get(i).map(|d| SourceRef::Capture {
-                    symbolic_link: d.symbolic_link.clone(),
-                });
+                let source = self
+                    .sources
+                    .video_devices
+                    .get(i)
+                    .map(|d| SourceRef::Capture {
+                        symbolic_link: d.symbolic_link.clone(),
+                    });
                 self.add_layer(source);
             }
             SceneAction::AddMonitor(i) => {
-                let source = self.monitors.get(i).map(|m| SourceRef::Monitor {
+                let source = self.sources.monitors.get(i).map(|m| SourceRef::Monitor {
                     device_name: m.device_name.clone(),
                 });
                 self.add_layer(source);
             }
             SceneAction::AddWindow(i) => {
-                let source = self.windows.get(i).map(|w| SourceRef::Window {
+                let source = self.sources.windows.get(i).map(|w| SourceRef::Window {
                     title: w.title.clone(),
                 });
                 self.add_layer(source);
@@ -108,14 +114,14 @@ impl Core {
     /// A scene made of the current source, which becomes the active one.
     fn new_scene(&mut self) {
         let count = self.settings.scenes.len();
-        let Some(base) = self.main_source_ref() else {
+        let Some(base) = self.sources.main_source_ref() else {
             self.emit(AppEvent::SceneMissing);
             return;
         };
         if count >= MAX_SCENES {
             return;
         }
-        let lang = self.lang_mode().resolve(self.system_lang);
+        let lang = self.lang_mode().resolve(self.view.system_lang);
         let name =
             i18n::tr(lang, i18n::Key::SceneDefaultName).replace("{n}", &(count + 1).to_string());
         self.settings.scenes.push(Scene::with_base(name, base));
@@ -148,13 +154,7 @@ impl Core {
         };
         layer.visible = !layer.visible;
         let visible = layer.visible;
-        if index == 0 {
-            if let Some(base) = self.scene_base.as_mut() {
-                base.visible = visible;
-            }
-        } else if let Some(overlay) = self.overlays.iter_mut().find(|o| o.index == index) {
-            overlay.layer.visible = visible;
-        }
+        self.scenes.set_layer_visible(index, visible);
         self.sync_compositor();
     }
 
@@ -167,12 +167,7 @@ impl Core {
             return;
         }
         scene.layers.remove(index);
-        self.overlays.retain(|o| o.index != index);
-        for overlay in &mut self.overlays {
-            if overlay.index > index {
-                overlay.index -= 1;
-            }
-        }
+        self.scenes.remove_overlay(index);
         self.sync_compositor();
         self.set_capture_exclusion(self.wants_exclusion());
     }
@@ -191,7 +186,7 @@ impl Core {
         let layer = scene.layers[index].clone();
         let slot = Arc::new(FrameSlot::new());
         match self.start_overlay_source(&source, &slot) {
-            Some(running) => self.overlays.push(Overlay {
+            Some(running) => self.scenes.overlays.push(Overlay {
                 running,
                 slot,
                 layer,

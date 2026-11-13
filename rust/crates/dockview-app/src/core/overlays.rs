@@ -3,9 +3,10 @@
 
 use dockview_domain::scene::{NormRect, Scene, SourceRef};
 
-use super::scene_runtime::{OverlayRunning, PIP_DEFAULT_SIZE};
+use super::scene_runtime::PIP_DEFAULT_SIZE;
 use super::*;
 use crate::cli::PipSpec;
+use crate::scenes_service::OverlayRunning;
 
 impl Core {
     /// Starts the source of an overlay, publishing to `slot`.
@@ -17,13 +18,15 @@ impl Core {
         match source {
             SourceRef::Capture { symbolic_link } => {
                 // The device the main source already has open cannot be opened twice.
-                let in_use = self.source_kind == SourceKind::Capture
+                let in_use = self.sources.source_kind == SourceKind::Capture
                     && self
+                        .sources
                         .video_index
-                        .and_then(|i| self.video_devices.get(i))
+                        .and_then(|i| self.sources.video_devices.get(i))
                         .is_some_and(|d| &d.symbolic_link == symbolic_link);
                 if in_use
                     || !self
+                        .sources
                         .video_devices
                         .iter()
                         .any(|d| &d.symbolic_link == symbolic_link)
@@ -31,7 +34,7 @@ impl Core {
                     return None;
                 }
                 Some(OverlayRunning::Capture {
-                    capture: self.machine.start_capture(
+                    capture: self.sources.machine.start_capture(
                         symbolic_link.clone(),
                         CaptureOptions::default(),
                         Arc::clone(slot),
@@ -43,10 +46,11 @@ impl Core {
             SourceRef::Monitor { device_name } => {
                 self.refresh_sources();
                 let monitor = self
+                    .sources
                     .monitors
                     .iter()
                     .find(|m| &m.device_name == device_name)?;
-                Some(OverlayRunning::Screen(self.machine.start_screen(
+                Some(OverlayRunning::Screen(self.sources.machine.start_screen(
                     CaptureTarget::Monitor(monitor.handle),
                     ScreenOptions::default(),
                     Arc::clone(slot),
@@ -54,8 +58,8 @@ impl Core {
             }
             SourceRef::Window { title } => {
                 self.refresh_sources();
-                let (handle, _) = self.find_window(title)?;
-                Some(OverlayRunning::Screen(self.machine.start_screen(
+                let (handle, _) = self.sources.find_window(title)?;
+                Some(OverlayRunning::Screen(self.sources.machine.start_screen(
                     CaptureTarget::Window(handle),
                     ScreenOptions::default(),
                     Arc::clone(slot),
@@ -79,7 +83,7 @@ impl Core {
             SourceRef::Capture {
                 symbolic_link: "test-pattern".into(),
             }
-        } else if let Some(base) = self.main_source_ref() {
+        } else if let Some(base) = self.sources.main_source_ref() {
             base
         } else {
             dockview_domain::log_warn!("--pip needs a main source to draw over");
@@ -88,26 +92,28 @@ impl Core {
         let source = match &spec {
             PipSpec::Video(text) => {
                 let wanted = text.to_lowercase();
-                self.video_devices
+                self.sources
+                    .video_devices
                     .iter()
                     .find(|d| d.friendly_name.to_lowercase().contains(&wanted))
                     .map(|d| SourceRef::Capture {
                         symbolic_link: d.symbolic_link.clone(),
                     })
             }
-            PipSpec::Monitor(n) => {
-                self.machine
-                    .list_monitors()
-                    .into_iter()
-                    .nth(*n)
-                    .map(|m| SourceRef::Monitor {
-                        device_name: m.device_name,
-                    })
-            }
+            PipSpec::Monitor(n) => self
+                .sources
+                .machine
+                .list_monitors()
+                .into_iter()
+                .nth(*n)
+                .map(|m| SourceRef::Monitor {
+                    device_name: m.device_name,
+                }),
             PipSpec::Window(text) => {
                 let wanted = text.to_lowercase();
                 let own = std::process::id();
-                self.machine
+                self.sources
+                    .machine
                     .list_windows()
                     .into_iter()
                     .find(|w| w.process_id != own && w.title.to_lowercase().contains(&wanted))
@@ -133,55 +139,18 @@ impl Core {
     /// Keeps the overlays alive: a capture card that drops out is reopened,
     /// and a screen source that ends is taken off the picture.
     pub fn maintain_overlays(&mut self, now: Instant) {
-        let mut lost = Vec::new();
-        for (index, overlay) in self.overlays.iter_mut().enumerate() {
-            match &mut overlay.running {
-                OverlayRunning::Capture {
-                    capture,
-                    link,
-                    reconnect,
-                } => {
-                    let gone = matches!(
-                        capture.status(),
-                        CaptureStatus::Disconnected { .. } | CaptureStatus::Failed(_)
-                    );
-                    if reconnect.tick(gone, now) {
-                        *capture = self.machine.start_capture(
-                            link.clone(),
-                            CaptureOptions::default(),
-                            Arc::clone(&overlay.slot),
-                        );
-                    }
-                }
-                OverlayRunning::Screen(capture) => {
-                    if matches!(
-                        capture.status(),
-                        ScreenStatus::Ended(_) | ScreenStatus::Failed(_)
-                    ) {
-                        lost.push(index);
-                    }
-                }
-            }
+        if self.scenes.maintain(now, &*self.sources.machine) {
+            self.sync_compositor();
+            self.set_capture_exclusion(self.wants_exclusion());
+            self.emit(AppEvent::PipLost);
         }
-        if lost.is_empty() {
-            return;
-        }
-        for index in lost.into_iter().rev() {
-            self.overlays.remove(index);
-        }
-        self.sync_compositor();
-        self.set_capture_exclusion(self.wants_exclusion());
-        self.emit(AppEvent::PipLost);
     }
 
     /// Whether Dockview's own window must stay out of the captured picture:
     /// whenever any layer is a screen.
     pub fn wants_exclusion(&self) -> bool {
-        self.source_kind != SourceKind::Capture
-            || self.leaving_has_screen()
-            || self
-                .overlays
-                .iter()
-                .any(|o| matches!(o.running, OverlayRunning::Screen(_)))
+        self.sources.source_kind != SourceKind::Capture
+            || self.scenes.leaving_has_screen()
+            || self.scenes.has_screen_overlay()
     }
 }

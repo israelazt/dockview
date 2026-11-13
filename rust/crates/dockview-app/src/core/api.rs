@@ -28,7 +28,7 @@ impl Core {
         self.maintain_audio(now);
         self.maintain_overlays(now);
         self.tick_transition();
-        if sources_open && now.saturating_duration_since(self.sources_refreshed) > SOURCES_REFRESH {
+        if sources_open && self.sources.lists_are_stale(now, SOURCES_REFRESH) {
             self.refresh_sources();
         }
         self.update_stats(now);
@@ -43,40 +43,40 @@ impl Core {
 
     /// A new picture of `size` was uploaded to the screen.
     pub fn frame_uploaded(&mut self, size: (u32, u32)) {
-        self.video_size = size;
-        self.rendered += 1;
+        self.view.video_size = size;
+        self.view.rendered += 1;
     }
 
     /// A picture took `ms` from arriving to being on screen.
     pub fn note_latency(&mut self, ms: f64) {
-        self.telemetry.note_latency(ms);
+        self.measures.telemetry.note_latency(ms);
     }
 
     /// Pictures shown so far.
     pub fn rendered_frames(&self) -> u64 {
-        self.rendered
+        self.view.rendered
     }
 
     /// Measurement windows closed so far (the first include start-up work).
     pub fn measurement_windows(&self) -> u32 {
-        self.telemetry.windows()
+        self.measures.telemetry.windows()
     }
 
     /// The language the interface is shown in.
     pub fn lang(&self) -> Lang {
-        self.lang_mode().resolve(self.system_lang)
+        self.lang_mode().resolve(self.view.system_lang)
     }
 
     pub fn stats(&self) -> &Stats {
-        &self.stats
+        &self.measures.stats
     }
 
     pub fn stats_open(&self) -> bool {
-        self.stats_open
+        self.view.stats_open
     }
 
     pub fn fullscreen(&self) -> bool {
-        self.fullscreen
+        self.view.fullscreen
     }
 
     pub fn render_preset(&self) -> RenderPreset {
@@ -95,7 +95,7 @@ impl Core {
 
     /// The system's light or dark setting, which `auto` follows.
     pub fn set_system_appearance(&mut self, appearance: Appearance) {
-        self.system_appearance = appearance;
+        self.view.system_appearance = appearance;
     }
 
     /// Hides the window from captures when any layer is a screen. Called once

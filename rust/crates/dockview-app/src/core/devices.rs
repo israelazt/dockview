@@ -11,23 +11,25 @@ impl Core {
         if self.cli.test_pattern {
             return;
         }
-        let lists = self.machine.devices();
+        let lists = self.sources.machine.devices();
         let video_key = self
+            .sources
             .video_index
-            .and_then(|i| self.video_devices.get(i))
+            .and_then(|i| self.sources.video_devices.get(i))
             .map(|d| d.symbolic_link.clone());
         let audio_key = self
+            .sources
             .audio_index
-            .and_then(|i| self.audio_devices.get(i))
+            .and_then(|i| self.sources.audio_devices.get(i))
             .map(|d| d.device_id.clone());
         let video = reconcile(
-            &self.video_devices,
+            &self.sources.video_devices,
             &lists.video,
             video_key.as_deref(),
             |d| &d.symbolic_link,
         );
         let audio = reconcile(
-            &self.audio_devices,
+            &self.sources.audio_devices,
             &lists.audio,
             audio_key.as_deref(),
             |d| &d.device_id,
@@ -35,12 +37,12 @@ impl Core {
         if !video.changed && !audio.changed {
             return;
         }
-        self.video_devices = lists.video;
-        self.audio_devices = lists.audio;
-        self.video_index = video.selected;
-        self.audio_index = audio.selected;
+        self.sources.video_devices = lists.video;
+        self.sources.audio_devices = lists.audio;
+        self.sources.video_index = video.selected;
+        self.sources.audio_index = audio.selected;
         // While a screen is shown, the lists are kept but nothing is started.
-        if self.source_kind == SourceKind::Capture {
+        if self.sources.source_kind == SourceKind::Capture {
             self.restore_video_device();
             self.restore_audio_device();
         }
@@ -50,15 +52,16 @@ impl Core {
     /// and afterwards only the one that was in use (when it comes back), so
     /// that unplugging the capture card never moves the picture to a webcam.
     fn restore_video_device(&mut self) {
-        if self.video_index.is_some() {
+        if self.sources.video_index.is_some() {
             return;
         }
         let last = self.settings.last_video_device_symbolic_link.as_deref();
-        let found = if matches!(self.source, Source::None) {
-            pick_video(&self.video_devices, None, last)
+        let found = if matches!(self.sources.source, Source::None) {
+            pick_video(&self.sources.video_devices, None, last)
         } else {
             last.and_then(|link| {
-                self.video_devices
+                self.sources
+                    .video_devices
                     .iter()
                     .position(|d| d.symbolic_link == link)
             })
@@ -67,26 +70,31 @@ impl Core {
             return;
         };
         self.select_video(Some(index));
-        let matched = self.match_audio(Some(index));
+        let matched = self.sources.match_audio(Some(index));
         let last_audio = self.settings.last_audio_device_id.as_deref();
-        let audio = pick_audio(&self.audio_devices, last_audio, matched);
+        let audio = pick_audio(&self.sources.audio_devices, last_audio, matched);
         self.select_audio(audio);
     }
 
     /// Same for the audio input, when the card's own did not come with it.
     fn restore_audio_device(&mut self) {
-        if self.audio_index.is_some() {
+        if self.sources.audio_index.is_some() {
             return;
         }
         let last = self.settings.last_audio_device_id.as_deref();
-        let found = if self.audio.is_none() {
+        let found = if !self.sources.has_audio() {
             pick_audio(
-                &self.audio_devices,
+                &self.sources.audio_devices,
                 last,
-                self.match_audio(self.video_index),
+                self.sources.match_audio(self.sources.video_index),
             )
         } else {
-            last.and_then(|id| self.audio_devices.iter().position(|d| d.device_id == id))
+            last.and_then(|id| {
+                self.sources
+                    .audio_devices
+                    .iter()
+                    .position(|d| d.device_id == id)
+            })
         };
         if found.is_some() {
             self.select_audio(found);

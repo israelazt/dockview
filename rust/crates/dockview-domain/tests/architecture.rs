@@ -91,11 +91,13 @@ fn rust_files(dir: &Path, out: &mut Vec<PathBuf>) {
     }
 }
 
-/// Lines with code in the production part of a file (before its inline test
-/// module).
+/// Lines with code in the production part of a file (before its
+/// `#[cfg(test)] mod tests`).
 fn production_lines(text: &str) -> usize {
-    let end = text.find("#[cfg(test)]").unwrap_or(text.len());
-    text[..end].lines().filter(|l| !l.trim().is_empty()).count()
+    before_the_tests_module(text)
+        .lines()
+        .filter(|l| !l.trim().is_empty())
+        .count()
 }
 
 #[test]

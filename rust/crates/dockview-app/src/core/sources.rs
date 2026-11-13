@@ -3,41 +3,11 @@
 
 use super::*;
 
-impl Source {
-    /// What the diagnosis and the status light should know about this source.
-    pub(super) fn video_state(&self) -> VideoState {
-        match self {
-            Self::Test(_) => VideoState::Running,
-            Self::None => VideoState::NoDevice,
-            Self::Capture { capture, .. } => video_state_of_capture(&capture.status()),
-            Self::Screen(capture) => video_state_of_screen(&capture.status()),
-        }
-    }
-}
-
 impl Core {
-    /// Points the recorder's game-sound input at the right place: the capture
-    /// card's audio, or the loopback of the PC (a monitor) or of one program (a
-    /// window). Neither is played back by Dockview.
+    /// Points the recorder's game-sound input at the right place.
     pub(super) fn route_audio(&mut self) {
-        self.loopback = None;
         let tap = self.replay.audio_tap();
-        match self.source_kind.audio_route() {
-            AudioRoute::Card => {
-                if let Some(audio) = &self.audio {
-                    audio.set_tap(tap);
-                }
-            }
-            route => {
-                let source = match route {
-                    AudioRoute::Process(pid) => Loopback::Process(pid),
-                    _ => Loopback::System,
-                };
-                if let Some(tap) = tap {
-                    self.loopback = Some(self.machine.start_loopback(source, tap));
-                }
-            }
-        }
+        self.sources.route_audio(tap);
     }
 
     /// Hides Dockview's own window from the capture, so a captured screen does
@@ -51,36 +21,24 @@ impl Core {
         if self.cli.test_pattern {
             return;
         }
-        self.source = Source::None; // releases the capture card
-        self.audio = None; // the card's sound is not needed
-        self.video_size = (0, 0);
-        self.source_kind = kind;
+        self.sources.release(); // releases the capture card
+        self.sources.stop_audio(); // the card's sound is not needed
+        self.view.video_size = (0, 0);
         self.set_capture_exclusion(true);
-        self.source = Source::Screen(self.machine.start_screen(
-            target,
-            ScreenOptions::default(),
-            Arc::clone(&self.input_slot),
-        ));
+        self.sources.open_screen(target, kind);
         self.route_audio();
     }
 
+    /// Lists the monitors and the windows again.
     pub fn refresh_sources(&mut self) {
-        self.monitors = self.machine.list_monitors();
-        let own = std::process::id();
-        self.windows = self
-            .machine
-            .list_windows()
-            .into_iter()
-            .filter(|w| w.process_id != own)
-            .collect();
-        self.sources_refreshed = Instant::now();
+        self.sources.refresh();
     }
 
     /// Starts on a monitor or a window when the command line or the last
     /// session asked for one.
     pub(super) fn restore_screen(&mut self) {
         if let Some(text) = self.cli.capture_window.clone() {
-            let found = find_window(&self.windows, &text, std::process::id()).cloned();
+            let found = find_window(&self.sources.windows, &text, std::process::id()).cloned();
             match found {
                 Some(w) => self.start_screen(
                     CaptureTarget::Window(w.handle),
@@ -95,197 +53,90 @@ impl Core {
         }
         let wanted = self.cli.screen.or_else(|| {
             monitor_to_restore(
-                &self.monitors,
+                &self.sources.monitors,
                 self.settings.last_monitor_name.as_deref(),
                 self.settings.last_monitor,
             )
         });
-        if let Some(monitor) = wanted.and_then(|i| self.monitors.get(i)) {
+        if let Some(monitor) = wanted.and_then(|i| self.sources.monitors.get(i)) {
             let handle = monitor.handle;
             self.start_screen(CaptureTarget::Monitor(handle), SourceKind::Monitor(handle));
         }
     }
 
-    /// The monitors and windows for the source popover.
-    pub(super) fn sources_view(&self, lang: Lang) -> SourcesView {
-        let monitors = self
-            .monitors
-            .iter()
-            .enumerate()
-            .map(|(i, m)| monitor_label(lang, i, m))
-            .collect();
-        let windows = self.windows.iter().map(|w| w.title.clone()).collect();
-        let current = self.source_kind.current(&self.monitors, &self.windows);
-        SourcesView {
-            monitors,
-            windows,
-            current,
-        }
-    }
-
-    pub(super) fn match_audio(&self, video: Option<usize>) -> Option<usize> {
-        let matched = match_audio_to_video(
-            video.and_then(|i| self.video_devices.get(i)),
-            &self.audio_devices,
-        )?;
-        self.audio_devices.iter().position(|a| a == matched)
-    }
-
     /// Starts capturing from the video device at `index` (or stops).
     pub(super) fn select_video(&mut self, index: Option<usize>) {
-        self.video_index = index;
+        self.sources.video_index = index;
         if self.cli.test_pattern {
             return; // the synthetic source stays; only the selection changes
         }
-        let from_screen = self.source_kind != SourceKind::Capture;
+        let from_screen = self.sources.source_kind != SourceKind::Capture;
         if from_screen {
-            self.source_kind = SourceKind::Capture;
+            self.sources.source_kind = SourceKind::Capture;
             self.settings.last_monitor = None;
             self.settings.last_monitor_name = None;
             self.set_capture_exclusion(self.wants_exclusion());
         }
-        self.video_size = (0, 0);
+        self.view.video_size = (0, 0);
         // Drop the old capture first so it releases the device.
-        self.source = Source::None;
-        let Some(device) = index.and_then(|i| self.video_devices.get(i)) else {
+        self.sources.release();
+        let Some(device) = index.and_then(|i| self.sources.video_devices.get(i)) else {
             self.route_audio();
             return;
         };
-        self.settings.last_video_device_symbolic_link = Some(device.symbolic_link.clone());
-        self.source = Source::Capture {
-            capture: self.start_capture(&device.symbolic_link.clone()),
-            reconnect: Reconnect::new(),
-        };
+        let link = device.symbolic_link.clone();
+        self.settings.last_video_device_symbolic_link = Some(link.clone());
+        self.sources.open_card(&link, self.capture_options());
         if from_screen {
             // The card's sound was stopped while a screen was captured.
-            self.select_audio(self.audio_index);
+            self.select_audio(self.sources.audio_index);
         }
     }
 
-    pub(super) fn start_capture(&self, symbolic_link: &str) -> Box<dyn CaptureHandle> {
-        self.machine.start_capture(
-            symbolic_link.to_owned(),
-            CaptureOptions {
-                prefer_compressed: self.settings.video_mode == VideoModePref::Compressed,
-                ..CaptureOptions::default()
-            },
-            Arc::clone(&self.input_slot),
-        )
+    /// How the capture card is opened, as the settings ask.
+    pub(super) fn capture_options(&self) -> CaptureOptions {
+        CaptureOptions {
+            prefer_compressed: self.settings.video_mode == VideoModePref::Compressed,
+            ..CaptureOptions::default()
+        }
     }
 
     /// Starts the audio pipeline for the audio device at `index` (or stops).
     pub(super) fn select_audio(&mut self, index: Option<usize>) {
-        self.audio_index = index;
-        if self.cli.test_pattern || self.source_kind != SourceKind::Capture {
-            return; // while a screen is captured, its own sound is used
-        }
-        self.audio = None;
-        let Some(device) = index.and_then(|i| self.audio_devices.get(i)) else {
+        if self.cli.test_pattern {
+            self.sources.audio_index = index; // only the choice changes
             return;
-        };
-        self.settings.last_audio_device_id = Some(device.device_id.clone());
-        let audio = self.machine.start_playback(
-            device.device_id.clone(),
-            self.settings.volume,
-            self.settings.audio_offset_ms,
-        );
-        if let Some(tap) = self.replay.audio_tap() {
-            audio.set_tap(Some(tap));
         }
-        self.audio = Some(audio);
-    }
-
-    /// Whether the open device also offers a compressed mode.
-    pub(super) fn capture_has_compressed(&self) -> bool {
-        match &self.source {
-            Source::Capture { capture, .. } => matches!(
-                capture.status(),
-                CaptureStatus::Running {
-                    has_compressed: true,
-                    ..
-                }
-            ),
-            _ => false,
-        }
-    }
-
-    /// The device mode in use (a stand-in for the synthetic source).
-    pub(super) fn native_mode(&self) -> Option<StreamInfo> {
-        match &self.source {
-            Source::Test(_) => Some(StreamInfo {
-                type_index: 0,
-                format_name: "NV12".into(),
-                width: 1920,
-                height: 1080,
-                fps: 30,
-                is_compressed: false,
-            }),
-            Source::Capture { capture, .. } => match capture.status() {
-                CaptureStatus::Running { native, .. } => Some(native),
-                _ => None,
-            },
-            Source::Screen(_) | Source::None => None,
+        let tap = self.replay.audio_tap();
+        let (volume, offset_ms) = (self.settings.volume, self.settings.audio_offset_ms);
+        if let Some(id) = self.sources.play(index, volume, offset_ms, tap) {
+            self.settings.last_audio_device_id = Some(id);
         }
     }
 
     /// Starts the card's sound again when it stopped (the device went away or
     /// the speakers changed), after a pause, and tells the user once.
     pub(super) fn maintain_audio(&mut self, now: Instant) {
-        if self.source_kind != SourceKind::Capture || self.cli.test_pattern {
+        if self.cli.test_pattern {
             return;
         }
-        let Some(status) = self.audio.as_ref().map(|a| a.status()) else {
-            return;
-        };
-        let lost = audio_is_lost(&status);
-        if lost && !self.audio_lost {
-            self.audio_lost = true;
-            self.emit(AppEvent::AudioLost);
-        } else if self.audio_lost && status == AudioStatus::Running {
-            self.audio_lost = false;
-            self.emit(AppEvent::AudioBack);
+        let check = self.sources.check_audio(now);
+        if let Some(event) = check.event {
+            self.emit(event);
         }
-        // With no input selected (it was unplugged), wait for it to come back.
-        if self.audio_reconnect.tick(lost, now) && self.audio_index.is_some() {
-            self.select_audio(self.audio_index);
+        if check.restart {
+            self.select_audio(self.sources.audio_index);
         }
     }
 
-    /// Restarts the capture thread if the device was lost.
+    /// Keeps the main source alive. A card that dropped out is opened again by
+    /// the service; a screen or window that ended sends the picture back to
+    /// the card, and the user is told.
     pub(super) fn maintain_source(&mut self, now: Instant) {
-        if let Source::Screen(capture) = &self.source {
-            // The window went away or cannot be captured: back to the card.
-            let lost = match capture.status() {
-                ScreenStatus::Ended(_) => Some(AppEvent::SourceLost),
-                ScreenStatus::Failed(e) => {
-                    dockview_domain::log_warn!("screen capture failed: {e}");
-                    Some(AppEvent::SourceFailed)
-                }
-                _ => None,
-            };
-            if let Some(event) = lost {
-                self.emit(event);
-                self.select_video(self.video_index);
-            }
-            return;
-        }
-        let Some(device) = self.video_index.and_then(|i| self.video_devices.get(i)) else {
-            return;
-        };
-        let link = device.symbolic_link.clone();
-        let Source::Capture { capture, reconnect } = &mut self.source else {
-            return;
-        };
-        let lost = matches!(
-            capture.status(),
-            CaptureStatus::Disconnected { .. } | CaptureStatus::Failed(_)
-        );
-        if reconnect.tick(lost, now) {
-            let capture = self.start_capture(&link);
-            self.source = Source::Capture {
-                capture,
-                reconnect: Reconnect::new(),
-            };
+        let options = self.capture_options();
+        if let Maintained::ScreenLost(event) = self.sources.maintain(now, options) {
+            self.emit(event);
+            self.select_video(self.sources.video_index);
         }
     }
 }

@@ -11,7 +11,10 @@ pub mod cli;
 mod core;
 pub mod keys;
 pub mod replay_service;
+mod scenes_service;
+mod settings_storage;
 pub mod sources;
+mod sources_service;
 pub mod telemetry;
 #[cfg(test)]
 mod testing;

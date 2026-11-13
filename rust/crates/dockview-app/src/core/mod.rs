@@ -2,6 +2,18 @@
 //! decisions themselves live in the modules next to this one (`replay_service`,
 //! `auto_switch`, `telemetry`, `sources`) and are tested without a window.
 
+/// What the scenes service needs to run the compositor, borrowed from the
+/// fields it lives in, so `self.scenes` can be borrowed mutably at the same time.
+macro_rules! scene_env {
+    ($core:expr) => {
+        $crate::scenes_service::SceneEnv {
+            machine: &*$core.sources.machine,
+            input_slot: &$core.sources.input_slot,
+            slot: &$core.slot,
+        }
+    };
+}
+
 mod actions;
 mod api;
 mod devices;
@@ -21,68 +33,43 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use dockview_domain::audio_status::AudioStatus;
-use dockview_domain::device::{
-    match_audio_to_video, pick_microphone, AudioDevice, DeviceLists, VideoDevice,
-};
+use dockview_domain::device::{pick_microphone, AudioDevice, DeviceLists, VideoDevice};
 use dockview_domain::device_names;
 use dockview_domain::diagnostics::{diagnose, Finding, Snapshot, VideoState};
 use dockview_domain::events::AppEvent;
 use dockview_domain::frame::FrameSlot;
 use dockview_domain::i18n::{self, Lang, LangModeExt};
-use dockview_domain::ports::{
-    AudioPlayback, CaptureHandle, Host, Loopback, MicInput, ReplayMachine, SceneCompositor,
-    ScreenHandle, SourceMachine, StatsSink, SystemProbe,
-};
+use dockview_domain::ports::{Host, ReplayMachine, SourceMachine, StatsSink, SystemProbe};
 use dockview_domain::recording::{RecorderStatus, RecordingInfo, RecordingState, ReplaySettings};
-use dockview_domain::scene::SceneLayer;
 use dockview_domain::settings::{
     self, AppSettings, LangMode, RenderPreset, SettingsStore, ThemeMode, VideoModePref,
 };
-use dockview_domain::sources::{
-    CaptureOptions, CaptureStatus, CaptureTarget, MonitorInfo, ScreenOptions, ScreenStatus,
-    WindowInfo,
-};
+use dockview_domain::sources::{CaptureOptions, CaptureTarget, ScreenOptions};
 use dockview_domain::stats::Stats;
 use dockview_domain::stream::StreamInfo;
 use dockview_domain::theme::{Appearance, Theme, ThemeModeExt};
-use dockview_domain::view::{
-    Action, MicState, MicView, Model, RecState, RecView, ReplayState, SourcesView,
-};
+use dockview_domain::view::{Action, MicState, MicView, Model, RecState, RecView, ReplayState};
 use helpers::{mic_device_id, mic_index_of, next_index, next_preset, resolution_label};
-use scene_runtime::Overlay;
-use scene_transition::ActiveTransition;
 
 use crate::auto_switch::{AutoSwitch, SwitchEvent};
 use crate::cli::Cli;
 use crate::keys::KeyCommand;
 use crate::replay_service::{RecordToggle, ReplayService};
+use crate::scenes_service::ScenesService;
+use crate::settings_storage::SettingsStorage;
 use crate::sources::{
-    audio_is_lost, find_window, monitor_label, monitor_to_restore, pick_audio, pick_video,
-    reconcile, startup_scene, status_kind, video_state_of_capture, video_state_of_screen,
-    AudioRoute, Reconnect, SourceKind, StartupScene,
+    find_window, monitor_to_restore, pick_audio, pick_video, reconcile, startup_scene, status_kind,
+    Reconnect, SourceKind, StartupScene,
 };
+use crate::sources_service::{Maintained, Source, SourcesService};
 use crate::telemetry::{Rates, Telemetry};
 
 /// How often the lists of monitors and windows are refreshed while shown.
 pub const SOURCES_REFRESH: Duration = Duration::from_millis(1500);
-/// The least time between two writes of the settings file.
-const SETTINGS_SAVE_INTERVAL: Duration = Duration::from_millis(500);
 /// Volume change per key press.
 const VOLUME_STEP: f32 = 0.05;
 /// Audio offset change per key press, in milliseconds.
 const OFFSET_STEP_MS: i32 = 10;
-
-enum Source {
-    /// The handle only keeps the generator thread alive.
-    Test(#[allow(dead_code)] Box<dyn std::any::Any>),
-    Capture {
-        capture: Box<dyn CaptureHandle>,
-        reconnect: Reconnect,
-    },
-    /// A monitor or a window, captured by Windows Graphics Capture.
-    Screen(Box<dyn ScreenHandle>),
-    None,
-}
 
 /// Everything the application needs from the machine, behind ports. The real
 /// ones are made by the binary; tests pass fakes.
@@ -106,74 +93,59 @@ pub struct Ports {
 pub struct Core {
     /// What the viewer, the replay and the recording read.
     slot: Arc<FrameSlot>,
-    /// Where the main source publishes. It forwards to `slot` unless a scene
-    /// is running, when it keeps the frames for the compositor (see
-    /// `scene_runtime`).
-    input_slot: Arc<FrameSlot>,
-    /// Draws the layers of the scene; `Some` only while there is a scene.
-    scene: Option<Box<dyn SceneCompositor>>,
-    /// The layers above the base of the active scene, with their sources.
-    overlays: Vec<Overlay>,
-    /// The base layer of the active scene (its source is `source`).
-    scene_base: Option<SceneLayer>,
-    /// A change from one scene to another in progress (see `scene_transition`).
-    transition: Option<ActiveTransition>,
-    source: Source,
-    video_devices: Vec<VideoDevice>,
-    audio_devices: Vec<AudioDevice>,
-    video_index: Option<usize>,
-    audio_index: Option<usize>,
-    audio: Option<Box<dyn AudioPlayback>>,
+    /// The scene that is running and the change to another (see
+    /// `scenes_service`).
+    scenes: ScenesService,
+    /// The devices, the monitors and the windows, the main source and the
+    /// machine they are started on (see `sources_service`).
+    sources: SourcesService,
     settings: AppSettings,
-    /// Where the settings are saved (the real file, or a stand-in in tests).
-    store: Box<dyn SettingsStore>,
-    rendered: u64,
-    video_size: (u32, u32),
-    fullscreen: bool,
+    /// When to write the settings to disk, and what to do when that fails.
+    storage: SettingsStorage,
+    /// What the window shows and knows about itself.
+    view: ViewState,
+    /// What is measured once a second and acted on.
+    measures: Measurements,
     cli: Cli,
-    system_appearance: Appearance,
-    system_lang: Lang,
-    stats_open: bool,
-    stats: Stats,
-    stats_sink: Option<Box<dyn StatsSink>>,
-    /// The once-a-second counters (see `telemetry`).
-    telemetry: Telemetry,
-    /// The automatic move to a compressed mode (see `auto_switch`).
-    auto: AutoSwitch,
     /// Instant replay, clips, recording and the microphone (see `replay_service`).
     replay: ReplayService,
     /// Installed RAM, which caps the replay length.
     total_ram: u64,
-    /// Whether the card, a monitor or a window is being captured.
-    source_kind: SourceKind,
-    /// The sound of the PC or of one program, while a screen is captured.
-    loopback: Option<Box<dyn MicInput>>,
-    /// What the sources are started on (the real machine, or a fake in tests).
-    machine: Box<dyn SourceMachine>,
     /// What happened since the last tick, to be shown (see `toast_for`).
     events: Vec<AppEvent>,
-    /// What can be captured, refreshed while the source popover is open.
-    monitors: Vec<MonitorInfo>,
-    windows: Vec<WindowInfo>,
-    sources_refreshed: Instant,
-    /// When to start the card's sound again after it was lost.
-    audio_reconnect: Reconnect,
-    /// Whether the user was told the sound was lost (so the return is told too).
-    audio_lost: bool,
     /// What the application asks of the window (the real one, or none in tests).
     host: Box<dyn Host>,
-    /// The settings changed and are not on disk yet.
-    settings_dirty: bool,
-    /// The last write failed (so the user is told once, not at every try).
-    settings_failed: bool,
-    /// When the settings were last written.
-    settings_saved_at: Instant,
+}
+
+/// What the window shows and knows about itself.
+struct ViewState {
+    /// Pictures shown so far.
+    rendered: u64,
+    /// The size of the last picture shown.
+    video_size: (u32, u32),
+    fullscreen: bool,
+    /// The system's light or dark setting, which `auto` follows.
+    system_appearance: Appearance,
+    system_lang: Lang,
+    stats_open: bool,
+}
+
+/// What is measured once a second and acted on (see `stats`).
+struct Measurements {
+    /// The last measurements, shown by the statistics panel.
+    stats: Stats,
+    /// Where they are logged, when asked for.
+    sink: Option<Box<dyn StatsSink>>,
+    /// The once-a-second counters (see `telemetry`).
+    telemetry: Telemetry,
+    /// The automatic move to a compressed mode (see `auto_switch`).
+    auto: AutoSwitch,
 }
 
 impl Drop for Core {
     /// Whatever was changed last is not lost when the program ends.
     fn drop(&mut self) {
-        if self.settings_dirty {
+        if self.storage.is_dirty() {
             self.save_settings();
         }
     }

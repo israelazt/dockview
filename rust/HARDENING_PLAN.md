@@ -231,12 +231,20 @@ Primero medir. Lo que no mejore las cifras no se fusiona.
 
 | Tarea | Qué | Listo cuando |
 |---|---|---|
-| 8-1 | `app`: `SourcesService` con el estado de dispositivos (`video_devices`, `audio_devices`, índices, `monitors`, `windows`) y sus consultas | Tests del `Rig` en verde; tests propios del servicio |
-| 8-2 | Mover a `SourcesService` la fuente activa y su mantenimiento (`source`, `source_kind`, `Reconnect`, arrancar captura o pantalla) | Ídem |
-| 8-3 | Mover a `SourcesService` el audio (`audio`, `loopback`, `route_audio`, `maintain_audio`) | Ídem |
-| 8-4 | `app`: `ScenesService` con `scene`, `overlays`, `scene_base` y `transition` y su avance por `tick` | Ídem |
-| 8-5 | `Core` queda como coordinador: ajustes, eventos, composición del `Model` y reparto de `Action`s. Quitar los `use super::*` que ya no hagan falta | `Core` con menos de 15 campos |
-| 8-6 | `ARCHITECTURE.md` y la memoria del proyecto al día | Docs al día |
+| 8-1 ✅ | `app`: `SourcesService` con el estado de dispositivos (`video_devices`, `audio_devices`, índices, `monitors`, `windows`) y sus consultas | Tests del `Rig` en verde; tests propios del servicio |
+| 8-2 ✅ | Mover a `SourcesService` la fuente activa y su mantenimiento (`source`, `source_kind`, `Reconnect`, arrancar captura o pantalla) | Ídem |
+| 8-3 ✅ | Mover a `SourcesService` el audio (`audio`, `loopback`, `route_audio`, `maintain_audio`) | Ídem |
+| 8-4 ✅ | `app`: `ScenesService` con `scene`, `overlays`, `scene_base` y `transition` y su avance por `tick` | Ídem |
+| 8-5 ✅ | `Core` queda como coordinador: ajustes, eventos, composición del `Model` y reparto de `Action`s. Quitar los `use super::*` que ya no hagan falta | `Core` con menos de 15 campos |
+| 8-6 ✅ | `ARCHITECTURE.md` y la memoria del proyecto al día | Docs al día |
+
+**Hecho (2026-11-13).** Cómo quedó y qué cambió respecto a lo previsto:
+- **Qué se movió.** El **estado** y todo lo que no necesita el contexto de `Core` pasó a servicios; lo que además toca ajustes, ventana o eventos se quedó en `Core` (`core/`), que le da al servicio lo que necesita. `SourcesService` (8-1 a 8-3) posee dispositivos, monitores y ventanas, la fuente principal, el audio y su recuperación y la máquina de fuentes; `ScenesService` (8-4) posee el compositor, las capas superpuestas, la capa base y la transición, y recibe un `SceneEnv` (máquina y las dos ranuras) para trabajar; `SettingsStorage` (8-5) posee el guardado agrupado y el aviso único de fallo.
+- **8-5, menos de 15 campos.** `Core` pasó de 23 a **12**: además de los servicios, se agruparon `ViewState` (lo que la ventana muestra y sabe de sí misma) y `Measurements` (estadísticas, telemetría, cambio automático de modo).
+- **Los `use super::*` se quedaron** en los nueve archivos de `core/`: siguen siendo la forma natural de repartir `impl Core` por responsabilidades y hacerlos explícitos solo sumaría unas 100 líneas de imports sin cambiar nada.
+- **Tests.** `dockview-app` pasó de 104 a **132**: 28 nuevos (7 de `SourcesService`, 7 de su audio, 10 de `ScenesService` y 4 de `SettingsStorage`). Los 104 anteriores, que ejercitan `Core` entero, no se tocaron y siguen en verde: el refactor no cambió el comportamiento.
+- **Una guarda arreglada de paso.** El límite de 400 líneas cortaba en el primer `#[cfg(test)]` del archivo, así que un módulo con `#[cfg(test)] mod tests;` arriba no se contaba. Ahora corta en `#[cfg(test)] mod tests`; con eso ningún archivo supera el límite.
+- **Una trampa de los dobles, otra vez.** Pedir el mismo `Mutex` dos veces en una misma expresión de un test (`a.lock().x, a.lock().y`) bloquea el test para siempre; me pasó dos veces. Los tests nuevos bloquean una sola vez.
 
 **Pausa 8:** revisión final.
 

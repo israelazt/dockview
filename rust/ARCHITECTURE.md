@@ -9,7 +9,7 @@ Definida el 2026-11-12, después de desacoplar la app una vez (ver `ARCHITECTURE
 | `dockview-domain` | El **qué** | Reglas y datos puros: escenas, transiciones, geometría, ajustes, grabación como datos, diagnóstico, textos (`i18n`), paleta (`theme`), el **modelo de vista** (`Model`, `Action` y sus vistas), los **eventos** (`AppEvent`), los datos de dibujo (`Vertex`, `GlyphUpload`) y los **puertos** (traits) | Windows, hilos propios, disco, ventana |
 | `dockview-platform` | El **cómo** en Windows | Adaptadores: captura, audio, codificador, GPU, compositor, grabador, renderizador de vídeo y de interfaz (Direct3D), atajos, ajustes en disco, carpeta de clips, contadores. Implementa los puertos | Conocer la app o la interfaz |
 | `dockview-ui` | El **cómo se ve** | Construye un fotograma de interfaz (`Ui`, controles, panel de estadísticas, avisos) a partir de un `Model` y devuelve `Action`s y una lista de dibujo. Texto con cosmic-text | Windows, Direct3D, servicios, la ventana |
-| `dockview-app` | El **cuándo** (biblioteca) | `Core`: los servicios (`Replay`, `Sources`, `Scenes`, `Telemetry`, `AutoSwitch`…), cómo se compone el `Model` y qué hace cada `Action`. Trabaja **solo contra puertos** | winit, Windows, la interfaz, `platform` |
+| `dockview-app` | El **cuándo** (biblioteca) | `Core`: los servicios (`Replay`, `Sources`, `Scenes`, `SettingsStorage`, `Telemetry`, `AutoSwitch`…), cómo se compone el `Model` y qué hace cada `Action`. Trabaja **solo contra puertos** | winit, Windows, la interfaz, `platform` |
 | `dockview` (binario) | La **raíz de composición** y la ventana | `main`, la ventana y el bucle de eventos (winit), el cursor y la pantalla completa. Crea los adaptadores reales, se los da a `Core`, y conecta `Core` ↔ `ui` ↔ renderizador | Lógica |
 
 ```
@@ -24,7 +24,13 @@ Las flechas solo van hacia abajo. `ui`, `app` y `platform` no se ven entre sí: 
 
 ## Cómo se reparte el trabajo en tiempo de ejecución
 
-- **`Core` es dueño de todo el estado de aplicación.** Cada servicio es dueño de su estado y de nada más; no hay estado compartido mutable entre servicios. `Core` los coordina.
+- **`Core` coordina; los servicios son dueños de su estado.** Cada servicio guarda lo suyo y nada más; no hay estado compartido mutable entre ellos. `Core` (12 campos) los reparte el trabajo y es el único que junta lo que toca varios a la vez (ajustes, ventana, eventos):
+  - `SourcesService` (`sources_service/`): los dispositivos, los monitores y las ventanas; la fuente principal (capturadora, pantalla, ventana o patrón) y cómo se mantiene viva; el audio (tarjeta o *loopback*) y su recuperación. Posee la máquina de fuentes.
+  - `ScenesService` (`scenes_service/`): el compositor, las capas superpuestas con sus fuentes, la capa base y la transición entre escenas.
+  - `ReplayService` (`replay_service/`): el replay, los clips, la grabación y el micrófono.
+  - `SettingsStorage` (`settings_storage/`): cuándo se escriben los ajustes (agrupado, a lo sumo dos veces por segundo) y qué pasa si falla.
+  - `Telemetry` y `AutoSwitch`: los contadores de cada segundo y el cambio automático a modo comprimido.
+  Un servicio no llama a otro: `Core` le pasa lo que necesita (por ejemplo, el *tap* de audio del replay a `SourcesService::route_audio`, o el entorno del compositor, `SceneEnv`, a `ScenesService`). Lo que decide algo que depende de varios servicios (elegir una capturadora y recordarla, arrancar la fuente de una capa) vive en `Core`, en `core/`.
 - **El modelo de vista se compone en `Core`**, con una función por servicio (`replay_view`, `sources_view`, `scenes_view`…) que recibe datos neutros del servicio y devuelve la parte del `Model` que le toca. Cada una se prueba sola. `Core::model()` solo las junta.
 - **Órdenes entran, eventos salen.** La interfaz devuelve `Action`; `Core::apply(action)` la ejecuta contra los servicios. Los servicios devuelven `AppEvent` (por ejemplo «clip guardado», «fuente perdida»), sin ningún tipo de interfaz; el binario decide cómo mostrarlo (hoy, un aviso). Es una lista que se vacía en cada vuelta del bucle; cuando lleguen los plugins se amplía a un bus.
 - **Lo que `Core` pide a la ventana lo pide por un puerto**, `Host`: pantalla completa, excluir la ventana de las capturas, elegir una carpeta. El binario lo implementa con winit y Windows.
@@ -77,5 +83,7 @@ Las flechas solo van hacia abajo. `ui`, `app` y `platform` no se ven entre sí: 
 - [x] Paso 9: guardas automáticas (`crates/dockview-domain/tests/architecture.rs`): dependencias permitidas por crate y límite de 400 líneas de código por archivo (1000 en `tests.rs`). Se partieron `encode`, `compose`, `render`, `scene_runtime` y `controls/scenes`.
 
 - [x] Arnés de `Core` (bloque 1 de `HARDENING_PLAN.md`): `testing/` con dobles de `ReplayMachine`, `SourceMachine`, `SystemProbe`, `StatsSink` y `Host`, y `Rig` para construir un `Core` sobre ellos. Los tests de conjunto están en `core/tests.rs`.
+
+- [x] `Core` en servicios (bloque 8 de `HARDENING_PLAN.md`): `SourcesService`, `ScenesService` y `SettingsStorage` son dueños de su estado y tienen tests propios; `Core` pasó de 23 a 12 campos. La guarda de tamaño ahora corta solo en `#[cfg(test)] mod tests` (antes, un `#[cfg(test)] mod x;` arriba del archivo la dejaba sin contar casi nada).
 
 Cada paso deja la app funcionando, con todos los tests, una prueba con la app real y la comparación de la interfaz píxel a píxel, y se commitea y sube por separado.

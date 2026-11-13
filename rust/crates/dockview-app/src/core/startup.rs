@@ -29,55 +29,36 @@ impl Core {
         input_slot.set_forward(Some(Arc::clone(&slot)));
         let mut app = Self {
             slot,
-            input_slot,
-            scene: None,
-            overlays: Vec::new(),
-            scene_base: None,
-            transition: None,
-            source: Source::None,
-            video_devices,
-            audio_devices,
-            video_index: None,
-            audio_index: None,
-            audio: None,
+            scenes: ScenesService::new(),
+            sources: SourcesService::new(ports.sources, video_devices, audio_devices, input_slot),
             settings,
-            store: ports.settings,
-            rendered: 0,
-            video_size: (0, 0),
-            fullscreen: false,
+            storage: SettingsStorage::new(ports.settings),
+            view: ViewState {
+                rendered: 0,
+                video_size: (0, 0),
+                fullscreen: false,
+                system_appearance: Appearance::Dark,
+                system_lang,
+                stats_open: show_stats,
+            },
+            measures: Measurements {
+                stats: Stats::default(),
+                sink: ports.stats_sink,
+                telemetry: Telemetry::new(Arc::clone(&system)),
+                auto: AutoSwitch::new(),
+            },
             cli,
-            system_appearance: Appearance::Dark,
             host: ports.host,
-            system_lang,
-            stats_open: show_stats,
-            stats: Stats::default(),
-            stats_sink: ports.stats_sink,
-            telemetry: Telemetry::new(Arc::clone(&system)),
-            auto: AutoSwitch::new(),
             replay: ReplayService::new(ports.replay),
             total_ram: system.total_ram_bytes(),
-            source_kind: SourceKind::Capture,
-            loopback: None,
-            machine: ports.sources,
             events: Vec::new(),
-            monitors: Vec::new(),
-            windows: Vec::new(),
-            sources_refreshed: Instant::now(),
-            audio_reconnect: Reconnect::new(),
-            audio_lost: false,
-            settings_dirty: false,
-            settings_failed: false,
-            settings_saved_at: Instant::now(),
         };
 
         if test_pattern {
             // The preview exists for screenshots, which must be the same every
             // time: one picture a second keeps the moving stripe at its start.
             let fps = if preview { 1 } else { 30 };
-            app.source = Source::Test(
-                app.machine
-                    .start_test_pattern(Arc::clone(&app.input_slot), fps),
-            );
+            app.sources.open_test_pattern(fps);
             if preview {
                 app.install_preview_devices();
             }
@@ -89,13 +70,13 @@ impl Core {
         // Restore the last devices, else the first video device and the audio
         // device whose name matches it.
         let video = pick_video(
-            &app.video_devices,
+            &app.sources.video_devices,
             app.cli.video.as_deref(),
             app.settings.last_video_device_symbolic_link.as_deref(),
         );
-        let matched_audio = app.match_audio(video);
+        let matched_audio = app.sources.match_audio(video);
         let audio = pick_audio(
-            &app.audio_devices,
+            &app.sources.audio_devices,
             app.settings.last_audio_device_id.as_deref(),
             matched_audio,
         );
@@ -142,16 +123,16 @@ impl Core {
             friendly_name: name.into(),
             device_id: id.into(),
         };
-        self.video_devices = vec![
+        self.sources.video_devices = vec![
             video("UGREEN 25173", "preview:video:0"),
             video("Integrated Camera", "preview:video:1"),
         ];
-        self.audio_devices = vec![
+        self.sources.audio_devices = vec![
             audio("HDMI (UGREEN 25173)", "preview:audio:0"),
             audio("Microphone (Integrated Camera)", "preview:audio:1"),
             audio("Desktop Microphone (RØDE NT-USB Mini)", "preview:audio:2"),
         ];
-        self.video_index = Some(0);
-        self.audio_index = Some(0);
+        self.sources.video_index = Some(0);
+        self.sources.audio_index = Some(0);
     }
 }

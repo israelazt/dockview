@@ -10,24 +10,27 @@ impl Core {
             received_fps,
             dropped_per_sec,
             shown_fps,
-        }) = self.telemetry.close_window(
+        }) = self.measures.telemetry.close_window(
             now,
             self.slot.published(),
             self.slot.dropped(),
-            self.rendered,
+            self.view.rendered,
         )
         else {
             return;
         };
 
-        let usage = self.telemetry.usage();
-        let latency_ms = self.telemetry.take_latency(self.stats.latency_ms);
+        let usage = self.measures.telemetry.usage();
+        let latency_ms = self
+            .measures
+            .telemetry
+            .take_latency(self.measures.stats.latency_ms);
 
-        let native = self.native_mode();
-        let video = self.source.video_state();
+        let native = self.sources.native_mode();
+        let video = self.sources.video_state();
         let monitor_hz = self.host.monitor_hz();
         let gpu_ms = self.host.gpu_ms();
-        let audio_ok = self.audio.as_ref().map(|a| !audio_is_lost(&a.status()));
+        let audio_ok = self.sources.audio_ok();
 
         let findings = diagnose(&Snapshot {
             video,
@@ -43,14 +46,14 @@ impl Core {
 
         let allowed = self.settings.video_mode == VideoModePref::Auto
             && video == VideoState::Running
-            && self.capture_has_compressed()
+            && self.sources.capture_has_compressed()
             && !self.cli.test_pattern;
         let usb_slow = findings.contains(&Finding::NeedsUsb3);
-        if let Some(event) = self.auto.tick(usb_slow, allowed, received_fps) {
+        if let Some(event) = self.measures.auto.tick(usb_slow, allowed, received_fps) {
             self.apply_switch_event(event);
         }
         let mut findings = findings;
-        if self.auto.is_switched() {
+        if self.measures.auto.is_switched() {
             findings.insert(0, Finding::SwitchedToCompressed);
         }
 
@@ -66,7 +69,7 @@ impl Core {
         };
 
         let size = self.host.window_size();
-        self.stats = Stats {
+        self.measures.stats = Stats {
             device_mode: native.as_ref().map(ToString::to_string),
             mode_mbps: native.as_ref().and_then(StreamInfo::raw_mbps),
             received_fps,
@@ -77,14 +80,14 @@ impl Core {
             cpu_total_percent: usage.cpu_total_percent,
             gpu_ms,
             memory_mb: usage.memory_mb,
-            audio_buffer_ms: self.audio.as_ref().map(|a| a.buffered_ms()),
+            audio_buffer_ms: self.sources.audio_buffered_ms(),
             monitor_hz,
             window: size,
             findings,
             measured: true,
         };
-        if let Some(log) = self.stats_sink.as_mut() {
-            log.record(&self.stats);
+        if let Some(log) = self.measures.sink.as_mut() {
+            log.record(&self.measures.stats);
         }
     }
 
@@ -113,6 +116,6 @@ impl Core {
             }
         }
         self.settings_changed();
-        self.select_video(self.video_index);
+        self.select_video(self.sources.video_index);
     }
 }

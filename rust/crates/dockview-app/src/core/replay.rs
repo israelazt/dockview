@@ -41,7 +41,12 @@ impl Core {
     /// Names for the microphone list: the Windows default, then every input.
     pub(super) fn mic_device_names(&self, lang: Lang) -> Vec<String> {
         std::iter::once(i18n::tr(lang, i18n::Key::MicDefault).to_owned())
-            .chain(self.audio_devices.iter().map(|d| d.friendly_name.clone()))
+            .chain(
+                self.sources
+                    .audio_devices
+                    .iter()
+                    .map(|d| d.friendly_name.clone()),
+            )
             .collect()
     }
 
@@ -49,7 +54,7 @@ impl Core {
     pub(super) fn mic_selected(&self) -> usize {
         mic_index_of(
             self.settings.last_mic_device_id.as_deref(),
-            &self.audio_devices,
+            &self.sources.audio_devices,
         )
     }
 
@@ -85,7 +90,11 @@ impl Core {
             "microphone: {}",
             device
                 .as_deref()
-                .and_then(|id| self.audio_devices.iter().find(|d| d.device_id == id))
+                .and_then(|id| self
+                    .sources
+                    .audio_devices
+                    .iter()
+                    .find(|d| d.device_id == id))
                 .map_or("Windows default input".to_owned(), |d| d
                     .friendly_name
                     .clone())
@@ -97,13 +106,16 @@ impl Core {
     /// default, unless that is the capture card's own audio (see
     /// [`dockview_domain::device::pick_microphone`]).
     pub(super) fn automatic_mic(&self) -> Option<String> {
-        let default = self.machine.default_capture_device();
-        let game_audio = self.audio_index.and_then(|i| self.audio_devices.get(i));
+        let default = self.sources.machine.default_capture_device();
+        let game_audio = self
+            .sources
+            .audio_index
+            .and_then(|i| self.sources.audio_devices.get(i));
         pick_microphone(
-            &self.audio_devices,
+            &self.sources.audio_devices,
             default.as_ref(),
             game_audio,
-            &self.video_devices,
+            &self.sources.video_devices,
         )
         .map(|d| d.device_id.clone())
     }
