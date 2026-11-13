@@ -1,19 +1,33 @@
 //! The window system's callbacks: start-up, events and the idle tick.
 
+use std::ffi::c_void;
+
+use dockview_app::keys::KeyCommand;
+use dockview_platform::render::Renderer;
+use windows::Win32::Foundation::HWND;
+use winit::application::ApplicationHandler;
+use winit::dpi::{LogicalSize, PhysicalSize};
+use winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
+use winit::event_loop::ActiveEventLoop;
+use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
+use winit::window::{Window, WindowId};
+
+use super::helpers::appearance_of;
+use super::keys::command_for;
 use super::*;
 
-impl ApplicationHandler for App {
+impl ApplicationHandler for Shell {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.window.is_some() {
             return;
         }
-        let title = if self.cli.ui_preview {
+        let title = if self.core.cli().ui_preview {
             "Dockview — UI preview"
         } else {
             "Dockview"
         };
         let mut attributes = Window::default_attributes().with_title(title);
-        attributes = match self.cli.scale {
+        attributes = match self.core.cli().scale {
             Some(scale) => attributes.with_inner_size(PhysicalSize::new(
                 (1280.0 * scale).round(),
                 (720.0 * scale).round(),
@@ -40,7 +54,7 @@ impl ApplicationHandler for App {
         let size = window.inner_size();
         match Renderer::new(hwnd, size.width, size.height) {
             Ok(mut renderer) => {
-                renderer.set_filter(filter_for(self.settings.render_preset));
+                renderer.set_filter(filter_for(self.core.render_preset()));
                 match UiGpu::new(renderer.device()) {
                     Ok(gpu) => self.ui_gpu = Some(gpu),
                     Err(e) => eprintln!("could not initialise the interface renderer: {e}"),
@@ -53,21 +67,27 @@ impl ApplicationHandler for App {
                 return;
             }
         }
-        self.ui_scale = self.cli.scale.unwrap_or(window.scale_factor() as f32);
-        self.system_appearance = appearance_of(window.theme());
+        self.ui_scale = self
+            .core
+            .cli()
+            .scale
+            .unwrap_or(window.scale_factor() as f32);
+        self.core
+            .set_system_appearance(appearance_of(window.theme()));
+        self.host.borrow_mut().hwnd = Some(hwnd);
         self.window = Some(window);
+        self.refresh_host_info();
         // A screen started from the command line began before this window
         // existed, so hide the window from it now.
-        self.set_capture_exclusion(self.wants_exclusion());
-        if self.settings.was_fullscreen {
-            self.set_fullscreen(true);
-        }
+        self.core.apply_capture_exclusion();
+        self.core.restore_fullscreen();
+        self.apply_host_requests();
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
         match event {
             WindowEvent::CloseRequested => {
-                self.save_settings();
+                self.core.save_settings();
                 event_loop.exit();
             }
             WindowEvent::Resized(size) => {
@@ -106,12 +126,22 @@ impl ApplicationHandler for App {
                 };
                 self.needs_redraw = true;
             }
-            WindowEvent::ThemeChanged(theme) => self.system_appearance = appearance_of(Some(theme)),
+            WindowEvent::ThemeChanged(theme) => {
+                self.core.set_system_appearance(appearance_of(Some(theme)))
+            }
             WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
-                self.ui_scale = self.cli.scale.unwrap_or(scale_factor as f32);
+                self.ui_scale = self.core.cli().scale.unwrap_or(scale_factor as f32);
             }
             WindowEvent::KeyboardInput { event, .. } if event.state == ElementState::Pressed => {
-                self.on_key(&event.logical_key);
+                if let Some(command) = command_for(&event.logical_key) {
+                    // Escape closes an open popover first.
+                    let closed_a_popover =
+                        command == KeyCommand::Escape && self.controls.close_settings();
+                    if !closed_a_popover {
+                        self.core.on_key(command);
+                    }
+                }
+                self.apply_host_requests();
                 self.needs_redraw = true;
             }
             _ => {}
@@ -123,19 +153,15 @@ impl ApplicationHandler for App {
             event_loop.exit();
             return;
         }
-        self.maintain_source();
-        self.maintain_overlays();
-        self.tick_transition();
-        if self.controls.sources_open() && self.sources_refreshed.elapsed() > SOURCES_REFRESH {
-            self.refresh_sources();
-        }
-        self.update_stats();
-        self.poll_replay();
+        self.refresh_host_info();
+        self.core.tick(self.controls.sources_open());
+        self.show_events();
+        self.apply_host_requests();
         // Redraw for new video, for input, and while the controls are on
         // screen (hover, drag and fade animations need steady frames).
-        let new_frame = self.slot.wait_for_frame(FRAME_WAIT);
+        let new_frame = self.core.output_slot().wait_for_frame(FRAME_WAIT);
         let animating =
-            self.controls.is_visible() || self.toasts.is_visible() || self.rec_view().is_on();
+            self.controls.is_visible() || self.toasts.is_visible() || self.core.rec_is_on();
         if new_frame || animating || std::mem::take(&mut self.needs_redraw) {
             if let Some(window) = &self.window {
                 window.request_redraw();

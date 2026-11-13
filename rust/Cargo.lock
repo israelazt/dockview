@@ -327,12 +327,20 @@ dependencies = [
 name = "dockview"
 version = "0.1.0"
 dependencies = [
+ "dockview-app",
  "dockview-domain",
  "dockview-platform",
  "dockview-ui",
  "png",
  "windows",
  "winit",
+]
+
+[[package]]
+name = "dockview-app"
+version = "0.1.0"
+dependencies = [
+ "dockview-domain",
 ]
 
 [[package]]

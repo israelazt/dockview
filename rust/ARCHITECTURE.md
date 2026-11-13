@@ -72,8 +72,8 @@ Las flechas solo van hacia abajo. `ui`, `app` y `platform` no se ven entre sí: 
 - [x] Paso 4: `Model`, `Action` y todas sus vistas (`domain::view`), `i18n` y `theme` están en el dominio; la búsqueda del idioma de Windows pasó a `platform::system_lang`. Los datos de dibujo (`Vertex`, `GlyphUpload`) se mueven con la interfaz en el paso 5.
 - [x] Paso 5: los datos de dibujo (`Vertex`, `GlyphUpload`, `DrawList`) y `Stats` están en el dominio; `UiGpu` recibe una `DrawList` en lugar del `Ui` entero; y los renderizadores de Direct3D (`render`, `ui_gpu`) viven en `platform`.
 - [x] Paso 6: crate `dockview-ui` (la interfaz, sin Windows ni Direct3D; solo depende de `domain` y de cosmic-text). Lleva sus fuentes y sus 105 tests.
-- [~] Paso 7: puertos hechos: `SourceMachine` (capturas, audio, compositor, listados), `SystemProbe` (CPU, memoria y RAM), `StatsSink` (el registro CSV de medidas) y, en `ReplayMachine`, la carpeta por defecto, la comprobación de escritura y las etiquetas de atajos. Todos los mensajes al usuario son `AppEvent`. `App` los recibe agrupados en `Ports`. **Falta** el puerto `Host` (ventana: pantalla completa, filtro de dibujo, excluir de capturas, elegir carpeta, tamaño y frecuencia del monitor, tiempo de GPU), que llega con el paso 8.
-- [ ] Paso 8: crate `dockview-app` como biblioteca (`Core`) y el binario `dockview` solo con la ventana y el cableado.
+- [x] Paso 7: puertos hechos: `SourceMachine`, `SystemProbe`, `StatsSink`, el resto de `ReplayMachine` y `Host` (la ventana). Todos los mensajes al usuario son `AppEvent`.
+- [x] Paso 8: `dockview-app` es una **biblioteca** que solo depende de `dockview-domain` (`Core`, con su API pública: `model`, `apply`, `on_key`, `tick`, `take_events`…), y el binario `dockview` es solo la ventana (`Shell`, el `Host` real y la raíz de composición `run`). Los cinco crates de la tabla existen y el compilador impone las dependencias.
 - [ ] Paso 9: las guardas automáticas (límite de líneas y dependencias), partir lo que las incumpla.
 
 Cada paso deja la app funcionando, con todos los tests, una prueba con la app real y la comparación de la interfaz píxel a píxel, y se commitea y sube por separado.

@@ -23,7 +23,7 @@ use dockview_domain::sources::{CaptureTarget, ScreenOptions, ScreenStatus};
 
 use crate::cli::PipSpec;
 
-use super::{App, SourceKind};
+use super::{Core, SourceKind};
 use crate::sources::{find_window, Reconnect};
 
 /// The size of the picture a scene is drawn at.
@@ -52,7 +52,7 @@ pub struct Overlay {
     pub index: usize,
 }
 
-impl App {
+impl Core {
     /// The layers to draw, bottom first: the base, then the overlays.
     fn scene_layers(&self, base: &SceneLayer) -> Vec<Layer> {
         let mut layers = vec![Layer {

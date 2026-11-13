@@ -15,7 +15,7 @@ impl Source {
     }
 }
 
-impl App {
+impl Core {
     /// Points the recorder's game-sound input at the right place: the capture
     /// card's audio, or the loopback of the PC (a monitor) or of one program (a
     /// window). Neither is played back by Dockview.
@@ -43,14 +43,7 @@ impl App {
     /// Hides Dockview's own window from the capture, so a captured screen does
     /// not show the viewer inside itself.
     pub(super) fn set_capture_exclusion(&self, on: bool) {
-        if let Some(hwnd) = self.window_hwnd() {
-            let affinity = if on { WDA_EXCLUDEFROMCAPTURE } else { WDA_NONE };
-            // SAFETY: a plain call on our own window; it fails harmlessly on
-            // Windows versions that do not support it.
-            unsafe {
-                let _ = SetWindowDisplayAffinity(hwnd, affinity);
-            }
-        }
+        self.host.exclude_from_capture(on);
     }
 
     /// Captures a monitor or a window instead of the capture card.
@@ -71,7 +64,7 @@ impl App {
         self.route_audio();
     }
 
-    pub(super) fn refresh_sources(&mut self) {
+    pub fn refresh_sources(&mut self) {
         self.monitors = self.machine.list_monitors();
         let own = std::process::id();
         self.windows = self

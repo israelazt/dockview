@@ -2,16 +2,10 @@
 
 use super::*;
 
-impl App {
+impl Core {
     /// Tells the user something happened; it is shown on the next tick.
     pub(super) fn emit(&mut self, event: AppEvent) {
         self.events.push(event);
-    }
-
-    pub(super) fn toast(&mut self, key: i18n::Key, kind: ToastKind) {
-        let lang = self.lang_mode().resolve(self.system_lang);
-        self.toasts.show(i18n::tr(lang, key), kind);
-        self.needs_redraw = true;
     }
 
     pub(super) fn change_volume(&mut self, delta: f32) {
@@ -33,13 +27,18 @@ impl App {
 
     pub(super) fn cycle_preset(&mut self) {
         self.settings.render_preset = next_preset(self.settings.render_preset);
-        if let Some(renderer) = self.renderer.as_mut() {
-            renderer.set_filter(filter_for(self.settings.render_preset));
-        }
+        self.host.set_render_preset(self.settings.render_preset);
         self.save_settings();
     }
 
-    pub(super) fn save_settings(&mut self) {
+    /// Enters or leaves full screen.
+    pub fn set_fullscreen(&mut self, on: bool) {
+        self.fullscreen = on;
+        self.host.set_fullscreen(on);
+        self.save_settings();
+    }
+
+    pub fn save_settings(&mut self) {
         if self.cli.ui_preview {
             return;
         }
@@ -56,7 +55,7 @@ impl App {
     }
 
     /// Snapshot of everything the controls display.
-    pub(super) fn model(&self) -> Model {
+    pub fn model(&self) -> Model {
         let status = status_kind(self.source.video_state());
         let resolution = resolution_label(self.video_size, self.telemetry.shown_fps());
         let appearance = self.theme_mode().resolve(self.system_appearance);
@@ -108,7 +107,7 @@ impl App {
     }
 
     /// Applies a change requested through the controls.
-    pub(super) fn apply(&mut self, action: Action) {
+    pub fn apply(&mut self, action: Action) {
         match action {
             Action::SetVolume(volume) => {
                 self.settings.volume = volume;
@@ -240,9 +239,7 @@ impl App {
             }
             Action::SetPreset(preset) => {
                 self.settings.render_preset = preset;
-                if let Some(renderer) = self.renderer.as_mut() {
-                    renderer.set_filter(filter_for(preset));
-                }
+                self.host.set_render_preset(preset);
             }
             Action::SetTheme(mode) => {
                 self.settings.theme = mode;
@@ -256,14 +253,13 @@ impl App {
         self.save_settings();
     }
 
-    pub(super) fn on_key(&mut self, key: &Key) {
-        let Some(command) = keys::command_for(key) else {
-            return;
-        };
+    /// Carries out what a key asked for.
+    pub fn on_key(&mut self, command: KeyCommand) {
         match command {
             KeyCommand::ToggleFullscreen => self.set_fullscreen(!self.fullscreen),
             KeyCommand::Escape => {
-                if !self.controls.close_settings() && self.fullscreen {
+                // The window closes its popover first; this is what is left.
+                if self.fullscreen {
                     self.set_fullscreen(false);
                 }
             }

@@ -3,7 +3,7 @@
 
 use super::*;
 
-impl App {
+impl Core {
     /// Registers the hotkey and starts the replay buffer if it is enabled.
     pub(super) fn start_replay_services(&mut self) {
         if self.cli.ui_preview {
@@ -132,8 +132,7 @@ impl App {
     /// Lets the user pick the folder for clips and recordings.
     pub(super) fn choose_folder(&mut self) {
         let start = self.clips_folder();
-        let owner = self.window_hwnd();
-        let Some(folder) = clips::pick_folder(owner, &start) else {
+        let Some(folder) = self.host.pick_folder(&start) else {
             return; // cancelled
         };
         if !self.replay.is_writable_folder(&folder) {
@@ -141,7 +140,7 @@ impl App {
             return;
         }
         self.settings.replay_folder = Some(folder.display().to_string());
-        self.needs_redraw = true;
+        self.host.request_redraw();
     }
 
     /// Opens Explorer on the newest file saved this session, or on the folder
@@ -181,7 +180,7 @@ impl App {
     }
 
     /// What the record button shows.
-    pub(super) fn rec_view(&self) -> RecView {
+    pub fn rec_view(&self) -> RecView {
         rec_view_of(
             self.replay.waiting_to_record(),
             self.replay.recording_info(),
@@ -212,10 +211,6 @@ impl App {
         self.replay.poll(&folder);
         let replay_events = self.replay.take_events();
         self.events.extend(replay_events);
-        for event in std::mem::take(&mut self.events) {
-            let (key, kind) = toast_for(event);
-            self.toast(key, kind);
-        }
     }
 }
 
@@ -257,36 +252,6 @@ fn replay_state_of(status: &RecorderStatus) -> ReplayState {
         RecorderStatus::Starting => ReplayState::Starting,
         RecorderStatus::Recording => ReplayState::Recording,
         RecorderStatus::Unsupported(_) | RecorderStatus::Failed(_) => ReplayState::Unavailable,
-    }
-}
-
-/// How an event is shown: the words and the kind of toast.
-fn toast_for(event: AppEvent) -> (i18n::Key, ToastKind) {
-    use i18n::Key;
-    match event {
-        AppEvent::ReplayIsOff => (Key::ToastTurnOnFirst, ToastKind::Info),
-        AppEvent::ClipSaving => (Key::ToastSaving, ToastKind::Info),
-        AppEvent::ClipSaved => (Key::ToastClipSaved, ToastKind::Success),
-        AppEvent::ClipFailed => (Key::ToastClipFailed, ToastKind::Error),
-        AppEvent::RecordingStarted => (Key::ToastRecStarted, ToastKind::Info),
-        AppEvent::RecordingFailed => (Key::ToastRecFailed, ToastKind::Error),
-        AppEvent::RecordingNoSpace => (Key::ToastRecNoSpace, ToastKind::Error),
-        AppEvent::RecordingSaved => (Key::ToastRecSaved, ToastKind::Success),
-        AppEvent::RecordingNewPart => (Key::ToastRecNewPart, ToastKind::Info),
-        AppEvent::RecordingDiskFull => (Key::ToastRecDiskFull, ToastKind::Error),
-        AppEvent::RecordingNoSignal => (Key::ToastRecNoSignal, ToastKind::Error),
-        AppEvent::LowDisk => (Key::ToastLowDisk, ToastKind::Error),
-        AppEvent::StopRecordingFirst => (Key::ToastStopRecordingFirst, ToastKind::Info),
-        AppEvent::ReplayOn => (Key::ToastReplayOn, ToastKind::Info),
-        AppEvent::ReplayOff => (Key::ToastReplayOff, ToastKind::Info),
-        AppEvent::MicOn => (Key::ToastMicOn, ToastKind::Info),
-        AppEvent::MicOff => (Key::ToastMicOff, ToastKind::Info),
-        AppEvent::QualityChanged => (Key::ToastQualityChanged, ToastKind::Info),
-        AppEvent::FolderNotWritable => (Key::ToastFolderNotWritable, ToastKind::Error),
-        AppEvent::SceneMissing => (Key::ToastSceneMissing, ToastKind::Error),
-        AppEvent::PipLost => (Key::ToastPipLost, ToastKind::Error),
-        AppEvent::SourceLost => (Key::ToastSourceLost, ToastKind::Error),
-        AppEvent::SourceFailed => (Key::ToastSourceFailed, ToastKind::Error),
     }
 }
 
@@ -346,41 +311,5 @@ mod tests {
             replay_state_of(&RecorderStatus::Unsupported("no encoder".into())),
             ReplayState::Unavailable
         );
-    }
-
-    #[test]
-    fn every_event_has_a_message_and_failures_are_errors() {
-        use AppEvent::*;
-        for event in [
-            ReplayIsOff,
-            ClipSaving,
-            ClipSaved,
-            ClipFailed,
-            RecordingStarted,
-            RecordingFailed,
-            RecordingNoSpace,
-            RecordingSaved,
-            RecordingNewPart,
-            RecordingDiskFull,
-            RecordingNoSignal,
-            LowDisk,
-            StopRecordingFirst,
-            ReplayOn,
-            ReplayOff,
-            MicOn,
-            MicOff,
-            QualityChanged,
-            FolderNotWritable,
-            SceneMissing,
-            PipLost,
-            SourceLost,
-            SourceFailed,
-        ] {
-            let (key, _) = toast_for(event);
-            assert!(!i18n::tr(i18n::Lang::En, key).is_empty(), "{event:?}");
-        }
-        assert_eq!(toast_for(ClipSaved).1, ToastKind::Success);
-        assert_eq!(toast_for(ClipFailed).1, ToastKind::Error);
-        assert_eq!(toast_for(LowDisk).1, ToastKind::Error);
     }
 }

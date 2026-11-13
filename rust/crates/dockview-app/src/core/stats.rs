@@ -3,7 +3,7 @@
 
 use super::*;
 
-impl App {
+impl Core {
     /// Refreshes the measurements once a second.
     pub(super) fn update_stats(&mut self) {
         let Some(Rates {
@@ -25,13 +25,8 @@ impl App {
 
         let native = self.native_mode();
         let video = self.source.video_state();
-        let monitor_hz = self
-            .window
-            .as_ref()
-            .and_then(|w| w.current_monitor())
-            .and_then(|m| m.refresh_rate_millihertz())
-            .map(|mhz| mhz as f32 / 1000.0);
-        let gpu_ms = self.renderer.as_ref().and_then(Renderer::gpu_ms);
+        let monitor_hz = self.host.monitor_hz();
+        let gpu_ms = self.host.gpu_ms();
         let audio_ok = self.audio.as_ref().map(|a| {
             !matches!(
                 a.status(),
@@ -75,10 +70,7 @@ impl App {
             findings
         };
 
-        let size = self
-            .window
-            .as_ref()
-            .map_or((0, 0), |w| (w.inner_size().width, w.inner_size().height));
+        let size = self.host.window_size();
         self.stats = Stats {
             device_mode: native.as_ref().map(ToString::to_string),
             mode_mbps: native.as_ref().and_then(StreamInfo::raw_mbps),

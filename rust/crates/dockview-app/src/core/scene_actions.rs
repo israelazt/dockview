@@ -14,12 +14,12 @@ use dockview_domain::i18n::LangModeExt;
 use dockview_domain::view::{LayerView, SceneAction, ScenesView};
 
 use super::scene_runtime::Overlay;
-use super::App;
+use super::Core;
 
 /// Scenes a user may keep.
 const MAX_SCENES: usize = 12;
 
-impl App {
+impl Core {
     /// How a source is named in the layer list.
     fn source_label(&self, source: &SourceRef, lang: i18n::Lang) -> String {
         match source {

@@ -1,23 +1,21 @@
-//! Building the app and starting it: the devices, the first source and the
-//! event loop.
+//! Building the core and starting it: the devices and the first source.
 
 use super::*;
 
-impl App {
-    pub(super) fn new(
+impl Core {
+    pub fn new(
         slot: Arc<FrameSlot>,
         settings: AppSettings,
         ports: Ports,
         video_devices: Vec<VideoDevice>,
         audio_devices: Vec<AudioDevice>,
         cli: Cli,
+        system_lang: Lang,
     ) -> Self {
         let system = ports.system;
         let test_pattern = cli.test_pattern;
         let preview = cli.ui_preview;
         let show_stats = cli.show_stats;
-        // Screenshots must show the settled state, not a mid-transition frame.
-        let animations = cli.screenshot.is_none() && system_animations_enabled();
         // The main source has a slot of its own that forwards to the output
         // one, so a scene can start or stop without restarting anything.
         let input_slot = Arc::new(FrameSlot::new());
@@ -37,33 +35,19 @@ impl App {
             audio: None,
             settings,
             store: ports.settings,
-            window: None,
-            renderer: None,
             rendered: 0,
             video_size: (0, 0),
             fullscreen: false,
             cli,
-            ui: Ui::new(),
-            ui_gpu: None,
-            ui_scale: 1.0,
             system_appearance: Appearance::Dark,
-            system_lang: dockview_platform::system_lang::detect_system_lang(),
-            exit_requested: false,
-            controls: Controls::new(preview),
-            pointer: Pointer::default(),
-            last_frame: Instant::now(),
-            needs_redraw: true,
-            cursor_pointer: false,
-            cursor_hidden: false,
-            animations,
+            host: ports.host,
+            system_lang,
             stats_open: show_stats,
-            stats_panel: StatsPanel::new(),
             stats: Stats::default(),
             stats_sink: ports.stats_sink,
             telemetry: Telemetry::new(Arc::clone(&system)),
             auto: AutoSwitch::new(),
             replay: ReplayService::new(ports.replay),
-            toasts: ToastHost::new(),
             total_ram: system.total_ram_bytes(),
             source_kind: SourceKind::Capture,
             loopback: None,
@@ -73,8 +57,6 @@ impl App {
             windows: Vec::new(),
             sources_refreshed: Instant::now(),
         };
-
-        app.controls.set_animations(animations);
 
         if test_pattern {
             // The preview exists for screenshots, which must be the same every
@@ -87,7 +69,6 @@ impl App {
             if preview {
                 app.install_preview_devices();
             }
-            app.open_requested_popover();
             app.start_cli_scene();
             app.finish_startup();
             return app;
@@ -123,7 +104,6 @@ impl App {
             StartupScene::Saved(index) => app.activate_scene(Some(index)),
             StartupScene::None => {}
         }
-        app.open_requested_popover();
         app.finish_startup();
         app
     }
@@ -137,24 +117,6 @@ impl App {
         }
         if self.cli.record {
             self.toggle_record();
-        }
-    }
-
-    /// Opens the popover asked for on the command line (for screenshots).
-    pub(super) fn open_requested_popover(&mut self) {
-        if self.cli.open_settings {
-            self.controls.toggle_settings();
-        }
-        if self.cli.open_replay {
-            self.controls.toggle_replay();
-        }
-        if self.cli.open_sources {
-            self.refresh_sources();
-            self.controls.toggle_sources();
-        }
-        if self.cli.open_scenes {
-            self.refresh_sources();
-            self.controls.toggle_scenes();
         }
     }
 
@@ -179,68 +141,5 @@ impl App {
         ];
         self.video_index = Some(0);
         self.audio_index = Some(0);
-    }
-}
-
-/// Reads the command line, finds the devices and runs the event loop.
-pub fn run() {
-    let slot = Arc::new(FrameSlot::new());
-    let cli = match Cli::parse(std::env::args().skip(1)) {
-        Ok(cli) => cli,
-        Err(e) => {
-            eprintln!("dockview: {e}");
-            std::process::exit(2);
-        }
-    };
-    let test_pattern = cli.test_pattern;
-
-    let (video_devices, audio_devices) = if test_pattern {
-        (Vec::new(), Vec::new())
-    } else {
-        (
-            on_helper_thread(|| {
-                let session = MfSession::start().ok()?;
-                enumerate_video_devices(&session).ok()
-            }),
-            on_helper_thread(|| enumerate_audio_devices().ok()),
-        )
-    };
-
-    let event_loop = match EventLoop::new() {
-        Ok(l) => l,
-        Err(e) => {
-            eprintln!("could not create event loop: {e}");
-            return;
-        }
-    };
-    event_loop.set_control_flow(ControlFlow::Poll);
-
-    // The preview must look the same on every machine: ignore saved settings.
-    let store = FileSettingsStore::at_default_location();
-    let saved = if cli.ui_preview {
-        AppSettings::default()
-    } else {
-        store.load()
-    };
-    let mut app = App::new(
-        slot,
-        saved,
-        Ports {
-            settings: Box::new(store),
-            replay: Box::new(PlatformReplay),
-            sources: Box::new(PlatformSources),
-            system: Arc::new(PlatformSystem::new()),
-            stats_sink: cli
-                .log_stats
-                .as_deref()
-                .and_then(|path| StatsLog::create(path).ok())
-                .map(|log| Box::new(log) as Box<dyn StatsSink>),
-        },
-        video_devices,
-        audio_devices,
-        cli,
-    );
-    if let Err(e) = event_loop.run_app(&mut app) {
-        eprintln!("event loop error: {e}");
     }
 }

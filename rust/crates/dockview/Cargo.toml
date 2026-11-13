@@ -1,0 +1,21 @@
+[package]
+name = "dockview"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# The program: the window and the event loop, and the wiring of the real
+# adapters into the application. No logic. See rust/ARCHITECTURE.md.
+[dependencies]
+dockview-domain = { path = "../dockview-domain" }
+dockview-platform = { path = "../dockview-platform" }
+dockview-ui = { path = "../dockview-ui" }
+dockview-app = { path = "../dockview-app" }
+winit.workspace = true
+png = "0.18"
+
+[target.'cfg(windows)'.dependencies]
+windows = { workspace = true, features = [
+    "Win32_Foundation",
+    "Win32_UI_WindowsAndMessaging",
+] }

@@ -16,7 +16,7 @@ use dockview_domain::sources::Layer;
 use dockview_domain::transition::{Easing, Transition, DEFAULT_DURATION};
 
 use super::scene_runtime::{Overlay, SCENE_HEIGHT, SCENE_WIDTH};
-use super::App;
+use super::Core;
 
 /// A scene change in progress.
 pub struct ActiveTransition {
@@ -29,7 +29,7 @@ pub struct ActiveTransition {
     pub leaving: Vec<Overlay>,
 }
 
-impl App {
+impl Core {
     /// The scene as it is on screen now (the base and the overlays that run),
     /// or `None` when there is no main source to start from.
     pub fn running_scene(&self) -> Option<Scene> {

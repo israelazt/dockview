@@ -15,6 +15,7 @@ use crate::pcm::AudioTap;
 use crate::recording::{
     RecorderStatus, RecordingInfo, RecordingOutcome, ReplaySettings, SaveHandle,
 };
+use crate::settings::RenderPreset;
 use crate::sources::{
     CaptureOptions, CaptureStatus, CaptureTarget, Layer, MonitorInfo, ScreenOptions, ScreenStatus,
     WindowInfo,
@@ -187,4 +188,53 @@ pub trait SourceMachine {
         width: u32,
         height: u32,
     ) -> Box<dyn SceneCompositor>;
+}
+
+// ---------------------------------------------------------------------------
+// The window
+// ---------------------------------------------------------------------------
+
+/// What the application asks of the window it is shown in. The binary
+/// implements it with the real window; [`NullHost`] does nothing, for tests.
+pub trait Host {
+    /// Enters or leaves full screen.
+    fn set_fullscreen(&self, on: bool);
+    /// Switches how the video is scaled to the window.
+    fn set_render_preset(&self, preset: RenderPreset);
+    /// Hides (or shows again) the window from screen captures, so a captured
+    /// screen does not show the viewer inside itself.
+    fn exclude_from_capture(&self, on: bool);
+    /// Lets the user pick a folder, starting at `start`; `None` if cancelled.
+    fn pick_folder(&self, start: &Path) -> Option<PathBuf>;
+    /// Size of the window's drawing area, in physical pixels.
+    fn window_size(&self) -> (u32, u32);
+    /// Refresh rate of the monitor the window is on, in Hz.
+    fn monitor_hz(&self) -> Option<f32>;
+    /// Time the GPU takes to draw a frame, in milliseconds.
+    fn gpu_ms(&self) -> Option<f32>;
+    /// Asks for the next frame to be drawn.
+    fn request_redraw(&self);
+}
+
+/// A window that is not there: every request is ignored.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct NullHost;
+
+impl Host for NullHost {
+    fn set_fullscreen(&self, _: bool) {}
+    fn set_render_preset(&self, _: RenderPreset) {}
+    fn exclude_from_capture(&self, _: bool) {}
+    fn pick_folder(&self, _: &Path) -> Option<PathBuf> {
+        None
+    }
+    fn window_size(&self) -> (u32, u32) {
+        (0, 0)
+    }
+    fn monitor_hz(&self) -> Option<f32> {
+        None
+    }
+    fn gpu_ms(&self) -> Option<f32> {
+        None
+    }
+    fn request_redraw(&self) {}
 }
