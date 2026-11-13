@@ -35,8 +35,8 @@ use windows::Win32::Graphics::Dxgi::Common::{
 use windows::Win32::Media::{timeBeginPeriod, timeEndPeriod};
 
 use crate::frame::{Frame, FrameSlot, PixelFormat};
-use crate::gpu::{create_device, even, failed, Nv12Target};
-use crate::screen::fit_in;
+use crate::geometry::{even, layer_geometry, PixelRect};
+use crate::gpu::{create_device, failed, Nv12Target};
 use crate::worker::{StatusCell, Worker};
 
 pub use crate::scene::{Fit, NormRect};
@@ -62,93 +62,6 @@ impl Layer {
             fit: Fit::Contain,
             visible: true,
             opacity: 1.0,
-        }
-    }
-}
-
-/// A pixel rectangle, always with even sides and offsets (NV12 needs them).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct PixelRect {
-    pub x: u32,
-    pub y: u32,
-    pub w: u32,
-    pub h: u32,
-}
-
-/// Which part of a `content`-sized picture is drawn (the first rectangle) and
-/// where in the `out`-sized output (the second).
-pub fn layer_geometry(
-    rect: NormRect,
-    fit: Fit,
-    content: (u32, u32),
-    out: (u32, u32),
-) -> (PixelRect, PixelRect) {
-    let (out_w, out_h) = (out.0.max(2), out.1.max(2));
-    let (content_w, content_h) = (content.0.max(2), content.1.max(2));
-    let clamp01 = |v: f32| v.clamp(0.0, 1.0);
-    let x0 = even((clamp01(rect.x) * out_w as f32).round() as u32).min(out_w - 2);
-    let y0 = even((clamp01(rect.y) * out_h as f32).round() as u32).min(out_h - 2);
-    let x1 = (clamp01(rect.x + rect.w) * out_w as f32).round() as u32;
-    let y1 = (clamp01(rect.y + rect.h) * out_h as f32).round() as u32;
-    let bw = even(x1.saturating_sub(x0)).clamp(2, out_w - x0);
-    let bh = even(y1.saturating_sub(y0)).clamp(2, out_h - y0);
-    let whole = PixelRect {
-        x: 0,
-        y: 0,
-        w: even(content_w),
-        h: even(content_h),
-    };
-    match fit {
-        Fit::Stretch => (
-            whole,
-            PixelRect {
-                x: x0,
-                y: y0,
-                w: bw,
-                h: bh,
-            },
-        ),
-        Fit::Contain => {
-            let (dx, dy, w, h) = fit_in(content_w, content_h, bw, bh);
-            (
-                whole,
-                PixelRect {
-                    x: x0 + dx,
-                    y: y0 + dy,
-                    w,
-                    h,
-                },
-            )
-        }
-        Fit::Cover => {
-            // Crop the picture to the rectangle's proportions, from the centre.
-            let box_aspect = f64::from(bw) / f64::from(bh);
-            let content_aspect = f64::from(content_w) / f64::from(content_h);
-            let (sw, sh) = if content_aspect > box_aspect {
-                (
-                    even((f64::from(content_h) * box_aspect).round() as u32).clamp(2, content_w),
-                    even(content_h),
-                )
-            } else {
-                (
-                    even(content_w),
-                    even((f64::from(content_w) / box_aspect).round() as u32).clamp(2, content_h),
-                )
-            };
-            (
-                PixelRect {
-                    x: even((content_w - sw) / 2),
-                    y: even((content_h - sh) / 2),
-                    w: sw,
-                    h: sh,
-                },
-                PixelRect {
-                    x: x0,
-                    y: y0,
-                    w: bw,
-                    h: bh,
-                },
-            )
         }
     }
 }
@@ -567,79 +480,6 @@ fn run(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    const OUT: (u32, u32) = (1920, 1080);
-
-    #[test]
-    fn a_full_layer_fills_the_picture() {
-        let (src, dest) = layer_geometry(NormRect::FULL, Fit::Contain, (1920, 1080), OUT);
-        assert_eq!(
-            src,
-            PixelRect {
-                x: 0,
-                y: 0,
-                w: 1920,
-                h: 1080
-            }
-        );
-        assert_eq!(dest, src);
-    }
-
-    #[test]
-    fn contain_keeps_the_proportion_with_bars() {
-        // A 4:3 picture in a 16:9 output: pillarboxed, centred.
-        let (_, dest) = layer_geometry(NormRect::FULL, Fit::Contain, (1440, 1080), OUT);
-        assert_eq!((dest.w, dest.h), (1440, 1080));
-        assert_eq!(dest.x, 240);
-        assert_eq!(dest.y, 0);
-    }
-
-    #[test]
-    fn stretch_ignores_the_proportion() {
-        let (src, dest) = layer_geometry(NormRect::FULL, Fit::Stretch, (1440, 1080), OUT);
-        assert_eq!((src.w, src.h), (1440, 1080));
-        assert_eq!((dest.w, dest.h), (1920, 1080));
-    }
-
-    #[test]
-    fn cover_crops_from_the_centre() {
-        // A wide picture into a square box: the sides are cut.
-        let rect = NormRect::new(0.0, 0.0, 0.5625, 1.0); // 1080 x 1080 px
-        let (src, dest) = layer_geometry(rect, Fit::Cover, (1920, 1080), OUT);
-        assert_eq!((dest.w, dest.h), (1080, 1080));
-        assert_eq!((src.w, src.h), (1080, 1080));
-        assert_eq!(src.x, 420);
-        assert_eq!(src.y, 0);
-    }
-
-    #[test]
-    fn a_corner_camera_lands_in_the_corner() {
-        // 25 % wide, 16:9, bottom right with a small margin.
-        let rect = NormRect::new(0.73, 0.70, 0.25, 0.25 * 16.0 / 9.0 * 9.0 / 16.0);
-        let (_, dest) = layer_geometry(rect, Fit::Contain, (1280, 720), OUT);
-        assert!(dest.x >= 1400 && dest.x + dest.w <= 1920);
-        assert!(dest.y >= 750 && dest.y + dest.h <= 1080);
-        assert_eq!(dest.x % 2, 0);
-        assert_eq!(dest.y % 2, 0);
-        assert_eq!(dest.w % 2, 0);
-        assert_eq!(dest.h % 2, 0);
-    }
-
-    #[test]
-    fn rectangles_outside_the_picture_are_pulled_back_in() {
-        let rect = NormRect::new(0.9, 0.9, 0.5, 0.5);
-        let (_, dest) = layer_geometry(rect, Fit::Stretch, (640, 360), OUT);
-        assert!(dest.x + dest.w <= 1920 && dest.y + dest.h <= 1080);
-        assert!(dest.w >= 2 && dest.h >= 2);
-        let (_, dest) = layer_geometry(
-            NormRect::new(-1.0, -1.0, 0.0, 0.0),
-            Fit::Stretch,
-            (2, 2),
-            OUT,
-        );
-        assert_eq!((dest.x, dest.y), (0, 0));
-        assert!(dest.w >= 2 && dest.h >= 2);
-    }
 
     /// A solid NV12 picture of the given luma.
     fn solid(width: u32, height: u32, luma: u8) -> Frame {

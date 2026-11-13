@@ -13,6 +13,7 @@ pub mod diagnostics;
 #[cfg(windows)]
 pub mod encode;
 pub mod frame;
+pub mod geometry;
 pub mod gpu;
 #[cfg(windows)]
 pub mod mf;
@@ -30,6 +31,8 @@ pub mod settings;
 pub mod stream;
 #[cfg(windows)]
 pub mod tap_capture;
+#[cfg(windows)]
+pub mod targets;
 pub mod testsrc;
 pub mod transition;
 pub mod worker;

@@ -157,6 +157,13 @@ Efecto menor: `--capture-window` ahora prefiere un título exacto antes que uno 
 ### Resultado de D-3 (2026-11-12)
 `recorder.rs` (1548 líneas) pasó a `recorder/`: `mod.rs` (490: tipos compartidos y la API pública de `ReplayRecorder`), `runner.rs` (185: el hilo del codificador), `session.rs` (194: la grabación que pide el usuario, sus partes y su cierre), `clip.rs` (74: escribir el MP4 de un clip) y `tests.rs` (623). Solo se movió código; las únicas ediciones son la visibilidad (`pub(super)`) de lo que cruza archivos. Comprobado con los 206 tests del núcleo (los de grabación usan el codificador real) y con la app real: MP4 de 7,95 s con vídeo y tres pistas de audio.
 
+### Resultado del punto D: `compose.rs` y `screen.rs` (2026-11-12)
+- `geometry.rs` (245 líneas, sin Windows ni GPU): `even`, `output_size`, `fit_in`, `PixelRect` y `layer_geometry`, con sus 9 tests. Antes la aritmética estaba repartida entre `screen.rs`, `compose.rs` y `gpu.rs` (que tenía su propio test de `even`, repetido).
+- `targets.rs` (183): `CaptureTarget`, `MonitorInfo`, `WindowInfo` y el listado de monitores y ventanas. `screen.rs` los reexporta, así que la API pública no cambia.
+- `screen.rs` baja de 705 a 461 líneas y `compose.rs` de 751 a 593; lo que queda en ellos depende de la GPU y de los hilos.
+
+Comprobado con 386 tests y con la app real (capturadora + pantalla en la esquina y una pantalla como fuente principal, grabando).
+
 ## Lo que no conviene tocar
 - La separación en dos crates y el sentido de las dependencias.
 - `Model` y `Action` como frontera entre la lógica y la interfaz: funcionan bien.

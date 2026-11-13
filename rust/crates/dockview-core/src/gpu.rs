@@ -19,12 +19,9 @@ use windows::Win32::Graphics::Direct3D11::{
 };
 use windows::Win32::Graphics::Dxgi::Common::{DXGI_FORMAT_NV12, DXGI_SAMPLE_DESC};
 
-use crate::frame::{Frame, FrameSlot, PixelFormat};
+pub use crate::geometry::even;
 
-/// The nearest even number not above `n` (NV12 needs even sizes).
-pub fn even(n: u32) -> u32 {
-    n & !1
-}
+use crate::frame::{Frame, FrameSlot, PixelFormat};
 
 /// A Windows rectangle from an origin and a size.
 pub fn rect(x: u32, y: u32, w: u32, h: u32) -> RECT {
@@ -234,13 +231,6 @@ impl Nv12Target {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn sizes_are_rounded_down_to_even() {
-        assert_eq!(even(1920), 1920);
-        assert_eq!(even(1081), 1080);
-        assert_eq!(even(3), 2);
-    }
 
     #[test]
     fn a_rectangle_is_an_origin_and_a_size() {

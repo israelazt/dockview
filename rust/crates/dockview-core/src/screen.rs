@@ -22,7 +22,7 @@ use windows::Foundation::{TimeSpan, TypedEventHandler};
 use windows::Graphics::Capture::{Direct3D11CaptureFramePool, GraphicsCaptureItem};
 use windows::Graphics::DirectX::Direct3D11::IDirect3DDevice;
 use windows::Graphics::DirectX::DirectXPixelFormat;
-use windows::Win32::Foundation::{HWND, LPARAM, RECT};
+use windows::Win32::Foundation::HWND;
 use windows::Win32::Graphics::Direct3D11::{
     ID3D11Device, ID3D11DeviceContext, ID3D11Texture2D, ID3D11VideoContext, ID3D11VideoDevice,
     ID3D11VideoProcessor, ID3D11VideoProcessorEnumerator, D3D11_TEX2D_VPIV,
@@ -31,51 +31,23 @@ use windows::Win32::Graphics::Direct3D11::{
     D3D11_VIDEO_PROCESSOR_INPUT_VIEW_DESC_0, D3D11_VIDEO_PROCESSOR_STREAM,
     D3D11_VIDEO_USAGE_PLAYBACK_NORMAL, D3D11_VPIV_DIMENSION_TEXTURE2D,
 };
-use windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_CLOAKED};
 use windows::Win32::Graphics::Dxgi::Common::DXGI_RATIONAL;
 use windows::Win32::Graphics::Dxgi::IDXGIDevice;
-use windows::Win32::Graphics::Gdi::{
-    EnumDisplayMonitors, GetMonitorInfoW, HDC, HMONITOR, MONITORINFO, MONITORINFOEXW,
-};
+use windows::Win32::Graphics::Gdi::HMONITOR;
 use windows::Win32::System::WinRT::Direct3D11::{
     CreateDirect3D11DeviceFromDXGIDevice, IDirect3DDxgiInterfaceAccess,
 };
 use windows::Win32::System::WinRT::Graphics::Capture::IGraphicsCaptureItemInterop;
 use windows::Win32::System::WinRT::{RoInitialize, RO_INIT_MULTITHREADED};
-use windows::Win32::UI::WindowsAndMessaging::{
-    EnumWindows, GetWindow, GetWindowLongPtrW, GetWindowTextW, GetWindowThreadProcessId, IsIconic,
-    IsWindow, IsWindowVisible, GWL_EXSTYLE, GW_OWNER, WS_EX_TOOLWINDOW,
+
+pub use crate::targets::{
+    list_monitors, list_windows, window_exists, CaptureTarget, MonitorInfo, WindowInfo,
 };
 
 use crate::frame::FrameSlot;
-use crate::gpu::{create_device, even, rect, Nv12Target};
+use crate::geometry::{fit_in, output_size};
+use crate::gpu::{create_device, rect, Nv12Target};
 use crate::worker::{StatusCell, Worker};
-
-/// What to capture. The numbers are the raw `HMONITOR` / `HWND` handles.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CaptureTarget {
-    Monitor(isize),
-    Window(isize),
-}
-
-/// A monitor that can be captured.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct MonitorInfo {
-    pub handle: isize,
-    /// Windows' name for it, e.g. `\\.\DISPLAY1`.
-    pub device_name: String,
-    pub width: u32,
-    pub height: u32,
-    pub primary: bool,
-}
-
-/// A window that can be captured.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct WindowInfo {
-    pub handle: isize,
-    pub title: String,
-    pub process_id: u32,
-}
 
 /// Options for a capture.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -110,154 +82,6 @@ pub enum ScreenStatus {
     /// What was being captured went away (the window closed).
     Ended(String),
     Failed(String),
-}
-
-// ---------------------------------------------------------------------------
-// Pure helpers
-// ---------------------------------------------------------------------------
-
-/// Output size for a source of `width`×`height`: scaled down to at most
-/// `max_height` (never up), keeping the shape, and both sides even.
-pub fn output_size(width: u32, height: u32, max_height: u32) -> (u32, u32) {
-    let (width, height) = (width.max(2), height.max(2));
-    if height <= max_height {
-        return (even(width).max(2), even(height).max(2));
-    }
-    let scale = f64::from(max_height) / f64::from(height);
-    let w = (f64::from(width) * scale).round() as u32;
-    (even(w).max(2), even(max_height).max(2))
-}
-
-/// Where a `content_w`×`content_h` picture goes inside an `out_w`×`out_h`
-/// canvas: as large as fits, centred, with even coordinates. `(x, y, w, h)`.
-pub fn fit_in(content_w: u32, content_h: u32, out_w: u32, out_h: u32) -> (u32, u32, u32, u32) {
-    let (content_w, content_h) = (content_w.max(1), content_h.max(1));
-    let scale =
-        (f64::from(out_w) / f64::from(content_w)).min(f64::from(out_h) / f64::from(content_h));
-    let w = even((f64::from(content_w) * scale).round() as u32).clamp(2, out_w);
-    let h = even((f64::from(content_h) * scale).round() as u32).clamp(2, out_h);
-    (even((out_w - w) / 2), even((out_h - h) / 2), w, h)
-}
-
-// ---------------------------------------------------------------------------
-// Listing what can be captured
-// ---------------------------------------------------------------------------
-
-unsafe extern "system" fn monitor_callback(
-    monitor: HMONITOR,
-    _dc: HDC,
-    _rect: *mut RECT,
-    data: LPARAM,
-) -> BOOL {
-    // SAFETY: `data` is the `&mut Vec<MonitorInfo>` passed to EnumDisplayMonitors.
-    let list = unsafe { &mut *(data.0 as *mut Vec<MonitorInfo>) };
-    let mut info = MONITORINFOEXW::default();
-    info.monitorInfo.cbSize = std::mem::size_of::<MONITORINFOEXW>() as u32;
-    // SAFETY: `info` is a valid MONITORINFOEXW with cbSize set.
-    if unsafe {
-        GetMonitorInfoW(
-            monitor,
-            (&mut info as *mut MONITORINFOEXW).cast::<MONITORINFO>(),
-        )
-    }
-    .as_bool()
-    {
-        let r = info.monitorInfo.rcMonitor;
-        let name_len = info
-            .szDevice
-            .iter()
-            .position(|&c| c == 0)
-            .unwrap_or(info.szDevice.len());
-        list.push(MonitorInfo {
-            handle: monitor.0 as isize,
-            device_name: String::from_utf16_lossy(&info.szDevice[..name_len]),
-            width: (r.right - r.left).max(0) as u32,
-            height: (r.bottom - r.top).max(0) as u32,
-            primary: info.monitorInfo.dwFlags & 1 != 0, // MONITORINFOF_PRIMARY
-        });
-    }
-    BOOL(1)
-}
-
-/// The monitors, the primary one first.
-pub fn list_monitors() -> Vec<MonitorInfo> {
-    let mut list: Vec<MonitorInfo> = Vec::new();
-    // SAFETY: the callback only touches `list`, which outlives the call.
-    unsafe {
-        let _ = EnumDisplayMonitors(
-            None,
-            None,
-            Some(monitor_callback),
-            LPARAM(&mut list as *mut Vec<MonitorInfo> as isize),
-        );
-    }
-    list.sort_by_key(|m| !m.primary);
-    list
-}
-
-unsafe extern "system" fn window_callback(hwnd: HWND, data: LPARAM) -> BOOL {
-    // SAFETY: `data` is the `&mut Vec<WindowInfo>` passed to EnumWindows.
-    let list = unsafe { &mut *(data.0 as *mut Vec<WindowInfo>) };
-    // SAFETY: plain queries on a window handle from EnumWindows.
-    unsafe {
-        if !IsWindowVisible(hwnd).as_bool() || IsIconic(hwnd).as_bool() {
-            return BOOL(1);
-        }
-        // Owned windows (dialogs) and tool windows are not "applications".
-        if GetWindow(hwnd, GW_OWNER).is_ok_and(|owner| !owner.0.is_null()) {
-            return BOOL(1);
-        }
-        if GetWindowLongPtrW(hwnd, GWL_EXSTYLE) as u32 & WS_EX_TOOLWINDOW.0 != 0 {
-            return BOOL(1);
-        }
-        // Windows on other virtual desktops and suspended apps are "cloaked".
-        let mut cloaked = 0u32;
-        if DwmGetWindowAttribute(
-            hwnd,
-            DWMWA_CLOAKED,
-            (&mut cloaked as *mut u32).cast::<c_void>(),
-            std::mem::size_of::<u32>() as u32,
-        )
-        .is_ok()
-            && cloaked != 0
-        {
-            return BOOL(1);
-        }
-        let mut buffer = [0u16; 512];
-        let length = GetWindowTextW(hwnd, &mut buffer) as usize;
-        let title = String::from_utf16_lossy(&buffer[..length]);
-        if title.trim().is_empty() {
-            return BOOL(1);
-        }
-        let mut process_id = 0u32;
-        GetWindowThreadProcessId(hwnd, Some(&mut process_id));
-        list.push(WindowInfo {
-            handle: hwnd.0 as isize,
-            title,
-            process_id,
-        });
-    }
-    BOOL(1)
-}
-
-/// The application windows that can be captured, in the order Windows lists
-/// them (front to back).
-pub fn list_windows() -> Vec<WindowInfo> {
-    let mut list: Vec<WindowInfo> = Vec::new();
-    // SAFETY: the callback only touches `list`, which outlives the call.
-    unsafe {
-        let _ = EnumWindows(
-            Some(window_callback),
-            LPARAM(&mut list as *mut Vec<WindowInfo> as isize),
-        );
-    }
-    list
-}
-
-/// Whether a window handle still refers to a window.
-pub fn window_exists(handle: isize) -> bool {
-    // SAFETY: IsWindow accepts any handle value.
-    unsafe { IsWindow(Some(HWND(handle as *mut c_void))).as_bool() }
 }
 
 // ---------------------------------------------------------------------------
@@ -599,74 +423,6 @@ mod tests {
     use crate::frame::PixelFormat;
 
     use super::*;
-
-    #[test]
-    fn sizes_are_made_even() {
-        assert_eq!(even(1920), 1920);
-        assert_eq!(even(1081), 1080);
-        assert_eq!(even(3), 2);
-    }
-
-    #[test]
-    fn output_size_scales_down_but_never_up_and_stays_even() {
-        assert_eq!(output_size(1920, 1080, 1080), (1920, 1080));
-        assert_eq!(output_size(1280, 720, 1080), (1280, 720), "never scaled up");
-        assert_eq!(output_size(2560, 1440, 1080), (1920, 1080));
-        assert_eq!(output_size(3840, 2160, 1080), (1920, 1080));
-        // Odd window sizes are rounded down to even.
-        assert_eq!(output_size(801, 601, 1080), (800, 600));
-        // A tall window is limited by its height.
-        let (w, h) = output_size(1000, 2000, 1080);
-        assert_eq!(h, 1080);
-        assert!(w % 2 == 0 && (w as f64 - 540.0).abs() <= 2.0, "{w}");
-        // Degenerate input still gives a usable size.
-        assert_eq!(output_size(0, 0, 1080), (2, 2));
-    }
-
-    #[test]
-    fn a_picture_is_fitted_and_centred_with_black_bars() {
-        // Same shape: fills the canvas.
-        assert_eq!(fit_in(1920, 1080, 1920, 1080), (0, 0, 1920, 1080));
-        // A 4:3 picture in a 16:9 canvas: bars left and right.
-        let (x, y, w, h) = fit_in(1600, 1200, 1920, 1080);
-        assert_eq!((y, h), (0, 1080));
-        assert_eq!(w, 1440);
-        assert_eq!(x, 240);
-        // A window that grew: rescaled into the same canvas.
-        let (x, y, w, h) = fit_in(3000, 1000, 1920, 1080);
-        assert_eq!((x, w), (0, 1920));
-        assert!(y > 0 && h < 1080 && h % 2 == 0 && y % 2 == 0);
-        // Everything stays inside the canvas and even.
-        for (cw, ch) in [(1, 1), (7, 3), (5000, 100), (100, 5000)] {
-            let (x, y, w, h) = fit_in(cw, ch, 1280, 720);
-            assert!(x + w <= 1280 && y + h <= 720, "{cw}x{ch}");
-            assert!(
-                x % 2 == 0 && y % 2 == 0 && w % 2 == 0 && h % 2 == 0,
-                "{cw}x{ch}"
-            );
-        }
-    }
-
-    #[test]
-    fn monitors_are_listed_with_the_primary_first() {
-        let monitors = list_monitors();
-        assert!(!monitors.is_empty(), "this PC has at least one monitor");
-        assert!(monitors[0].primary);
-        assert!(monitors.iter().all(|m| m.width > 0 && m.height > 0));
-    }
-
-    #[test]
-    fn listing_windows_does_not_crash_and_skips_untitled_ones() {
-        let windows = list_windows();
-        assert!(windows
-            .iter()
-            .all(|w| !w.title.trim().is_empty() && w.process_id != 0));
-    }
-
-    #[test]
-    fn a_made_up_window_handle_does_not_exist() {
-        assert!(!window_exists(0x7FFF_FFF0));
-    }
 
     #[test]
     fn capturing_the_primary_monitor_delivers_even_sized_nv12_frames() {
