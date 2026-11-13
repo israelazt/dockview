@@ -4,6 +4,7 @@
 use std::ffi::c_void;
 
 use dockview_domain::frame::{Frame, PixelFormat};
+use dockview_domain::layout::Rect;
 use windows::core::{s, Error, Interface, Result};
 use windows::Win32::Foundation::{E_FAIL, HANDLE, HMODULE, HWND};
 use windows::Win32::Graphics::Direct3D::Fxc::{D3DCompile, D3DCOMPILE_OPTIMIZATION_LEVEL3};
@@ -93,6 +94,8 @@ pub struct Renderer {
     filter: Filter,
     video: Option<VideoTextures>,
     size: (u32, u32),
+    /// Where the video goes; `None` is the whole window.
+    video_area: Option<Rect>,
     gpu_timer: Option<GpuTimer>,
 }
 
@@ -175,6 +178,7 @@ impl Renderer {
                 filter: Filter::Linear,
                 video: None,
                 size: (width.max(1), height.max(1)),
+                video_area: None,
                 gpu_timer: None,
             };
             renderer.gpu_timer = GpuTimer::new(&renderer.device).ok();
@@ -193,6 +197,13 @@ impl Renderer {
         unsafe {
             WaitForSingleObjectEx(self.waitable, timeout_ms, true);
         }
+    }
+
+    /// Fits the video into `area` (physical pixels) instead of the whole
+    /// window, for example to leave room for a side panel. `None` goes back
+    /// to the whole window.
+    pub fn set_video_area(&mut self, area: Option<Rect>) {
+        self.video_area = area;
     }
 
     /// Resizes the back buffers. A zero-sized (minimised) window is ignored.
@@ -263,11 +274,26 @@ fn missing() -> Error {
 /// Largest rectangle with the video's aspect ratio that fits the window,
 /// centred. Returns `(x, y, width, height)` in pixels.
 pub fn letterbox(window: (u32, u32), video: (u32, u32)) -> (f32, f32, f32, f32) {
-    let (ww, wh) = (window.0 as f32, window.1 as f32);
+    let whole = Rect {
+        x: 0.0,
+        y: 0.0,
+        w: window.0 as f32,
+        h: window.1 as f32,
+    };
+    letterbox_in(whole, video)
+}
+
+/// Like [`letterbox`], inside `area` instead of the whole window.
+pub fn letterbox_in(area: Rect, video: (u32, u32)) -> (f32, f32, f32, f32) {
     let (vw, vh) = (video.0.max(1) as f32, video.1.max(1) as f32);
-    let scale = (ww / vw).min(wh / vh);
+    let scale = (area.w / vw).min(area.h / vh);
     let (w, h) = (vw * scale, vh * scale);
-    ((ww - w) / 2.0, (wh - h) / 2.0, w, h)
+    (
+        area.x + (area.w - w) / 2.0,
+        area.y + (area.h - h) / 2.0,
+        w,
+        h,
+    )
 }
 
 #[cfg(test)]
@@ -292,6 +318,28 @@ mod tests {
         assert!((h - 1000.0).abs() < 0.01 && y.abs() < 0.01);
         assert!((w - 1777.78).abs() < 0.1);
         assert!((x - (2000.0 - w) / 2.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn the_video_is_centred_inside_an_area_that_does_not_start_at_zero() {
+        // A 1600x1080 area on the left of a 1920x1080 window (panel on the right).
+        let area = Rect {
+            x: 0.0,
+            y: 0.0,
+            w: 1600.0,
+            h: 1080.0,
+        };
+        let (x, y, w, h) = letterbox_in(area, (1920, 1080));
+        assert!((w - 1600.0).abs() < 0.01 && x.abs() < 0.01);
+        assert!((h - 900.0).abs() < 0.01 && (y - 90.0).abs() < 0.01);
+        // An area offset from the origin keeps the offset.
+        let offset = Rect {
+            x: 320.0,
+            y: 0.0,
+            w: 1600.0,
+            h: 1080.0,
+        };
+        assert!((letterbox_in(offset, (1920, 1080)).0 - 320.0).abs() < 0.01);
     }
 
     #[test]

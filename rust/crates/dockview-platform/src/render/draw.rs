@@ -21,7 +21,10 @@ impl Renderer {
                 .ClearRenderTargetView(&target, &[0.0, 0.0, 0.0, 1.0]);
 
             if let Some(video) = &self.video {
-                let (x, y, w, h) = letterbox(self.size, (video.width, video.height));
+                let (x, y, w, h) = match self.video_area {
+                    Some(area) => letterbox_in(area, (video.width, video.height)),
+                    None => letterbox(self.size, (video.width, video.height)),
+                };
                 self.context.RSSetViewports(Some(&[D3D11_VIEWPORT {
                     TopLeftX: x,
                     TopLeftY: y,
