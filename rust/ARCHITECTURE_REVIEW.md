@@ -74,7 +74,7 @@ Cada paso: sin cambio visible, comprobado con los mismos tests y, en la interfaz
 |---|---|---|---|
 | D-1 ✅ | `Worker` común (hilo, parada, estado, cierre) en el núcleo | Quita 7 copias; base para fuentes nuevas | Bajo |
 | D-2 ✅ | Módulo `gpu` compartido (dispositivo, textura NV12, lectura al `Frame`) | Quita ≈ 120 líneas duplicadas | Bajo-medio |
-| D-3 | Partir `recorder.rs` en `recorder/` | Un archivo por responsabilidad | Medio (mucho movimiento, pocos cambios) |
+| D-3 ✅ | Partir `recorder.rs` en `recorder/` | Un archivo por responsabilidad | Medio (mucho movimiento, pocos cambios) |
 | D-4 | Extraer `Sources` de `App` (fuentes, audio y enrutado) | Mayor reducción de `main.rs`; permite probar el enrutado | Medio-alto |
 | D-5 | Extraer `ReplayService` (replay, grabación, micrófono) y `StatsService` | `App` queda como coordinador | Medio-alto |
 | D-6 | Capa de eventos entre servicios y la interfaz | Quita el `toast` de la lógica; base del bus de plugins | Medio |
@@ -153,6 +153,9 @@ Módulo sin hilos ni ventana con lo que `App` decidía a mano, ahora con 7 tests
 
 Efecto menor: `--capture-window` ahora prefiere un título exacto antes que uno que solo lo contiene, como ya hacían las escenas. Comprobado con 379 tests y con la app real (capturadora + pantalla en la esquina, y una pantalla como fuente principal).
 
+
+### Resultado de D-3 (2026-11-12)
+`recorder.rs` (1548 líneas) pasó a `recorder/`: `mod.rs` (490: tipos compartidos y la API pública de `ReplayRecorder`), `runner.rs` (185: el hilo del codificador), `session.rs` (194: la grabación que pide el usuario, sus partes y su cierre), `clip.rs` (74: escribir el MP4 de un clip) y `tests.rs` (623). Solo se movió código; las únicas ediciones son la visibilidad (`pub(super)`) de lo que cruza archivos. Comprobado con los 206 tests del núcleo (los de grabación usan el codificador real) y con la app real: MP4 de 7,95 s con vídeo y tres pistas de audio.
 
 ## Lo que no conviene tocar
 - La separación en dos crates y el sentido de las dependencias.
