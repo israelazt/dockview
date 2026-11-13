@@ -14,8 +14,8 @@ use dockview_domain::scene::{Scene, SceneLayer};
 use dockview_domain::transition::{Easing, Transition, DEFAULT_DURATION};
 use dockview_platform::compose::{Layer, SceneCompositor};
 
-use crate::ui::toast::ToastKind;
 use dockview_domain::i18n;
+use dockview_ui::toast::ToastKind;
 
 use super::scene_runtime::{Overlay, SCENE_HEIGHT, SCENE_WIDTH};
 use super::App;

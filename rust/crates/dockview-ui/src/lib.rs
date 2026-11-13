@@ -1,5 +1,5 @@
 //! Immediate-mode drawing layer: shapes and text are queued as vertices in
-//! logical pixels and drawn by [`gpu::UiGpu`] on top of the video.
+//! logical pixels and drawn on the GPU (by the platform) on top of the video.
 
 pub mod controls;
 pub mod input;

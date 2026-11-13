@@ -69,11 +69,6 @@ use crate::sources::{
 };
 use crate::stats_log;
 use crate::telemetry::{Rates, Telemetry};
-use crate::ui::controls::Controls;
-use crate::ui::input::Pointer;
-use crate::ui::stats::StatsPanel;
-use crate::ui::toast::{ToastHost, ToastKind};
-use crate::ui::{self, Ui};
 use dockview_domain::i18n::{self, Lang, LangModeExt};
 use dockview_domain::stats::Stats;
 use dockview_domain::theme::{Appearance, Theme, ThemeModeExt};
@@ -83,6 +78,11 @@ use dockview_domain::view::{
 use dockview_platform::render::{self, Filter, Renderer};
 use dockview_platform::ui_gpu::UiGpu;
 use dockview_platform::{clips, hotkey, perf};
+use dockview_ui::controls::Controls;
+use dockview_ui::input::Pointer;
+use dockview_ui::stats::StatsPanel;
+use dockview_ui::toast::{ToastHost, ToastKind};
+use dockview_ui::{self as ui, Ui};
 use helpers::{
     appearance_of, filter_for, mic_device_id, mic_index_of, next_index, next_preset,
     on_helper_thread, resolution_label, system_animations_enabled,

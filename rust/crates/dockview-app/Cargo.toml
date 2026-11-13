@@ -7,8 +7,8 @@ license.workspace = true
 [dependencies]
 dockview-domain = { path = "../dockview-domain" }
 dockview-platform = { path = "../dockview-platform" }
+dockview-ui = { path = "../dockview-ui" }
 winit.workspace = true
-cosmic-text = "0.19"
 png = "0.18"
 
 [target.'cfg(windows)'.dependencies]

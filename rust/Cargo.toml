@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/dockview-domain", "crates/dockview-platform", "crates/dockview-app"]
+members = ["crates/dockview-domain", "crates/dockview-platform", "crates/dockview-ui", "crates/dockview-app"]
 
 [workspace.package]
 version = "0.1.0"

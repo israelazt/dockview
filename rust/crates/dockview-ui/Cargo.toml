@@ -1,0 +1,11 @@
+[package]
+name = "dockview-ui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# The interface: it builds a frame of controls from a Model and returns Actions
+# and a draw list. No Windows, no Direct3D, no services. See rust/ARCHITECTURE.md.
+[dependencies]
+dockview-domain = { path = "../dockview-domain" }
+cosmic-text = "0.19"

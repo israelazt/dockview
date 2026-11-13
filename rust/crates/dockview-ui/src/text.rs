@@ -12,10 +12,10 @@ use cosmic_text::{
     Shaping, SwashCache, SwashContent, Weight as FontWeight,
 };
 
-const INTER_REGULAR: &[u8] = include_bytes!("../../assets/fonts/Inter-Regular.ttf");
-const INTER_MEDIUM: &[u8] = include_bytes!("../../assets/fonts/Inter-Medium.ttf");
-const INTER_SEMIBOLD: &[u8] = include_bytes!("../../assets/fonts/Inter-SemiBold.ttf");
-const LUCIDE: &[u8] = include_bytes!("../../assets/fonts/lucide.ttf");
+const INTER_REGULAR: &[u8] = include_bytes!("../assets/fonts/Inter-Regular.ttf");
+const INTER_MEDIUM: &[u8] = include_bytes!("../assets/fonts/Inter-Medium.ttf");
+const INTER_SEMIBOLD: &[u8] = include_bytes!("../assets/fonts/Inter-SemiBold.ttf");
+const LUCIDE: &[u8] = include_bytes!("../assets/fonts/lucide.ttf");
 
 const TEXT_FAMILY: &str = "Inter";
 const ICON_FAMILY: &str = "lucide";

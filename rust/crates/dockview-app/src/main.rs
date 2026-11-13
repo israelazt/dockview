@@ -15,8 +15,6 @@ mod replay_service;
 mod sources;
 mod stats_log;
 mod telemetry;
-#[allow(dead_code)] // some helpers are used by the upcoming live controls
-mod ui;
 
 fn main() {
     app::run();

@@ -327,9 +327,9 @@ dependencies = [
 name = "dockview"
 version = "0.1.0"
 dependencies = [
- "cosmic-text",
  "dockview-domain",
  "dockview-platform",
+ "dockview-ui",
  "png",
  "windows",
  "winit",
@@ -352,6 +352,14 @@ dependencies = [
  "serde_json",
  "wasapi",
  "windows",
+]
+
+[[package]]
+name = "dockview-ui"
+version = "0.1.0"
+dependencies = [
+ "cosmic-text",
+ "dockview-domain",
 ]
 
 [[package]]

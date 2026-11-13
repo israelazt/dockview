@@ -22,8 +22,8 @@ use dockview_platform::screen::{
 };
 
 use crate::cli::PipSpec;
-use crate::ui::toast::ToastKind;
 use dockview_domain::i18n;
+use dockview_ui::toast::ToastKind;
 
 use super::{App, SourceKind};
 use crate::sources::{find_window, Reconnect};
