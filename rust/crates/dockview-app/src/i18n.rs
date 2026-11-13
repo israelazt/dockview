@@ -47,152 +47,179 @@ impl Lang {
     }
 }
 
-/// Every translatable string.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Key {
-    Live,
-    Connecting,
-    Disconnected,
-    NoDevice,
-    Volume,
-    Sync,
-    Settings,
-    Fullscreen,
-    Video,
-    Audio,
-    ImageQuality,
-    PresetPerformance,
-    PresetBalanced,
-    PresetHigh,
-    Theme,
-    Language,
-    Auto,
-    Dark,
-    Light,
-    English,
-    Spanish,
-    Statistics,
-    Performance,
-    Display,
-    Diagnosis,
-    DeviceMode,
-    Received,
-    Shown,
-    Dropped,
-    AppLatency,
-    Cpu,
-    GpuPerFrame,
-    Memory,
-    AudioBuffer,
-    Monitor,
-    WindowSize,
-    Bandwidth,
-    Measuring,
-    FindHealthy,
-    FindNoVideo,
-    FindVideoLost,
-    FindNeedsUsb3,
-    FindCaptureLow,
-    FindDropping,
-    FindHighCpu,
-    FindSlowGpu,
-    FindAudioLost,
-    VideoMode,
-    ModeCompressed,
-    FindSwitched,
-    InstantReplay,
-    ReplayOff,
-    ReplayRecording,
-    ReplayStarting,
-    ReplayUnavailable,
-    ReplayKeep,
-    ReplayHint,
-    ReplayMemory,
-    ReplayMemoryLimit,
-    Microphone,
-    MicDefault,
-    MicHint,
-    MicUnavailable,
-    ToastMicOn,
-    ToastMicOff,
-    ToastRecStarted,
-    ToastRecSaved,
-    ToastRecFailed,
-    ToastStopRecordingFirst,
-    ToastRecDiskFull,
-    ToastRecNewPart,
-    ToastRecNoSignal,
-    ToastLowDisk,
-    ToastRecNoSpace,
-    RecordingQuality,
-    QualityNormal,
-    QualityHigh,
-    QualityHint,
-    ChangeFolder,
-    ToastFolderNotWritable,
-    ToastQualityChanged,
-    SourceCapture,
-    SourceScreen,
-    SourceApp,
-    SourceScreenWord,
-    SourcePrimary,
-    ToastSourceLost,
-    ToastSourceFailed,
-    ToastPipLost,
-    ToastSceneMissing,
-    ScenesSection,
-    ScenePlain,
-    SceneNew,
-    SceneLayers,
-    SceneAddSource,
-    SceneAddTitle,
-    SceneBaseTag,
-    SceneDefaultName,
-    TipScenes,
-    TipScenePlain,
-    TipSceneRow,
-    TipSceneDelete,
-    TipSceneNew,
-    TipLayerHide,
-    TipLayerShow,
-    TipLayerRemove,
-    TipSceneAdd,
-    TipSceneBack,
-    TipSources,
-    TipReplay,
-    TipSave,
-    TipSaveOff,
-    TipRecord,
-    TipRecordStop,
-    TipRecordCancel,
-    TipSettings,
-    TipFullscreen,
-    TipExitFullscreen,
-    TipVolume,
-    TipSyncEarlier,
-    TipSyncLater,
-    TipReplayToggle,
-    TipReplayShorter,
-    TipReplayLonger,
-    TipMicToggle,
-    TipFolderOpen,
-    TipFolderChange,
-    TipQualityNormal,
-    TipQualityHigh,
-    TipVideoAuto,
-    TipVideoCompressed,
-    TipStats,
-    TipPresetPerformance,
-    TipPresetBalanced,
-    TipPresetQuality,
-    SaveClip,
-    OpenFolder,
-    ToastClipSaved,
-    ToastClipFailed,
-    ToastTurnOnFirst,
-    ToastReplayOn,
-    ToastReplayOff,
-    ToastSaving,
+/// Declares every translatable string once, with both texts, and builds from
+/// that the [`Key`] enum, [`ALL_KEYS`] and the two lookups. A key cannot exist
+/// without both translations, and the list cannot fall out of step with the
+/// enum, because there is nothing to keep in step.
+macro_rules! strings {
+    ($($key:ident => $en:literal, $es:literal;)*) => {
+        /// Every translatable string.
+        #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+        pub enum Key {
+            $($key),*
+        }
+
+        /// All keys, for completeness tests.
+        pub const ALL_KEYS: [Key; [$(Key::$key),*].len()] = [$(Key::$key),*];
+
+        fn en(key: Key) -> &'static str {
+            match key {
+                $(Key::$key => $en),*
+            }
+        }
+
+        fn es(key: Key) -> &'static str {
+            match key {
+                $(Key::$key => $es),*
+            }
+        }
+    };
+}
+
+strings! {
+    Live => "Live", "En vivo";
+    Connecting => "Connecting…", "Conectando…";
+    Disconnected => "Disconnected", "Desconectado";
+    NoDevice => "No device", "Sin dispositivo";
+    Volume => "Volume", "Volumen";
+    Sync => "Sync", "Sincronía";
+    Settings => "Settings", "Ajustes";
+    Fullscreen => "Full screen", "Pantalla completa";
+    Video => "Video", "Video";
+    Audio => "Audio", "Audio";
+    ImageQuality => "Image quality", "Calidad de imagen";
+    PresetPerformance => "Performance", "Rendimiento";
+    PresetBalanced => "Balanced", "Equilibrado";
+    PresetHigh => "High", "Alta";
+    Theme => "Theme", "Tema";
+    Language => "Language", "Idioma";
+    Auto => "Auto", "Automático";
+    Dark => "Dark", "Oscuro";
+    Light => "Light", "Claro";
+    English => "English", "English";
+    Spanish => "Español", "Español";
+    Statistics => "Statistics", "Estadísticas";
+    Performance => "Performance", "Rendimiento";
+    Display => "Display", "Pantalla";
+    Diagnosis => "Diagnosis", "Diagnóstico";
+    DeviceMode => "Device mode", "Modo del dispositivo";
+    Received => "Frames received", "Frames recibidos";
+    Shown => "Frames shown", "Frames mostrados";
+    Dropped => "Frames skipped", "Frames saltados";
+    AppLatency => "App latency", "Latencia de la app";
+    Cpu => "CPU (this app)", "CPU (esta app)";
+    GpuPerFrame => "GPU per frame", "GPU por frame";
+    Memory => "Memory", "Memoria";
+    AudioBuffer => "Audio buffer", "Búfer de audio";
+    Monitor => "Monitor", "Monitor";
+    WindowSize => "Window", "Ventana";
+    Bandwidth => "Mode data rate", "Datos del modo";
+    Measuring => "Measuring…", "Midiendo…";
+    FindHealthy => "Everything looks good.", "Todo parece estar bien.";
+    FindNoVideo => "No video device found. Check the cable and the capture card.", "No se encontró ningún dispositivo de video. Revisa el cable y la capturadora.";
+    FindVideoLost => "The capture card stopped responding. Trying to reconnect…", "La capturadora dejó de responder. Intentando reconectar…";
+    FindNeedsUsb3 => "This mode needs a fast USB 3 port. Try a USB 3 port without a hub, or a lower mode.", "Este modo necesita un puerto USB 3 rápido. Prueba un puerto USB 3 sin hub, o un modo menor.";
+    FindCaptureLow => "The device sends fewer frames than its mode promises. Low light (webcams), a busy USB port or the source itself can cause this.", "El dispositivo envía menos frames de los que anuncia. La poca luz (en webcams), un puerto USB saturado o la propia fuente pueden causarlo.";
+    FindDropping => "Some frames are being skipped. Try the Performance image quality.", "Se están saltando frames. Prueba la calidad de imagen «Rendimiento».";
+    FindHighCpu => "The app is using a lot of CPU. Close other heavy programs.", "La app usa mucha CPU. Cierra otros programas pesados.";
+    FindSlowGpu => "Drawing takes a big part of each frame. Try the Performance image quality.", "Dibujar ocupa gran parte de cada frame. Prueba la calidad de imagen «Rendimiento».";
+    FindAudioLost => "The audio device was lost. Choose it again in Settings.", "Se perdió el dispositivo de audio. Vuelve a elegirlo en Ajustes.";
+    VideoMode => "Video mode", "Modo de video";
+    ModeCompressed => "Compressed", "Comprimido";
+    FindSwitched => "Switched to a compressed video mode because the USB port could not carry the uncompressed one. Use a USB 3 port and choose Auto in Settings to try again.", "Se cambió a un modo de video comprimido porque el puerto USB no podía con el modo sin comprimir. Usa un puerto USB 3 y elige «Automático» en Ajustes para volver a probar.";
+    InstantReplay => "Instant replay", "Repetición instantánea";
+    ReplayOff => "Off — turn it on to keep the last moments.", "Apagada: actívala para guardar los últimos momentos.";
+    ReplayRecording => "Recording", "Grabando";
+    ReplayStarting => "Starting…", "Iniciando…";
+    ReplayUnavailable => "Not available on this PC.", "No disponible en este PC.";
+    ReplayKeep => "Keep the last", "Guardar los últimos";
+    ReplayHint => "A clip has at least this much. Hotkey: {hotkey}", "Un clip tiene al menos este tiempo. Atajo: {hotkey}";
+    ReplayMemory => "Uses about {size} of memory.", "Usa unos {size} de memoria.";
+    ReplayMemoryLimit => "Uses about {size} of memory. This is the longest this PC's memory allows.", "Usa unos {size} de memoria. Es lo más largo que permite la memoria de este PC.";
+    Microphone => "Microphone", "Micrófono";
+    MicDefault => "Automatic", "Automático";
+    MicHint => "Off. Saved as its own track.", "Apagado. Se guarda como pista propia.";
+    MicUnavailable => "Microphone not available", "Micrófono no disponible";
+    ToastMicOn => "Microphone is on", "Micrófono activado";
+    ToastMicOff => "Microphone is off", "Micrófono apagado";
+    ToastRecStarted => "Recording started", "Grabación iniciada";
+    ToastRecSaved => "Recording saved", "Grabación guardada";
+    ToastRecFailed => "Could not record", "No se pudo grabar";
+    ToastStopRecordingFirst => "Stop the recording first", "Detén primero la grabación";
+    ToastRecDiskFull => "Recording stopped: the disk is almost full", "Grabación detenida: el disco está casi lleno";
+    ToastRecNewPart => "The picture changed size: recording continues in a new file", "La imagen cambió de tamaño: la grabación sigue en un archivo nuevo";
+    ToastRecNoSignal => "There is no video signal to record", "No hay señal de video para grabar";
+    ToastLowDisk => "Low disk space: the recording will stop if it fills up", "Poco espacio en disco: la grabación se detendrá si se llena";
+    ToastRecNoSpace => "Not enough free disk space to record", "No hay espacio suficiente en el disco para grabar";
+    RecordingQuality => "Recording quality", "Calidad de grabación";
+    QualityNormal => "Normal", "Normal";
+    QualityHigh => "High", "Alta";
+    QualityHint => "A recording takes about {size} per hour.", "Una grabación ocupa unos {size} por hora.";
+    ChangeFolder => "Change…", "Cambiar…";
+    ToastFolderNotWritable => "Cannot save to that folder", "No se puede guardar en esa carpeta";
+    ToastQualityChanged => "Quality changed: the replay buffer starts over", "Calidad cambiada: el búfer del replay empieza de nuevo";
+    SourceCapture => "Capture card", "Capturadora";
+    SourceScreen => "Screen", "Pantalla";
+    SourceApp => "Application window", "Ventana de aplicación";
+    SourceScreenWord => "Screen", "Pantalla";
+    SourcePrimary => "primary", "principal";
+    ToastSourceLost => "The captured window closed: back to the capture card", "La ventana capturada se cerró: de vuelta a la capturadora";
+    ToastSourceFailed => "That window cannot be captured: back to the capture card", "No se puede capturar esa ventana: de vuelta a la capturadora";
+    ToastPipLost => "The corner source stopped and was taken off the picture", "La fuente de la esquina se detuvo y se quitó de la imagen";
+    ToastSceneMissing => "Part of the scene is not available right now", "Una parte de la escena no está disponible ahora";
+    ScenesSection => "Scenes", "Escenas";
+    ScenePlain => "Single source", "Fuente simple";
+    SceneNew => "New scene", "Nueva escena";
+    SceneLayers => "Layers", "Capas";
+    SceneAddSource => "Add a source", "Añadir una fuente";
+    SceneAddTitle => "Add to the scene", "Añadir a la escena";
+    SceneBaseTag => "base", "base";
+    SceneDefaultName => "Scene {n}", "Escena {n}";
+    TipScenes => "Scenes: arrange several sources in one picture", "Escenas: combina varias fuentes en una sola imagen";
+    TipScenePlain => "Show just the selected source", "Mostrar solo la fuente elegida";
+    TipSceneRow => "Switch to this scene", "Cambiar a esta escena";
+    TipSceneDelete => "Delete this scene", "Borrar esta escena";
+    TipSceneNew => "Make a scene from the current source", "Crear una escena con la fuente actual";
+    TipLayerHide => "Hide this layer", "Ocultar esta capa";
+    TipLayerShow => "Show this layer", "Mostrar esta capa";
+    TipLayerRemove => "Remove this layer from the scene", "Quitar esta capa de la escena";
+    TipSceneAdd => "Add another source on top", "Añadir otra fuente encima";
+    TipSceneBack => "Back to the scenes", "Volver a las escenas";
+    TipSources => "Choose what to capture: a capture card, a screen or an application", "Elegir qué capturar: una capturadora, una pantalla o una aplicación";
+    TipReplay => "Instant replay options", "Opciones de la repetición instantánea";
+    TipSave => "Save the last {seconds} as a clip ({hotkey})", "Guardar los últimos {seconds} como clip ({hotkey})";
+    TipSaveOff => "Instant replay is off: turn it on to save clips", "La repetición instantánea está apagada: actívala para guardar clips";
+    TipRecord => "Start recording ({hotkey})", "Empezar a grabar ({hotkey})";
+    TipRecordStop => "Stop recording ({hotkey})", "Detener la grabación ({hotkey})";
+    TipRecordCancel => "Cancel: still waiting to start ({hotkey})", "Cancelar: aún esperando para empezar ({hotkey})";
+    TipSettings => "Settings: devices, image and language", "Ajustes: dispositivos, imagen e idioma";
+    TipFullscreen => "Fullscreen (F)", "Pantalla completa (F)";
+    TipExitFullscreen => "Leave fullscreen (Esc)", "Salir de pantalla completa (Esc)";
+    TipVolume => "Volume (↑ ↓ or the mouse wheel)", "Volumen (↑ ↓ o la rueda del ratón)";
+    TipSyncEarlier => "Play the sound a little earlier (←)", "Adelantar un poco el sonido (←)";
+    TipSyncLater => "Delay the sound a little (→)", "Retrasar un poco el sonido (→)";
+    TipReplayToggle => "Turn the instant replay on or off", "Encender o apagar la repetición instantánea";
+    TipReplayShorter => "Keep less time: shorter clips and less memory", "Guardar menos tiempo: clips más cortos y menos memoria";
+    TipReplayLonger => "Keep more time: longer clips and more memory", "Guardar más tiempo: clips más largos y más memoria";
+    TipMicToggle => "Turn the microphone on or off. It is saved as its own track", "Encender o apagar el micrófono. Se guarda como pista propia";
+    TipFolderOpen => "Show the last saved file, or open the folder", "Mostrar el último archivo guardado, o abrir la carpeta";
+    TipFolderChange => "Choose another folder for clips and recordings", "Elegir otra carpeta para clips y grabaciones";
+    TipQualityNormal => "Smaller files, still good for sharing", "Archivos más pequeños, buenos para compartir";
+    TipQualityHigh => "The best picture, with big files", "La mejor imagen, con archivos grandes";
+    TipVideoAuto => "Best quality; switches to a lighter mode by itself if the USB port is slow", "La mejor calidad; cambia solo a un modo más ligero si el puerto USB es lento";
+    TipVideoCompressed => "Always use the lighter compressed mode", "Usar siempre el modo comprimido, más ligero";
+    TipStats => "Show statistics and a plain-language diagnosis (I)", "Mostrar estadísticas y un diagnóstico en lenguaje sencillo (I)";
+    TipPresetPerformance => "Fastest drawing, lowest use of the PC", "El dibujo más rápido, con el menor uso del PC";
+    TipPresetBalanced => "A good balance of speed and sharpness", "Un buen equilibrio entre velocidad y nitidez";
+    TipPresetQuality => "The sharpest image, using more of the graphics card", "La imagen más nítida, usando más la tarjeta gráfica";
+    SaveClip => "Save clip", "Guardar clip";
+    OpenFolder => "Open folder", "Abrir carpeta";
+    ToastClipSaved => "Clip saved", "Clip guardado";
+    ToastClipFailed => "Could not save the clip", "No se pudo guardar el clip";
+    ToastTurnOnFirst => "Turn on instant replay first", "Activa primero la repetición instantánea";
+    ToastReplayOn => "Instant replay is on", "Repetición instantánea activada";
+    ToastReplayOff => "Instant replay is off", "Repetición instantánea desactivada";
+    ToastSaving => "Saving clip…", "Guardando clip…";
 }
 
 /// A length of time as people say it: `45 s`, `2 min`, `1 min 30 s`.
@@ -214,455 +241,11 @@ pub fn size_label(bytes: u64) -> String {
     }
 }
 
-/// All keys, for completeness tests.
-pub const ALL_KEYS: [Key; 143] = [
-    Key::Live,
-    Key::Connecting,
-    Key::Disconnected,
-    Key::NoDevice,
-    Key::Volume,
-    Key::Sync,
-    Key::Settings,
-    Key::Fullscreen,
-    Key::Video,
-    Key::Audio,
-    Key::ImageQuality,
-    Key::PresetPerformance,
-    Key::PresetBalanced,
-    Key::PresetHigh,
-    Key::Theme,
-    Key::Language,
-    Key::Auto,
-    Key::Dark,
-    Key::Light,
-    Key::English,
-    Key::Spanish,
-    Key::Statistics,
-    Key::Performance,
-    Key::Display,
-    Key::Diagnosis,
-    Key::DeviceMode,
-    Key::Received,
-    Key::Shown,
-    Key::Dropped,
-    Key::AppLatency,
-    Key::Cpu,
-    Key::GpuPerFrame,
-    Key::Memory,
-    Key::AudioBuffer,
-    Key::Monitor,
-    Key::WindowSize,
-    Key::Bandwidth,
-    Key::Measuring,
-    Key::FindHealthy,
-    Key::FindNoVideo,
-    Key::FindVideoLost,
-    Key::FindNeedsUsb3,
-    Key::FindCaptureLow,
-    Key::FindDropping,
-    Key::FindHighCpu,
-    Key::FindSlowGpu,
-    Key::FindAudioLost,
-    Key::VideoMode,
-    Key::ModeCompressed,
-    Key::FindSwitched,
-    Key::InstantReplay,
-    Key::ReplayOff,
-    Key::ReplayRecording,
-    Key::ReplayStarting,
-    Key::ReplayUnavailable,
-    Key::ReplayKeep,
-    Key::ReplayHint,
-    Key::ReplayMemory,
-    Key::ReplayMemoryLimit,
-    Key::Microphone,
-    Key::MicDefault,
-    Key::MicHint,
-    Key::MicUnavailable,
-    Key::ToastMicOn,
-    Key::ToastMicOff,
-    Key::ToastRecStarted,
-    Key::ToastRecSaved,
-    Key::ToastRecFailed,
-    Key::ToastStopRecordingFirst,
-    Key::ToastRecDiskFull,
-    Key::ToastRecNewPart,
-    Key::ToastRecNoSignal,
-    Key::ToastLowDisk,
-    Key::ToastRecNoSpace,
-    Key::RecordingQuality,
-    Key::QualityNormal,
-    Key::QualityHigh,
-    Key::QualityHint,
-    Key::ChangeFolder,
-    Key::ToastFolderNotWritable,
-    Key::ToastQualityChanged,
-    Key::SourceCapture,
-    Key::SourceScreen,
-    Key::SourceApp,
-    Key::SourceScreenWord,
-    Key::SourcePrimary,
-    Key::ToastSourceLost,
-    Key::ToastSourceFailed,
-    Key::ToastPipLost,
-    Key::ToastSceneMissing,
-    Key::ScenesSection,
-    Key::ScenePlain,
-    Key::SceneNew,
-    Key::SceneLayers,
-    Key::SceneAddSource,
-    Key::SceneAddTitle,
-    Key::SceneBaseTag,
-    Key::SceneDefaultName,
-    Key::TipScenes,
-    Key::TipScenePlain,
-    Key::TipSceneRow,
-    Key::TipSceneDelete,
-    Key::TipSceneNew,
-    Key::TipLayerHide,
-    Key::TipLayerShow,
-    Key::TipLayerRemove,
-    Key::TipSceneAdd,
-    Key::TipSceneBack,
-    Key::TipSources,
-    Key::TipReplay,
-    Key::TipSave,
-    Key::TipSaveOff,
-    Key::TipRecord,
-    Key::TipRecordStop,
-    Key::TipRecordCancel,
-    Key::TipSettings,
-    Key::TipFullscreen,
-    Key::TipExitFullscreen,
-    Key::TipVolume,
-    Key::TipSyncEarlier,
-    Key::TipSyncLater,
-    Key::TipReplayToggle,
-    Key::TipReplayShorter,
-    Key::TipReplayLonger,
-    Key::TipMicToggle,
-    Key::TipFolderOpen,
-    Key::TipFolderChange,
-    Key::TipQualityNormal,
-    Key::TipQualityHigh,
-    Key::TipVideoAuto,
-    Key::TipVideoCompressed,
-    Key::TipStats,
-    Key::TipPresetPerformance,
-    Key::TipPresetBalanced,
-    Key::TipPresetQuality,
-    Key::SaveClip,
-    Key::OpenFolder,
-    Key::ToastClipSaved,
-    Key::ToastClipFailed,
-    Key::ToastTurnOnFirst,
-    Key::ToastReplayOn,
-    Key::ToastReplayOff,
-    Key::ToastSaving,
-];
-
-/// Looks up `key` in `lang`. The matches have no wildcard arm, so adding a
-/// [`Key`] without translating it in both languages does not compile.
+/// Looks up `key` in `lang`.
 pub fn tr(lang: Lang, key: Key) -> &'static str {
     match lang {
         Lang::En => en(key),
         Lang::Es => es(key),
-    }
-}
-
-fn en(key: Key) -> &'static str {
-    match key {
-        Key::Live => "Live",
-        Key::Connecting => "Connecting…",
-        Key::Disconnected => "Disconnected",
-        Key::NoDevice => "No device",
-        Key::Volume => "Volume",
-        Key::Sync => "Sync",
-        Key::Settings => "Settings",
-        Key::Fullscreen => "Full screen",
-        Key::Video => "Video",
-        Key::Audio => "Audio",
-        Key::ImageQuality => "Image quality",
-        Key::PresetPerformance => "Performance",
-        Key::PresetBalanced => "Balanced",
-        Key::PresetHigh => "High",
-        Key::Theme => "Theme",
-        Key::Language => "Language",
-        Key::Auto => "Auto",
-        Key::Dark => "Dark",
-        Key::Light => "Light",
-        Key::English => "English",
-        Key::Spanish => "Español",
-        Key::Statistics => "Statistics",
-        Key::Performance => "Performance",
-        Key::Display => "Display",
-        Key::Diagnosis => "Diagnosis",
-        Key::DeviceMode => "Device mode",
-        Key::Received => "Frames received",
-        Key::Shown => "Frames shown",
-        Key::Dropped => "Frames skipped",
-        Key::AppLatency => "App latency",
-        Key::Cpu => "CPU (this app)",
-        Key::GpuPerFrame => "GPU per frame",
-        Key::Memory => "Memory",
-        Key::AudioBuffer => "Audio buffer",
-        Key::Monitor => "Monitor",
-        Key::WindowSize => "Window",
-        Key::Bandwidth => "Mode data rate",
-        Key::Measuring => "Measuring…",
-        Key::FindHealthy => "Everything looks good.",
-        Key::FindNoVideo => "No video device found. Check the cable and the capture card.",
-        Key::FindVideoLost => "The capture card stopped responding. Trying to reconnect…",
-        Key::FindNeedsUsb3 => "This mode needs a fast USB 3 port. Try a USB 3 port without a hub, or a lower mode.",
-        Key::FindCaptureLow => "The device sends fewer frames than its mode promises. Low light (webcams), a busy USB port or the source itself can cause this.",
-        Key::FindDropping => "Some frames are being skipped. Try the Performance image quality.",
-        Key::FindHighCpu => "The app is using a lot of CPU. Close other heavy programs.",
-        Key::FindSlowGpu => "Drawing takes a big part of each frame. Try the Performance image quality.",
-        Key::FindAudioLost => "The audio device was lost. Choose it again in Settings.",
-        Key::VideoMode => "Video mode",
-        Key::ModeCompressed => "Compressed",
-        Key::FindSwitched => "Switched to a compressed video mode because the USB port could not carry the uncompressed one. Use a USB 3 port and choose Auto in Settings to try again.",
-        Key::InstantReplay => "Instant replay",
-        Key::ReplayOff => "Off — turn it on to keep the last moments.",
-        Key::ReplayRecording => "Recording",
-        Key::ReplayStarting => "Starting…",
-        Key::ReplayUnavailable => "Not available on this PC.",
-        Key::ReplayKeep => "Keep the last",
-        Key::ReplayHint => "A clip has at least this much. Hotkey: {hotkey}",
-        Key::ReplayMemory => "Uses about {size} of memory.",
-        Key::ReplayMemoryLimit => "Uses about {size} of memory. This is the longest this PC's memory allows.",
-        Key::Microphone => "Microphone",
-        Key::MicDefault => "Automatic",
-        Key::MicHint => "Off. Saved as its own track.",
-        Key::MicUnavailable => "Microphone not available",
-        Key::ToastMicOn => "Microphone is on",
-        Key::ToastMicOff => "Microphone is off",
-        Key::ToastRecStarted => "Recording started",
-        Key::ToastRecSaved => "Recording saved",
-        Key::ToastRecFailed => "Could not record",
-        Key::ToastStopRecordingFirst => "Stop the recording first",
-        Key::ToastRecDiskFull => "Recording stopped: the disk is almost full",
-        Key::ToastRecNewPart => "The picture changed size: recording continues in a new file",
-        Key::ToastRecNoSignal => "There is no video signal to record",
-        Key::ToastLowDisk => "Low disk space: the recording will stop if it fills up",
-        Key::ToastRecNoSpace => "Not enough free disk space to record",
-        Key::RecordingQuality => "Recording quality",
-        Key::QualityNormal => "Normal",
-        Key::QualityHigh => "High",
-        Key::QualityHint => "A recording takes about {size} per hour.",
-        Key::ChangeFolder => "Change…",
-        Key::ToastFolderNotWritable => "Cannot save to that folder",
-        Key::ToastQualityChanged => "Quality changed: the replay buffer starts over",
-        Key::SourceCapture => "Capture card",
-        Key::SourceScreen => "Screen",
-        Key::SourceApp => "Application window",
-        Key::SourceScreenWord => "Screen",
-        Key::SourcePrimary => "primary",
-        Key::ToastSourceLost => "The captured window closed: back to the capture card",
-        Key::ToastSourceFailed => "That window cannot be captured: back to the capture card",
-        Key::ToastPipLost => "The corner source stopped and was taken off the picture",
-        Key::ToastSceneMissing => "Part of the scene is not available right now",
-        Key::ScenesSection => "Scenes",
-        Key::ScenePlain => "Single source",
-        Key::SceneNew => "New scene",
-        Key::SceneLayers => "Layers",
-        Key::SceneAddSource => "Add a source",
-        Key::SceneAddTitle => "Add to the scene",
-        Key::SceneBaseTag => "base",
-        Key::SceneDefaultName => "Scene {n}",
-        Key::TipScenes => "Scenes: arrange several sources in one picture",
-        Key::TipScenePlain => "Show just the selected source",
-        Key::TipSceneRow => "Switch to this scene",
-        Key::TipSceneDelete => "Delete this scene",
-        Key::TipSceneNew => "Make a scene from the current source",
-        Key::TipLayerHide => "Hide this layer",
-        Key::TipLayerShow => "Show this layer",
-        Key::TipLayerRemove => "Remove this layer from the scene",
-        Key::TipSceneAdd => "Add another source on top",
-        Key::TipSceneBack => "Back to the scenes",
-        Key::TipSources => "Choose what to capture: a capture card, a screen or an application",
-        Key::TipReplay => "Instant replay options",
-        Key::TipSave => "Save the last {seconds} as a clip ({hotkey})",
-        Key::TipSaveOff => "Instant replay is off: turn it on to save clips",
-        Key::TipRecord => "Start recording ({hotkey})",
-        Key::TipRecordStop => "Stop recording ({hotkey})",
-        Key::TipRecordCancel => "Cancel: still waiting to start ({hotkey})",
-        Key::TipSettings => "Settings: devices, image and language",
-        Key::TipFullscreen => "Fullscreen (F)",
-        Key::TipExitFullscreen => "Leave fullscreen (Esc)",
-        Key::TipVolume => "Volume (↑ ↓ or the mouse wheel)",
-        Key::TipSyncEarlier => "Play the sound a little earlier (←)",
-        Key::TipSyncLater => "Delay the sound a little (→)",
-        Key::TipReplayToggle => "Turn the instant replay on or off",
-        Key::TipReplayShorter => "Keep less time: shorter clips and less memory",
-        Key::TipReplayLonger => "Keep more time: longer clips and more memory",
-        Key::TipMicToggle => "Turn the microphone on or off. It is saved as its own track",
-        Key::TipFolderOpen => "Show the last saved file, or open the folder",
-        Key::TipFolderChange => "Choose another folder for clips and recordings",
-        Key::TipQualityNormal => "Smaller files, still good for sharing",
-        Key::TipQualityHigh => "The best picture, with big files",
-        Key::TipVideoAuto => "Best quality; switches to a lighter mode by itself if the USB port is slow",
-        Key::TipVideoCompressed => "Always use the lighter compressed mode",
-        Key::TipStats => "Show statistics and a plain-language diagnosis (I)",
-        Key::TipPresetPerformance => "Fastest drawing, lowest use of the PC",
-        Key::TipPresetBalanced => "A good balance of speed and sharpness",
-        Key::TipPresetQuality => "The sharpest image, using more of the graphics card",
-        Key::SaveClip => "Save clip",
-        Key::OpenFolder => "Open folder",
-        Key::ToastClipSaved => "Clip saved",
-        Key::ToastClipFailed => "Could not save the clip",
-        Key::ToastTurnOnFirst => "Turn on instant replay first",
-        Key::ToastReplayOn => "Instant replay is on",
-        Key::ToastReplayOff => "Instant replay is off",
-        Key::ToastSaving => "Saving clip…",
-    }
-}
-
-fn es(key: Key) -> &'static str {
-    match key {
-        Key::Live => "En vivo",
-        Key::Connecting => "Conectando…",
-        Key::Disconnected => "Desconectado",
-        Key::NoDevice => "Sin dispositivo",
-        Key::Volume => "Volumen",
-        Key::Sync => "Sincronía",
-        Key::Settings => "Ajustes",
-        Key::Fullscreen => "Pantalla completa",
-        Key::Video => "Video",
-        Key::Audio => "Audio",
-        Key::ImageQuality => "Calidad de imagen",
-        Key::PresetPerformance => "Rendimiento",
-        Key::PresetBalanced => "Equilibrado",
-        Key::PresetHigh => "Alta",
-        Key::Theme => "Tema",
-        Key::Language => "Idioma",
-        Key::Auto => "Automático",
-        Key::Dark => "Oscuro",
-        Key::Light => "Claro",
-        Key::English => "English",
-        Key::Spanish => "Español",
-        Key::Statistics => "Estadísticas",
-        Key::Performance => "Rendimiento",
-        Key::Display => "Pantalla",
-        Key::Diagnosis => "Diagnóstico",
-        Key::DeviceMode => "Modo del dispositivo",
-        Key::Received => "Frames recibidos",
-        Key::Shown => "Frames mostrados",
-        Key::Dropped => "Frames saltados",
-        Key::AppLatency => "Latencia de la app",
-        Key::Cpu => "CPU (esta app)",
-        Key::GpuPerFrame => "GPU por frame",
-        Key::Memory => "Memoria",
-        Key::AudioBuffer => "Búfer de audio",
-        Key::Monitor => "Monitor",
-        Key::WindowSize => "Ventana",
-        Key::Bandwidth => "Datos del modo",
-        Key::Measuring => "Midiendo…",
-        Key::FindHealthy => "Todo parece estar bien.",
-        Key::FindNoVideo => "No se encontró ningún dispositivo de video. Revisa el cable y la capturadora.",
-        Key::FindVideoLost => "La capturadora dejó de responder. Intentando reconectar…",
-        Key::FindNeedsUsb3 => "Este modo necesita un puerto USB 3 rápido. Prueba un puerto USB 3 sin hub, o un modo menor.",
-        Key::FindCaptureLow => "El dispositivo envía menos frames de los que anuncia. La poca luz (en webcams), un puerto USB saturado o la propia fuente pueden causarlo.",
-        Key::FindDropping => "Se están saltando frames. Prueba la calidad de imagen «Rendimiento».",
-        Key::FindHighCpu => "La app usa mucha CPU. Cierra otros programas pesados.",
-        Key::FindSlowGpu => "Dibujar ocupa gran parte de cada frame. Prueba la calidad de imagen «Rendimiento».",
-        Key::FindAudioLost => "Se perdió el dispositivo de audio. Vuelve a elegirlo en Ajustes.",
-        Key::VideoMode => "Modo de video",
-        Key::ModeCompressed => "Comprimido",
-        Key::FindSwitched => "Se cambió a un modo de video comprimido porque el puerto USB no podía con el modo sin comprimir. Usa un puerto USB 3 y elige «Automático» en Ajustes para volver a probar.",
-        Key::InstantReplay => "Repetición instantánea",
-        Key::ReplayOff => "Apagada: actívala para guardar los últimos momentos.",
-        Key::ReplayRecording => "Grabando",
-        Key::ReplayStarting => "Iniciando…",
-        Key::ReplayUnavailable => "No disponible en este PC.",
-        Key::ReplayKeep => "Guardar los últimos",
-        Key::ReplayHint => "Un clip tiene al menos este tiempo. Atajo: {hotkey}",
-        Key::ReplayMemory => "Usa unos {size} de memoria.",
-        Key::ReplayMemoryLimit => "Usa unos {size} de memoria. Es lo más largo que permite la memoria de este PC.",
-        Key::Microphone => "Micrófono",
-        Key::MicDefault => "Automático",
-        Key::MicHint => "Apagado. Se guarda como pista propia.",
-        Key::MicUnavailable => "Micrófono no disponible",
-        Key::ToastMicOn => "Micrófono activado",
-        Key::ToastMicOff => "Micrófono apagado",
-        Key::ToastRecStarted => "Grabación iniciada",
-        Key::ToastRecSaved => "Grabación guardada",
-        Key::ToastRecFailed => "No se pudo grabar",
-        Key::ToastStopRecordingFirst => "Detén primero la grabación",
-        Key::ToastRecDiskFull => "Grabación detenida: el disco está casi lleno",
-        Key::ToastRecNewPart => "La imagen cambió de tamaño: la grabación sigue en un archivo nuevo",
-        Key::ToastRecNoSignal => "No hay señal de video para grabar",
-        Key::ToastLowDisk => "Poco espacio en disco: la grabación se detendrá si se llena",
-        Key::ToastRecNoSpace => "No hay espacio suficiente en el disco para grabar",
-        Key::RecordingQuality => "Calidad de grabación",
-        Key::QualityNormal => "Normal",
-        Key::QualityHigh => "Alta",
-        Key::QualityHint => "Una grabación ocupa unos {size} por hora.",
-        Key::ChangeFolder => "Cambiar…",
-        Key::ToastFolderNotWritable => "No se puede guardar en esa carpeta",
-        Key::ToastQualityChanged => "Calidad cambiada: el búfer del replay empieza de nuevo",
-        Key::SourceCapture => "Capturadora",
-        Key::SourceScreen => "Pantalla",
-        Key::SourceApp => "Ventana de aplicación",
-        Key::SourceScreenWord => "Pantalla",
-        Key::SourcePrimary => "principal",
-        Key::ToastSourceLost => "La ventana capturada se cerró: de vuelta a la capturadora",
-        Key::ToastSourceFailed => "No se puede capturar esa ventana: de vuelta a la capturadora",
-        Key::ToastPipLost => "La fuente de la esquina se detuvo y se quitó de la imagen",
-        Key::ToastSceneMissing => "Una parte de la escena no está disponible ahora",
-        Key::ScenesSection => "Escenas",
-        Key::ScenePlain => "Fuente simple",
-        Key::SceneNew => "Nueva escena",
-        Key::SceneLayers => "Capas",
-        Key::SceneAddSource => "Añadir una fuente",
-        Key::SceneAddTitle => "Añadir a la escena",
-        Key::SceneBaseTag => "base",
-        Key::SceneDefaultName => "Escena {n}",
-        Key::TipScenes => "Escenas: combina varias fuentes en una sola imagen",
-        Key::TipScenePlain => "Mostrar solo la fuente elegida",
-        Key::TipSceneRow => "Cambiar a esta escena",
-        Key::TipSceneDelete => "Borrar esta escena",
-        Key::TipSceneNew => "Crear una escena con la fuente actual",
-        Key::TipLayerHide => "Ocultar esta capa",
-        Key::TipLayerShow => "Mostrar esta capa",
-        Key::TipLayerRemove => "Quitar esta capa de la escena",
-        Key::TipSceneAdd => "Añadir otra fuente encima",
-        Key::TipSceneBack => "Volver a las escenas",
-        Key::TipSources => "Elegir qué capturar: una capturadora, una pantalla o una aplicación",
-        Key::TipReplay => "Opciones de la repetición instantánea",
-        Key::TipSave => "Guardar los últimos {seconds} como clip ({hotkey})",
-        Key::TipSaveOff => "La repetición instantánea está apagada: actívala para guardar clips",
-        Key::TipRecord => "Empezar a grabar ({hotkey})",
-        Key::TipRecordStop => "Detener la grabación ({hotkey})",
-        Key::TipRecordCancel => "Cancelar: aún esperando para empezar ({hotkey})",
-        Key::TipSettings => "Ajustes: dispositivos, imagen e idioma",
-        Key::TipFullscreen => "Pantalla completa (F)",
-        Key::TipExitFullscreen => "Salir de pantalla completa (Esc)",
-        Key::TipVolume => "Volumen (↑ ↓ o la rueda del ratón)",
-        Key::TipSyncEarlier => "Adelantar un poco el sonido (←)",
-        Key::TipSyncLater => "Retrasar un poco el sonido (→)",
-        Key::TipReplayToggle => "Encender o apagar la repetición instantánea",
-        Key::TipReplayShorter => "Guardar menos tiempo: clips más cortos y menos memoria",
-        Key::TipReplayLonger => "Guardar más tiempo: clips más largos y más memoria",
-        Key::TipMicToggle => "Encender o apagar el micrófono. Se guarda como pista propia",
-        Key::TipFolderOpen => "Mostrar el último archivo guardado, o abrir la carpeta",
-        Key::TipFolderChange => "Elegir otra carpeta para clips y grabaciones",
-        Key::TipQualityNormal => "Archivos más pequeños, buenos para compartir",
-        Key::TipQualityHigh => "La mejor imagen, con archivos grandes",
-        Key::TipVideoAuto => "La mejor calidad; cambia solo a un modo más ligero si el puerto USB es lento",
-        Key::TipVideoCompressed => "Usar siempre el modo comprimido, más ligero",
-        Key::TipStats => "Mostrar estadísticas y un diagnóstico en lenguaje sencillo (I)",
-        Key::TipPresetPerformance => "El dibujo más rápido, con el menor uso del PC",
-        Key::TipPresetBalanced => "Un buen equilibrio entre velocidad y nitidez",
-        Key::TipPresetQuality => "La imagen más nítida, usando más la tarjeta gráfica",
-        Key::SaveClip => "Guardar clip",
-        Key::OpenFolder => "Abrir carpeta",
-        Key::ToastClipSaved => "Clip guardado",
-        Key::ToastClipFailed => "No se pudo guardar el clip",
-        Key::ToastTurnOnFirst => "Activa primero la repetición instantánea",
-        Key::ToastReplayOn => "Repetición instantánea activada",
-        Key::ToastReplayOff => "Repetición instantánea desactivada",
-        Key::ToastSaving => "Guardando clip…",
     }
 }
 
@@ -730,5 +313,14 @@ mod tests {
         assert_eq!(LangMode::Auto.resolve(Lang::En), Lang::En);
         assert_eq!(LangMode::En.resolve(Lang::Es), Lang::En);
         assert_eq!(LangMode::Es.resolve(Lang::En), Lang::Es);
+    }
+
+    #[test]
+    fn every_key_is_listed_once_and_in_order() {
+        // `ALL_KEYS` is built from the same declaration as the enum, so the
+        // first key is the first one declared and the count matches.
+        assert_eq!(ALL_KEYS[0], Key::Live);
+        assert_eq!(ALL_KEYS.last(), Some(&Key::ToastSaving));
+        assert!(ALL_KEYS.len() > 100);
     }
 }

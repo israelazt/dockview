@@ -78,7 +78,7 @@ Cada paso: sin cambio visible, comprobado con los mismos tests y, en la interfaz
 | D-4 | Extraer `Sources` de `App` (fuentes, audio y enrutado) | Mayor reducción de `main.rs`; permite probar el enrutado | Medio-alto |
 | D-5 | Extraer `ReplayService` (replay, grabación, micrófono) y `StatsService` | `App` queda como coordinador | Medio-alto |
 | D-6 | Capa de eventos entre servicios y la interfaz | Quita el `toast` de la lógica; base del bus de plugins | Medio |
-| D-7 | Macro de textos en `i18n.rs` | De cuatro ediciones a una | Bajo |
+| D-7 ✅ | Macro de textos en `i18n.rs` | De cuatro ediciones a una | Bajo |
 | D-8 | Dividir las funciones de dibujo grandes y mover `Stats` fuera de `ui` | Interfaz más fácil de ampliar | Bajo-medio |
 
 **Orden recomendado:** D-1, D-2, D-7 (rápidos y sin riesgo), luego D-4 y D-5 con D-6 (el núcleo del desacoplamiento), y D-3 y D-8 cuando estorben. Cada uno se puede intercalar con funciones nuevas sin bloquearlas.
@@ -92,6 +92,11 @@ Cambio pequeño de comportamiento: `TestSource` esperaba a su hilo sin límite; 
 `dockview-core/src/gpu.rs`: `create_device` (dispositivo con soporte de BGRA y de vídeo, protegido para varios hilos), `nv12_texture`, `Nv12Target` (textura de salida, su vista, la copia de lectura y `publish`, que devuelve la imagen como `Frame`), más `even`, `rect` y `failed`. `screen.rs` (`Converter`) y `compose.rs` (`Compositor`) dejaron de llevar cada uno su copia. 3 tests nuevos, uno con la GPU real.
 
 Se quedaron fuera a propósito `render.rs` y el ejemplo `screen_probe`: crean el dispositivo con otras opciones (sin soporte de vídeo, nivel de características fijo), así que compartirlo obligaría a parametrizarlo sin ganar nada. Comprobado con 354 tests y con la app real (capturadora + pantalla en la esquina + grabación, cierre en 512 ms, vídeo de 13,7 MB).
+
+### Resultado de D-7 (2026-11-12)
+`i18n.rs` pasó de 734 a 334 líneas. La macro `strings!` declara cada clave una vez, `Clave => "English", "Español";`, y de ahí salen el `enum Key`, `ALL_KEYS` (con su longitud calculada) y las funciones `en` y `es`. Añadir un mensaje es **una línea**; no puede existir sin sus dos textos ni quedar fuera de la lista. Para otro idioma bastaría añadir un campo a la macro.
+
+Comprobado volcando las 143 claves en los dos idiomas antes y después: **idénticas byte a byte**. Los usos (`i18n::Key::X`, `tr`) no cambian.
 
 ## Lo que no conviene tocar
 - La separación en dos crates y el sentido de las dependencias.
