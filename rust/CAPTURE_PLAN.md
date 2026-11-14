@@ -202,7 +202,7 @@ Lo que se quiere: componer **varias fuentes a la vez** (por ejemplo el juego a p
 | E-2 ✅ | La app mantiene varias fuentes a la vez; el compositor alimenta visor, replay y grabación | Grabar una escena con clics reales |
 | E-3a ✅ | Modelo de escenas, guardado en `settings.json`, redirección de frames y varias capas encima (sin interfaz nueva) | Escena guardada activada al arrancar, con clics: pendiente de E-3b |
 | E-3b ✅ | Botón y popover de escenas: activar, crear, borrar y añadir una fuente en una esquina (módulo `ui/scenes.rs`) | Clics reales y capturas |
-| E-3c | Editor libre sobre la vista previa: mover, redimensionar y panel de capas (módulo `ui/scene_editor.rs`) | Clics reales y capturas |
+| E-3c | Editor libre sobre la vista previa: mover, redimensionar y panel de capas (módulo `ui/scene_editor.rs`). **Diseño y tareas más abajo (E-3c-1..5)** | Clics reales y capturas |
 | E-3d | Pulido y pruebas con clics reales | Grabar una escena editada |
 | E-4 | Cambio de escena con tecla global y transición suave opcional | Pruebas |
 
@@ -227,6 +227,24 @@ Lo que se quiere: componer **varias fuentes a la vez** (por ejemplo el juego a p
 - Sin tope, dos fuentes de 60 fps producían **110 imágenes por segundo** (64 % de un núcleo y el codificador trabajando el doble). El compositor se limita a `OUTPUT_FPS` = 60 y dibuja solo cuando alguna fuente visible tiene un frame nuevo.
 - Nada de esto toca todavía la app: el visor y el replay siguen leyendo una sola fuente (E-2).
 - **Pendiente de medir**: GPU y FPS del juego con LoL abierto (lo mide el autor).
+
+### E-3c — Editor libre de capas: diseño (2026-11-14)
+
+Con una escena activa, un botón **Editar** en la sección Escenas del panel (y la tecla Esc para salir) activa el editor sobre la imagen.
+
+- **Sobre la imagen:** el contorno de cada capa visible; la elegida se resalta y lleva 8 asas. Clic en una capa la elige (la de más arriba bajo el puntero); arrastrar el cuerpo la mueve; arrastrar un asa la redimensiona. **Shift** mantiene la proporción; **Alt** quita el imán. El imán pega a los bordes y al centro de la imagen y a los bordes de las otras capas (6 px). Tamaño mínimo `MIN_LAYER_SIZE`; nunca sale de la imagen.
+- **En el panel (sección Escenas):** la lista de capas elige la capa (la misma selección que la imagen) y tiene subir/bajar para el orden. La base también se puede mover y redimensionar.
+- **Datos:** el rectángulo viaja como enteros (diezmilésimas) para que `SceneAction` siga siendo `Copy + Eq`: `SetLayerRect(capa, [x, y, w, h])`, `MoveLayer(capa, ±1)`, `SelectLayer(capa)`. El núcleo guarda en `settings.json` (con el retraso habitual) y reaplica el compositor en cada cambio, así la edición se ve en vivo y en la grabación.
+- **Dónde vive cada cosa:** la geometría (rectángulo de la imagen dentro del área del vídeo, asas, mover, redimensionar, imán) es pura y vive en `dockview-domain/src/layer_edit.rs`, con tests; el dibujo y el puntero en `dockview-ui/src/scene_editor.rs`; el cableado en `shell/`.
+- **Puntero:** la píldora y el panel tienen prioridad; el editor solo recibe lo que ellos no usan. Con el editor activo la píldora no se oculta sola.
+
+| Tarea | Qué | Listo cuando |
+|---|---|---|
+| E-3c-1 | `layer_edit.rs`: geometría pura | Tests de asas, mover, redimensionar, mínimo, proporción, imán |
+| E-3c-2 | Acciones y estado: `SetLayerRect`, `MoveLayer`, `SelectLayer`, `Action::ToggleSceneEdit`, rectángulo y selección en `ScenesView` | Tests del núcleo con el `Rig` |
+| E-3c-3 | `scene_editor.rs`: contornos, asas y arrastre | Tests con puntero simulado y capturas |
+| E-3c-4 | Panel: botón Editar, selección y orden de capas | Tests y captura |
+| E-3c-5 | Cableado en el shell (rectángulo de la imagen, prioridad del puntero, Esc) | Prueba con la app real y clics |
 
 ### Resultados de E-3a
 
