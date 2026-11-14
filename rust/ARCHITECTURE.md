@@ -39,7 +39,8 @@ Las flechas solo van hacia abajo. `ui`, `app` y `platform` no se ven entre sí: 
 ## Reglas
 
 1. **Todo lo que toca hardware, disco o la ventana está detrás de un puerto** (trait en `domain`). Los servicios se prueban con dobles falsos, sin capturadora, GPU ni ventana. El adaptador real vive en `platform` (o, para la ventana, en el binario).
-2. **Receta de una función nueva**, siempre en este orden:
+2. **Multiplataforma (decidido 2026-11-14):** la app será para **Windows, Linux e iOS**. Hoy solo hay adaptador de Windows (y el binario lo exige con un `compile_error!`), pero cada decisión debe dejar la puerta abierta: nada del sistema operativo fuera de `platform` (el crate `windows` no se usa en `domain`, `app` ni `ui`), todo lo del sistema detrás de un puerto con un nombre neutro (`ScreenGrabber`, `ImageOutput`, `SelectionOverlay`, no `Gdi…`), y la lógica (reglas, selección, geometría, formatos, nombres de archivo) en `domain`/`app`, que son portátiles. Un puerto nuevo se escribe pensando en qué haría Linux (X11/Wayland, PipeWire) e iOS (sandbox: no hay captura de pantalla global fuera de la propia app) antes de fijar su forma; lo que no tenga sentido en una plataforma (por ejemplo, el capturador de pantallazos en iOS) se declara como no disponible allí, no se simula.
+3. **Receta de una función nueva**, siempre en este orden:
    1. Modelo y reglas puras en `domain`, con tests.
    2. Un puerto, si necesita hardware, disco o ventana.
    3. El servicio en `app`, probado con un doble falso del puerto, y su parte del `Model`. Lo que cambia el comportamiento de `Core` (una acción, una tecla, un `tick`) se prueba con el **`Rig`** (`dockview-app/src/testing/`): un `Core` completo sobre dobles de todos los puertos y un reloj manual (`Core::tick_at`), sin tocar sus campos internos.
@@ -48,8 +49,8 @@ Las flechas solo van hacia abajo. `ui`, `app` y `platform` no se ven entre sí: 
    6. El cableado en el binario (y solo eso).
 
    Si una función no cabe en esta receta, se discute antes de escribirla.
-3. **Guardas automáticas** (tests que corren con `cargo test`): ninguna fuente de más de **400 líneas** (los de tests, de 1000) y las dependencias de cada `Cargo.toml` solo las permitidas por la tabla de arriba. Una excepción se escribe en el propio test, con su motivo.
-4. **Convenciones**
+4. **Guardas automáticas** (tests que corren con `cargo test`): ninguna fuente de más de **400 líneas** (los de tests, de 1000) y las dependencias de cada `Cargo.toml` solo las permitidas por la tabla de arriba. Una excepción se escribe en el propio test, con su motivo.
+5. **Convenciones**
    - Un error que el usuario debe conocer es un `AppEvent`; uno que no, se registra con `log_warn!` / `log_error!` / `log_info!` (de `dockview-domain`; van a `%APPDATA%\Dockview\dockview.log`). Una guarda prohíbe `println!`/`eprintln!` en el código de producción. Los fallos de hardware se devuelven como `Result<_, String>` a través de los puertos.
    - Un puerto se llama por lo que **necesita** el servicio (`ReplayBuffer`), no por cómo se implementa (`Mf…`).
    - Un servicio expone **datos** (`buffer_info()`), no vistas; la vista la compone `Core`.

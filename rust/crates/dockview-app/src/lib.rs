@@ -13,6 +13,7 @@ pub mod keys;
 pub mod replay_service;
 mod scenes_service;
 mod settings_storage;
+pub mod snap_service;
 pub mod sources;
 mod sources_service;
 pub mod telemetry;

@@ -244,3 +244,61 @@ impl Host for NullHost {
     }
     fn request_redraw(&self) {}
 }
+
+// ---------------------------------------------------------------------------
+// Screenshots
+// ---------------------------------------------------------------------------
+//
+// Dockview is meant to run on Windows, Linux and iOS, so what a screenshot
+// needs from the system is described here and each platform implements it:
+// grabbing the screen, writing the picture out, and showing the selection
+// overlay. Everything else (the target, the selector, cutting a shape) is in
+// the domain and the same everywhere.
+
+/// Grabs stills of the screen. Rectangles are in virtual-screen pixels.
+pub trait ScreenGrabber {
+    /// The monitors and where they sit.
+    fn desktop(&self) -> crate::desktop::Desktop;
+    /// What is on `rect` now.
+    fn grab_rect(
+        &self,
+        rect: crate::desktop::PxRect,
+        cursor: bool,
+    ) -> Result<crate::image::Image, String>;
+    /// A window, whole even if other windows cover it, by its handle.
+    fn grab_window(&self, handle: isize, cursor: bool) -> Result<crate::image::Image, String>;
+    /// The windows that can be captured, the one on top first.
+    fn windows(&self) -> Vec<WindowInfo>;
+    /// Where a window is on the virtual screen, for the window mode of the
+    /// selection (`None` when it is gone).
+    fn window_rect(&self, handle: isize) -> Option<crate::desktop::PxRect>;
+}
+
+/// Where a finished picture goes.
+pub trait ImageOutput {
+    /// Writes the picture to `path` in `format`.
+    fn save(
+        &self,
+        image: &crate::image::Image,
+        path: &std::path::Path,
+        format: crate::image::ImageFormat,
+    ) -> Result<(), String>;
+    /// Puts the picture on the clipboard.
+    fn copy(&self, image: &crate::image::Image) -> Result<(), String>;
+}
+
+/// The overlay where the user picks what to capture: the frozen, dimmed
+/// screen over every monitor.
+pub trait SelectionOverlay {
+    /// Shows `frozen` (the picture of the whole virtual screen, whose corner is
+    /// the corner of `desktop`'s bounds) and lets the user choose with the
+    /// selector (`windows` are the rectangles for the window mode, topmost
+    /// first). Returns what was chosen, or `None` if it was cancelled.
+    fn pick(
+        &self,
+        frozen: &crate::image::Image,
+        desktop: &crate::desktop::Desktop,
+        windows: Vec<crate::desktop::PxRect>,
+        mode: crate::select::Mode,
+    ) -> Option<crate::select::Selection>;
+}

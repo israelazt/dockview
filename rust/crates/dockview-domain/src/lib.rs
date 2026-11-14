@@ -26,6 +26,7 @@ pub mod recording;
 pub mod render_plan;
 pub mod replay;
 pub mod scene;
+pub mod select;
 pub mod settings;
 pub mod snap;
 pub mod sources;

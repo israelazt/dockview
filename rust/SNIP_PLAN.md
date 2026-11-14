@@ -27,6 +27,13 @@ Dockview debe funcionar también como capturador de pantallazos y hacer **todo l
 - **Editor propio.** Documento de capas vectoriales sobre la imagen (trazos, formas, texto, recorte) con deshacer/rehacer. Reglas y estado en `dockview-domain` (con tests); dibujo y herramientas en `dockview-ui`; captura, portapapeles y bandeja en `dockview-platform`; cableado en `shell/`. Las guardas de tamaño (400 líneas) y de dependencias siguen vigentes, y `main.rs` solo orquesta.
 - **Dónde vive en la interfaz.** Botón «Captura» en la píldora y sección **Capturas** en el panel de Estudio (modo, retardo, carpeta, ajustes). El editor es una ventana propia.
 
+## Multiplataforma
+
+La app será para Windows, Linux e iOS (ver `ARCHITECTURE.md`, regla 2). Para el capturador:
+- **Portátil, en `domain`/`app`:** el objetivo (`SnapTarget`), el trabajo (`SnapJob`), el modelo de escritorio y de imagen, el selector (`select.rs`: rectángulo, ventana, pantalla completa, forma libre), recortar con forma, formatos y nombres, y el servicio `snap_service`.
+- **Detrás de puertos** (`ScreenGrabber`, `ImageOutput`, `SelectionOverlay`): coger la pantalla, escribir la imagen/portapapeles y mostrar la superposición. Windows: GDI + WIC + ventana Win32. Linux: X11/Wayland (en Wayland captura y selección pasan por el portal `xdg-desktop-portal`) y GTK/Qt o un lienzo propio. **iOS: no aplica** (el sistema no deja capturar la pantalla fuera de la propia app); allí solo tendrían sentido el editor y el OCR sobre una imagen dada.
+- Atajo global, bandeja e «iniciar con el sistema» (S-C) son lo más dependiente de la plataforma: se diseñan como puertos desde el principio.
+
 ## Cómo se trabaja
 
 Igual que el resto: tarea atómica = un commit + push, con `fmt`, `clippy` sin avisos y `cargo test --workspace` en verde; pausa de revisión al cerrar cada bloque. Verificación con la app real (varios monitores y escalas) y, donde se pueda, capturas píxel a píxel.

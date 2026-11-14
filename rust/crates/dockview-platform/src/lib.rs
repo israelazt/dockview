@@ -38,6 +38,8 @@ pub mod render;
 pub mod replay_machine;
 #[cfg(windows)]
 pub mod screen;
+#[cfg(windows)]
+pub mod screen_io;
 pub mod settings_store;
 #[cfg(windows)]
 pub mod snapshot;
