@@ -256,7 +256,7 @@ Con una escena activa, un botón **Editar** en la sección Escenas del panel (y 
 ### Resultados de E-3d (2026-11-14)
 
 - **Prueba con la app real, ratón y atajo globales** (`APPDATA` apuntando a una carpeta temporal para no tocar los ajustes del usuario, con una escena de dos pantallas): `--edit-layers`, un arrastre con el ratón de la capa de la pantalla 2 de (0,60; 0,55) a (0,15; 0,15), grabación con Ctrl+Alt+R durante 8 s. Los ajustes guardaron el rectángulo nuevo y un fotograma del MP4 (34 MB) muestra la pantalla 2 en esa esquina, sobre la pantalla 1 de base: **lo editado se graba tal cual**.
-- **Trampa para quien repita la prueba:** un `settings.json` escrito a mano con un JSON inválido se sustituye por los valores por defecto sin avisar (el log no dice nada). Conviene generarlo con `ConvertTo-Json`; las barras de `\.\DISPLAY1` se escapan mal a mano.
+- **Trampa para quien repita la prueba:** un `settings.json` escrito a mano con un JSON inválido se sustituye por los valores por defecto sin avisar (el log no dice nada). Conviene generarlo con `ConvertTo-Json`; las barras invertidas del nombre del monitor se escapan mal a mano.
 - **Pendiente de E-3d:** repetir con la capturadora y un juego abierto (coste de GPU/CPU con el compositor y el editor); flechas del teclado para empujar una capa; deshacer; duración y curva del morph configurables; la verificación con clics del morph entre escenas (arriba).
 
 ### Resultados de E-3a
