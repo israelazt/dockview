@@ -6,6 +6,7 @@
 
 pub mod audio_status;
 pub mod audio_sync;
+pub mod desktop;
 pub mod device;
 pub mod device_names;
 pub mod diagnostics;
@@ -15,6 +16,7 @@ pub mod events;
 pub mod frame;
 pub mod geometry;
 pub mod i18n;
+pub mod image;
 pub mod layer_edit;
 pub mod layout;
 pub mod log;

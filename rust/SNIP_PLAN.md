@@ -36,7 +36,7 @@ Igual que el resto: tarea atómica = un commit + push, con `fmt`, `clippy` sin a
 | Tarea | Qué | Listo cuando |
 |---|---|---|
 | S-A1 | `platform`: obtener una imagen fija de un monitor, de todos juntos o de una ventana (con y sin cursor) | Test con fuente simulada; prueba real en 2 monitores |
-| S-A2 | `domain`: modelo de recorte (`Rect` en píxeles virtuales, modos, retardo) y conversión entre monitores con distinto DPI | Tests de bordes, monitores negativos y escalas mixtas |
+| S-A2 ✅ | `domain`: modelo de recorte (`Rect` en píxeles virtuales, modos, retardo) y conversión entre monitores con distinto DPI | Tests de bordes, monitores negativos y escalas mixtas |
 | S-A3 | `platform`: portapapeles (imagen) y guardado PNG/JPG/GIF con nombre por fecha | Pegar en Paint da la misma imagen |
 | S-A4 | CLI de prueba: `--snap monitor|window|full FILE.png` | Resultado idéntico a la pantalla |
 
