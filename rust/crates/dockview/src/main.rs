@@ -18,6 +18,7 @@ compile_error!("Dockview only supports Windows.");
 
 mod run;
 mod shell;
+mod snap;
 
 fn main() {
     run::run();

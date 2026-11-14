@@ -19,6 +19,8 @@ pub mod gpu;
 #[cfg(windows)]
 pub mod hotkey;
 #[cfg(windows)]
+pub mod imagefile;
+#[cfg(windows)]
 pub mod log_file;
 #[cfg(windows)]
 pub mod mf;

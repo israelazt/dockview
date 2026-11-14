@@ -27,6 +27,7 @@ pub mod render_plan;
 pub mod replay;
 pub mod scene;
 pub mod settings;
+pub mod snap;
 pub mod sources;
 pub mod stats;
 pub mod stream;

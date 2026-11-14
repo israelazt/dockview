@@ -37,10 +37,21 @@ Igual que el resto: tarea atómica = un commit + push, con `fmt`, `clippy` sin a
 |---|---|---|
 | S-A1 ✅ | `platform`: obtener una imagen fija de un monitor, de todos juntos o de una ventana (con y sin cursor) | Test con fuente simulada; prueba real en 2 monitores |
 | S-A2 ✅ | `domain`: modelo de recorte (`Rect` en píxeles virtuales, modos, retardo) y conversión entre monitores con distinto DPI | Tests de bordes, monitores negativos y escalas mixtas |
-| S-A3 | `platform`: portapapeles (imagen) y guardado PNG/JPG/GIF con nombre por fecha | Pegar en Paint da la misma imagen |
-| S-A4 | CLI de prueba: `--snap monitor|window|full FILE.png` | Resultado idéntico a la pantalla |
+| S-A3 ✅ | `platform`: portapapeles (imagen) y guardado PNG/JPG/GIF con nombre por fecha | Pegar en Paint da la misma imagen |
+| S-A4 ✅ | CLI de prueba: `--snap monitor|window|full FILE.png` | Resultado idéntico a la pantalla |
 
 **Pausa S-A:** comparar con la Herramienta Recortes (misma ventana, misma imagen) y revisar HDR y DPI.
+
+### Resultados del bloque S-A (2026-11-14)
+
+- **S-A1** `platform/snapshot.rs`: capturas fijas con GDI (sin GPU): un rectángulo del escritorio virtual, un monitor, todo, o una ventana (con `PrintWindow`, entera aunque otras la tapen, recortada a su marco visible), con o sin cursor. `desktop()` da los monitores con su posición (puede ser negativa) y su escala.
+- **S-A2** `domain/desktop.rs` e `image.rs` (puros, con tests): rectángulos en píxeles del escritorio virtual, qué monitor tiene un punto o la mayor parte de un recorte, recortar a la pantalla, dónde cae un recorte dentro de la imagen de todo el escritorio, escalas mezcladas; `Image` (BGRA) con recorte, canales RGBA y detección de «todo negro» (ventana protegida).
+- **S-A3** `platform/imagefile.rs`: guarda **PNG, JPG y GIF** con WIC (los códecs de Windows, sin librerías nuevas; el GIF se reduce a 256 colores) y copia al portapapeles como `CF_DIB`. Nombre como el de Windows: `Screenshot 2026-11-14 163012.png`.
+- **S-A4** `--snap full|monitor:N|window:TEXTO|rect:X,Y,W,H` con `--snap-out ARCHIVO` y/o `--snap-copy`, y `--snap-cursor`; saca la captura y sale sin abrir la ventana. El formato sale de la extensión; crea la carpeta; avisa si la imagen sale toda negra.
+- **Verificado con la pantalla real** (dos monitores de 1920×1080): `full` = 3840×1080 con el primario a la izquierda, `monitor:0` y `monitor:1` = 1920×1080 en JPG y GIF, un `rect` de 400×300 con cursor y una ventana (1280×800, no negra). Los tres formatos los abre PIL. Los tests de plataforma que necesitan pantalla se saltan si la sesión no tiene.
+- **Sin verificar:** el portapapeles con una app real (solo hay test de la construcción del bitmap; el test que lo escribe de verdad está `#[ignore]` porque pisa el portapapeles de quien lo corre); monitores con distinta escala y HDR (esta máquina tiene dos a 100 %); ventanas protegidas (DRM).
+
+**Pausa S-A.**
 
 ## Bloque S-B — Selección
 

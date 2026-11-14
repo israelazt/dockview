@@ -2,6 +2,52 @@
 
 use crate::desktop::PxRect;
 
+/// A file format a picture can be saved in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ImageFormat {
+    #[default]
+    Png,
+    Jpeg,
+    Gif,
+}
+
+impl ImageFormat {
+    pub const ALL: [ImageFormat; 3] = [ImageFormat::Png, ImageFormat::Jpeg, ImageFormat::Gif];
+
+    /// The extension of its files, without the dot.
+    pub fn extension(self) -> &'static str {
+        match self {
+            ImageFormat::Png => "png",
+            ImageFormat::Jpeg => "jpg",
+            ImageFormat::Gif => "gif",
+        }
+    }
+
+    /// The format of a file called `name`, by its extension (any case); `jpeg`
+    /// counts as `jpg`.
+    pub fn from_name(name: &str) -> Option<Self> {
+        let ext = name.rsplit_once('.')?.1.to_ascii_lowercase();
+        match ext.as_str() {
+            "png" => Some(Self::Png),
+            "jpg" | "jpeg" => Some(Self::Jpeg),
+            "gif" => Some(Self::Gif),
+            _ => None,
+        }
+    }
+}
+
+/// The name Windows' own tool gives a screenshot: `Screenshot 2026-11-14 163012.png`.
+pub fn screenshot_name(
+    (year, month, day): (u16, u16, u16),
+    (hour, minute, second): (u16, u16, u16),
+    format: ImageFormat,
+) -> String {
+    format!(
+        "Screenshot {year:04}-{month:02}-{day:02} {hour:02}{minute:02}{second:02}.{}",
+        format.extension()
+    )
+}
+
 /// A picture of 8-bit B, G, R, A pixels, top row first, nothing between rows.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Image {
@@ -78,6 +124,31 @@ impl Image {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn formats_are_found_by_extension_in_any_case() {
+        assert_eq!(ImageFormat::from_name("a.PNG"), Some(ImageFormat::Png));
+        assert_eq!(ImageFormat::from_name("x.y.jpeg"), Some(ImageFormat::Jpeg));
+        assert_eq!(ImageFormat::from_name("a.Jpg"), Some(ImageFormat::Jpeg));
+        assert_eq!(ImageFormat::from_name("a.gif"), Some(ImageFormat::Gif));
+        assert_eq!(ImageFormat::from_name("a.bmp"), None);
+        assert_eq!(ImageFormat::from_name("noextension"), None);
+        for f in ImageFormat::ALL {
+            assert_eq!(
+                ImageFormat::from_name(&format!("f.{}", f.extension())),
+                Some(f)
+            );
+        }
+    }
+
+    #[test]
+    fn a_screenshot_is_named_like_windows_names_it() {
+        assert_eq!(
+            screenshot_name((2026, 11, 4), (9, 5, 7), ImageFormat::Png),
+            "Screenshot 2026-11-04 090507.png"
+        );
+        assert!(screenshot_name((2026, 1, 1), (0, 0, 0), ImageFormat::Jpeg).ends_with(".jpg"));
+    }
 
     /// A 3×2 picture whose pixel at (x, y) has blue = x and green = y.
     fn grid() -> Image {

@@ -45,6 +45,11 @@ pub fn run() {
         }
     };
 
+    // A screenshot from the command line: take it and leave, with no window.
+    if let Some(job) = &cli.snap {
+        std::process::exit(crate::snap::run(job));
+    }
+
     let event_loop = match EventLoop::new() {
         Ok(l) => l,
         Err(e) => {

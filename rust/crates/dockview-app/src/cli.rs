@@ -14,6 +14,7 @@
 use std::path::PathBuf;
 
 use dockview_domain::i18n::LangMode;
+use dockview_domain::snap::{SnapJob, SnapTarget};
 use dockview_domain::theme::ThemeMode;
 
 /// A source to draw in the corner of the picture.
@@ -64,6 +65,8 @@ pub struct Cli {
     pub scale: Option<f32>,
     /// Start with the Studio side panel open.
     pub open_studio: bool,
+    /// A screenshot to take instead of opening the window (`--snap`).
+    pub snap: Option<SnapJob>,
     /// Start with the layer editor on, the second layer chosen (for the
     /// interface preview and tests).
     pub edit_layers: bool,
@@ -98,6 +101,8 @@ impl Cli {
     /// Parses the arguments after the program name.
     pub fn parse<I: IntoIterator<Item = String>>(args: I) -> Result<Self, String> {
         let mut cli = Self::default();
+        let (mut snap_target, mut snap_out) = (None, None);
+        let (mut snap_cursor, mut snap_copy) = (false, false);
         let mut args = args.into_iter();
 
         while let Some(arg) = args.next() {
@@ -148,6 +153,10 @@ impl Cli {
                 }
                 "--open-studio" => cli.open_studio = true,
                 "--edit-layers" => cli.edit_layers = true,
+                "--snap" => snap_target = Some(SnapTarget::parse(&value("--snap")?)?),
+                "--snap-out" => snap_out = Some(PathBuf::from(value("--snap-out")?)),
+                "--snap-cursor" => snap_cursor = true,
+                "--snap-copy" => snap_copy = true,
                 "--studio-section" => {
                     cli.studio_section = Some(value("--studio-section")?);
                     cli.open_studio = true;
@@ -182,6 +191,22 @@ impl Cli {
                 other => return Err(format!("unknown option '{other}'")),
             }
         }
+        cli.snap = match snap_target {
+            Some(target) if snap_out.is_none() && !snap_copy => {
+                let _ = target;
+                return Err("--snap needs --snap-out FILE or --snap-copy".into());
+            }
+            Some(target) => Some(SnapJob {
+                target,
+                out: snap_out,
+                cursor: snap_cursor,
+                copy: snap_copy,
+            }),
+            None if snap_out.is_some() || snap_copy || snap_cursor => {
+                return Err("--snap-out, --snap-copy and --snap-cursor need --snap TARGET".into())
+            }
+            None => None,
+        };
         Ok(cli)
     }
 }
@@ -242,6 +267,36 @@ mod tests {
         assert_eq!(a.theme, Some(ThemeMode::Light));
         assert_eq!(a.lang, Some(LangMode::Es));
         assert_eq!(a.scale, Some(1.5));
+    }
+
+    #[test]
+    fn a_snap_needs_a_target_and_somewhere_to_put_it() {
+        let cli = parse(&[
+            "--snap",
+            "monitor:1",
+            "--snap-out",
+            "a.png",
+            "--snap-cursor",
+        ])
+        .unwrap();
+        let job = cli.snap.unwrap();
+        assert_eq!(job.target, SnapTarget::Monitor(1));
+        assert_eq!(job.out, Some(PathBuf::from("a.png")));
+        assert!(job.cursor && !job.copy);
+        assert!(
+            parse(&["--snap", "full", "--snap-copy"])
+                .unwrap()
+                .snap
+                .unwrap()
+                .copy
+        );
+        assert!(
+            parse(&["--snap", "full"]).is_err(),
+            "no file and no clipboard"
+        );
+        assert!(parse(&["--snap-out", "a.png"]).is_err(), "no target");
+        assert!(parse(&["--snap", "cosa:1", "--snap-copy"]).is_err());
+        assert!(parse(&[]).unwrap().snap.is_none());
     }
 
     #[test]
