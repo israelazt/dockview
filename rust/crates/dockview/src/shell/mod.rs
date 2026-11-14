@@ -2,6 +2,7 @@
 //! interface, the pointer and the cursor. It feeds the application core what
 //! happens (frames, keys, clicks, ticks) and draws what the core shows.
 
+mod cursor;
 mod events;
 mod keys;
 mod studio;
@@ -22,11 +23,12 @@ use dockview_platform::render::Renderer;
 use dockview_platform::ui_gpu::UiGpu;
 use dockview_ui::controls::Controls;
 use dockview_ui::input::Pointer;
+use dockview_ui::scene_editor::SceneEditor;
 use dockview_ui::stats::StatsPanel;
 use dockview_ui::studio::{StudioPanel, StudioSection};
 use dockview_ui::toast::{ToastHost, ToastKind};
 use dockview_ui::Ui;
-use winit::window::Window;
+use winit::window::{CursorIcon, Window};
 
 use helpers::{filter_for, system_animations_enabled};
 use host::{HostRequest, HostShared};
@@ -59,7 +61,10 @@ pub struct Shell {
     /// When the renderer was last rebuilt after losing the device.
     last_graphics_try: Instant,
     needs_redraw: bool,
-    cursor_pointer: bool,
+    cursor_icon: CursorIcon,
+    /// The layer editor over the picture, and the keys that modify its drags.
+    scene_editor: SceneEditor,
+    edit_mods: dockview_domain::layer_edit::Modifiers,
     cursor_hidden: bool,
     animations: bool,
     stats_panel: StatsPanel,
@@ -97,7 +102,9 @@ impl Shell {
             last_video_shown: Instant::now(),
             last_graphics_try: Instant::now(),
             needs_redraw: true,
-            cursor_pointer: false,
+            cursor_icon: CursorIcon::Default,
+            scene_editor: SceneEditor::new(),
+            edit_mods: Default::default(),
             cursor_hidden: false,
             animations,
             stats_panel: StatsPanel::new(),

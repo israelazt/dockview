@@ -141,6 +141,12 @@ impl Controls {
         self.visibility > 0.01
     }
 
+    /// Whether the pointer is over the pill (a button or its background), so
+    /// that whatever is under the pill must not get it.
+    pub fn over_controls(&self) -> bool {
+        self.is_visible() && self.hovered.is_some()
+    }
+
     /// Whether the pointer is over a clickable widget.
     pub fn wants_pointer(&self) -> bool {
         self.is_visible() && self.hovered.is_some_and(Hit::is_widget)

@@ -111,6 +111,13 @@ impl ApplicationHandler for Shell {
                 self.pointer.pos = Some(((position.x / scale) as f32, (position.y / scale) as f32));
                 self.needs_redraw = true;
             }
+            WindowEvent::ModifiersChanged(modifiers) => {
+                let state = modifiers.state();
+                self.edit_mods = dockview_domain::layer_edit::Modifiers {
+                    keep_aspect: state.shift_key(),
+                    no_snap: state.alt_key(),
+                };
+            }
             WindowEvent::CursorLeft { .. } => {
                 self.pointer.pos = None;
                 self.needs_redraw = true;

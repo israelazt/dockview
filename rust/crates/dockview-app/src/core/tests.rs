@@ -183,6 +183,22 @@ fn the_editor_is_a_switch_and_the_selection_only_counts_for_existing_layers() {
 }
 
 #[test]
+fn escape_closes_the_layer_editor_before_anything_else() {
+    use crate::keys::KeyCommand;
+    let mut rig = rig_editing();
+    rig.core.apply(Action::ToggleStudio);
+    rig.core.apply(Action::Scene(SceneAction::ToggleEdit));
+    rig.core.on_key(KeyCommand::Escape);
+    assert!(!rig.core.model().scenes.editing);
+    assert!(
+        rig.core.model().studio,
+        "the panel stays until the next Esc"
+    );
+    rig.core.on_key(KeyCommand::Escape);
+    assert!(!rig.core.model().studio);
+}
+
+#[test]
 fn the_editor_is_off_when_no_scene_is_in_use() {
     let mut rig = Rig::new();
     rig.core.apply(Action::Scene(SceneAction::ToggleEdit));

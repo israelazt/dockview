@@ -603,3 +603,17 @@ fn pill_buttons_ask_for_the_panel_on_their_section() {
         assert_eq!(rig.controls.take_studio_request(), None, "asked once");
     }
 }
+
+#[test]
+fn the_pointer_is_over_the_controls_on_the_pill_and_its_buttons_only() {
+    let mut rig = Rig::new(true);
+    assert!(!rig.controls.over_controls());
+    let (x, y) = rig.controls.rect_of(Hit::Fullscreen).center();
+    rig.move_to(x, y);
+    assert!(rig.controls.over_controls(), "on a button");
+    let pill = rig.controls.rect_of(Hit::Pill);
+    rig.move_to(pill.x + 4.0, pill.y + pill.h / 2.0);
+    assert!(rig.controls.over_controls(), "on the pill's background");
+    rig.move_to(20.0, 20.0);
+    assert!(!rig.controls.over_controls(), "on the picture");
+}

@@ -18,6 +18,7 @@ mod inputs;
 mod interact;
 mod recording;
 mod route;
+mod scene_layers;
 mod scenes;
 mod scroll;
 mod sections;

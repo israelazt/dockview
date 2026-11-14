@@ -307,8 +307,10 @@ impl Core {
         match command {
             KeyCommand::ToggleFullscreen => self.set_fullscreen(!self.view.fullscreen),
             KeyCommand::Escape => {
-                // The window closes its popover first; this is what is left.
-                if self.view.fullscreen {
+                // The layer editor goes first, then full screen, then the panel.
+                if self.view.scene_editing {
+                    self.view.scene_editing = false;
+                } else if self.view.fullscreen {
                     self.set_fullscreen(false);
                 } else if self.settings.studio_open {
                     self.toggle_studio();

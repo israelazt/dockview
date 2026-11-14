@@ -3,6 +3,7 @@
 use dockview_domain::render_plan::{render_plan, video_frame_due};
 use dockview_domain::view::RecState;
 use dockview_platform::render::{is_device_lost, Renderer, Screenshot};
+use dockview_ui::input::Pointer;
 use dockview_ui::studio::route_pointer;
 use winit::window::CursorIcon;
 
@@ -15,13 +16,16 @@ impl Shell {
             return;
         };
         let pointer = self.controls.wants_pointer() || self.studio.wants_pointer();
-        if pointer != self.cursor_pointer {
-            self.cursor_pointer = pointer;
-            window.set_cursor(if pointer {
-                CursorIcon::Pointer
-            } else {
-                CursorIcon::Default
-            });
+        let icon = match self.scene_editor.hover() {
+            Some(handle) if !pointer => {
+                super::cursor::cursor_for(handle, self.scene_editor.is_dragging())
+            }
+            _ if pointer => CursorIcon::Pointer,
+            _ => CursorIcon::Default,
+        };
+        if icon != self.cursor_icon {
+            self.cursor_icon = icon;
+            window.set_cursor(icon);
         }
         // While watching full screen, an idle cursor gets out of the way.
         let hidden = self.core.fullscreen() && !self.controls.is_visible();
@@ -116,6 +120,7 @@ impl Shell {
         }
 
         let (ui, ui_gpu, controls) = (&mut self.ui, &mut self.ui_gpu, &mut self.controls);
+        let (scene_editor, edit_mods) = (&mut self.scene_editor, &self.edit_mods);
         let studio = &mut self.studio;
         let stats_panel = &mut self.stats_panel;
         let (stats, stats_open) = (self.core.stats(), self.core.stats_open());
@@ -128,6 +133,21 @@ impl Shell {
                 };
                 ui.begin(size, scale);
                 // What floats over the video anchors to the video's room.
+                // The layer editor sits on the picture, under the controls; what
+                // the controls (the pill) use is not the editor's.
+                let editor_pointer = if controls.over_controls() {
+                    Pointer {
+                        pos: None,
+                        wheel: 0.0,
+                        just_pressed: false,
+                        ..video_pointer
+                    }
+                } else {
+                    video_pointer
+                };
+                let v = place.video;
+                let area = (v.x / scale, v.y / scale, v.w / scale, v.h / scale);
+                scene_editor.frame(ui, &model, area, &editor_pointer, *edit_mods);
                 ui.limit_width(Some(place.video_width));
                 controls.frame(ui, &model, &video_pointer, dt);
                 stats_panel.frame(
@@ -188,7 +208,12 @@ impl Shell {
         if let Some(section) = self.controls.take_studio_request() {
             self.studio.open_section(section);
         }
-        for action in actions.into_iter().chain(self.studio.take_actions()) {
+        let editor = self.scene_editor.take_actions();
+        for action in actions
+            .into_iter()
+            .chain(self.studio.take_actions())
+            .chain(editor)
+        {
             self.core.apply(action);
         }
         self.apply_host_requests();

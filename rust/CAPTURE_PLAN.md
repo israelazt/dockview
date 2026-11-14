@@ -244,7 +244,14 @@ Con una escena activa, un botón **Editar** en la sección Escenas del panel (y 
 | E-3c-2 ✅ | Acciones y estado: `SetLayerRect`, `MoveLayer`, `SelectLayer`, `Action::ToggleSceneEdit`, rectángulo y selección en `ScenesView` | Tests del núcleo con el `Rig` |
 | E-3c-3 ✅ | `scene_editor.rs`: contornos, asas y arrastre | Tests con puntero simulado y capturas |
 | E-3c-4 ✅ | Panel: botón Editar, selección y orden de capas | Tests y captura |
-| E-3c-5 | Cableado en el shell (rectángulo de la imagen, prioridad del puntero, Esc) | Prueba con la app real y clics |
+| E-3c-5 ✅ | Cableado en el shell (rectángulo de la imagen, prioridad del puntero, Esc) | Prueba con la app real y clics |
+
+### Resultados de E-3c (2026-11-14)
+
+- **Hecho:** `layer_edit.rs` (geometría pura, 12 tests), `SceneAction::{SetLayerRect, MoveLayer, SelectLayer, ToggleEdit}` con rectángulo y selección en `ScenesView`, `ui/scene_editor.rs` (contornos, asas, nombre, arrastre; 12 tests con puntero simulado), la sección Escenas (botón «Editar capas en la imagen», elegir capa al pulsar su fila, subir/bajar, el ojo y quitar no eligen) y el cableado del shell (puntero que la píldora no usa, Shift = proporción, Alt = sin imán, cursor según el asa, Esc cierra el editor antes que pantalla completa y panel). `--edit-layers` arranca con el editor activo para capturas y pruebas.
+- **Verificado con la app real y el ratón** (vista previa, `SendInput`): el contorno con 8 asas y el nombre de la capa elegida salen; arrastrar el cuerpo la mueve; arrastrar la esquina inferior derecha la agranda dejando fija la superior izquierda; pulsar en la imagen elige la capa de más arriba bajo el puntero (la base si no hay otra).
+- **Un fallo que cazaron los tests:** el arrastre se aplicaba a la capa elegida antes y no a la agarrada en el mismo fotograma; ahora el arrastre recuerda su capa y no mueve nada hasta pasar 3 px (una pulsación quieta no empuja la capa hacia un imán).
+- **Límites:** la base se puede mover y redimensionar pero no cambiar de orden; las flechas del teclado no empujan la capa; no hay deshacer; el editor y la grabación comparten el compositor, así que lo editado se graba tal cual, pero **no se ha probado todavía con fuentes reales vivas** (la vista previa no las ejecuta): es la prueba de E-3d.
 
 ### Resultados de E-3a
 

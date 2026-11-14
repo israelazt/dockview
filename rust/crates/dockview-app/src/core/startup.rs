@@ -49,8 +49,8 @@ impl Core {
                 system_appearance: Appearance::Dark,
                 system_lang,
                 stats_open: show_stats,
-                layer_selected: None,
-                scene_editing: false,
+                layer_selected: cli.edit_layers.then_some(1),
+                scene_editing: cli.edit_layers,
             },
             measures: Measurements {
                 stats: Stats::default(),

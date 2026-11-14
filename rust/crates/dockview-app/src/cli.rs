@@ -64,6 +64,9 @@ pub struct Cli {
     pub scale: Option<f32>,
     /// Start with the Studio side panel open.
     pub open_studio: bool,
+    /// Start with the layer editor on, the second layer chosen (for the
+    /// interface preview and tests).
+    pub edit_layers: bool,
     /// Start with this section of the Studio panel unfolded (`sources`,
     /// `scenes`, `audio`, `recording`, `settings` or `stats`).
     pub studio_section: Option<String>,
@@ -144,6 +147,7 @@ impl Cli {
                     cli.scale = Some(scale);
                 }
                 "--open-studio" => cli.open_studio = true,
+                "--edit-layers" => cli.edit_layers = true,
                 "--studio-section" => {
                     cli.studio_section = Some(value("--studio-section")?);
                     cli.open_studio = true;
@@ -238,6 +242,12 @@ mod tests {
         assert_eq!(a.theme, Some(ThemeMode::Light));
         assert_eq!(a.lang, Some(LangMode::Es));
         assert_eq!(a.scale, Some(1.5));
+    }
+
+    #[test]
+    fn edit_layers_is_a_flag() {
+        assert!(parse(&["--edit-layers"]).unwrap().edit_layers);
+        assert!(!parse(&[]).unwrap().edit_layers);
     }
 
     #[test]
