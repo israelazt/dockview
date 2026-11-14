@@ -20,6 +20,9 @@ mod devices;
 mod helpers;
 mod overlays;
 mod replay;
+mod resident;
+#[cfg(test)]
+mod resident_tests;
 mod scene_actions;
 mod scene_runtime;
 #[cfg(test)]
@@ -41,7 +44,9 @@ use dockview_domain::diagnostics::{diagnose, Finding, Snapshot, VideoState};
 use dockview_domain::events::AppEvent;
 use dockview_domain::frame::FrameSlot;
 use dockview_domain::i18n::{self, Lang, LangModeExt};
-use dockview_domain::ports::{Host, ReplayMachine, SourceMachine, StatsSink, SystemProbe};
+use dockview_domain::ports::{
+    CaptureHotkeys, Host, ReplayMachine, SourceMachine, StatsSink, SystemProbe,
+};
 use dockview_domain::recording::{RecorderStatus, RecordingInfo, RecordingState, ReplaySettings};
 use dockview_domain::settings::{
     self, AppSettings, LangMode, RenderPreset, SettingsStore, ThemeMode, VideoModePref,
@@ -50,6 +55,7 @@ use dockview_domain::sources::{CaptureOptions, CaptureTarget, ScreenOptions};
 use dockview_domain::stats::Stats;
 use dockview_domain::stream::StreamInfo;
 use dockview_domain::theme::{Appearance, Theme, ThemeModeExt};
+use dockview_domain::tray::TrayHost;
 use dockview_domain::view::{Action, MicState, MicView, Model, RecState, RecView, ReplayState};
 use helpers::{mic_device_id, mic_index_of, next_index, next_preset, resolution_label};
 
@@ -57,6 +63,7 @@ use crate::auto_switch::{AutoSwitch, SwitchEvent};
 use crate::cli::Cli;
 use crate::keys::KeyCommand;
 use crate::replay_service::{RecordToggle, ReplayService};
+use crate::resident_service::ResidentService;
 use crate::scenes_service::ScenesService;
 use crate::settings_storage::SettingsStorage;
 use crate::sources::{
@@ -88,6 +95,10 @@ pub struct Ports {
     pub stats_sink: Option<Box<dyn StatsSink>>,
     /// The window.
     pub host: Box<dyn Host>,
+    /// The global hotkey that starts a screenshot.
+    pub capture_hotkeys: Box<dyn CaptureHotkeys>,
+    /// The tray icon.
+    pub tray: Box<dyn TrayHost>,
 }
 
 /// The state and the services of the application. The binary creates one,
@@ -111,6 +122,8 @@ pub struct Core {
     cli: Cli,
     /// Instant replay, clips, recording and the microphone (see `replay_service`).
     replay: ReplayService,
+    /// The capture hotkey and the tray icon (see `resident_service`).
+    resident: ResidentService,
     /// Installed RAM, which caps the replay length.
     total_ram: u64,
     /// What happened since the last tick, to be shown (see `toast_for`).

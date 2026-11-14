@@ -220,6 +220,13 @@ pub trait Host {
     fn gpu_ms(&self) -> Option<f32>;
     /// Asks for the next frame to be drawn.
     fn request_redraw(&self);
+    /// Starts a screenshot in `mode` (the window takes it from here: it needs
+    /// the screen, the overlay and the clipboard).
+    fn start_capture(&self, mode: crate::select::Mode);
+    /// Shows the window and brings it forward (it may be hidden in the tray).
+    fn show_window(&self);
+    /// Ends the program.
+    fn quit(&self);
 }
 
 /// A window that is not there: every request is ignored.
@@ -243,6 +250,9 @@ impl Host for NullHost {
         None
     }
     fn request_redraw(&self) {}
+    fn start_capture(&self, _: crate::select::Mode) {}
+    fn show_window(&self) {}
+    fn quit(&self) {}
 }
 
 // ---------------------------------------------------------------------------
@@ -329,4 +339,10 @@ pub trait CaptureHotkeys {
     /// because another program already owns that combination.
     fn register(&self, spec: &crate::hotkey::HotkeySpec)
         -> Result<Box<dyn CaptureTrigger>, String>;
+    /// Whether the system keeps this combination for itself even though it
+    /// lets a program register it (Windows with Print Screen, while its
+    /// Snipping Tool setting is on): the program then never gets the key.
+    fn kept_by_system(&self, _spec: &crate::hotkey::HotkeySpec) -> bool {
+        false
+    }
 }

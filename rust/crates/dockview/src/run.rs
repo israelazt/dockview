@@ -10,12 +10,14 @@ use dockview_app::{Core, Ports};
 use dockview_domain::frame::FrameSlot;
 use dockview_domain::ports::StatsSink;
 use dockview_domain::settings::{AppSettings, SettingsStore};
+use dockview_platform::capture_hotkey::PlatformCaptureHotkeys;
 use dockview_platform::perf::PlatformSystem;
 use dockview_platform::replay_machine::PlatformReplay;
 use dockview_platform::settings_store::FileSettingsStore;
 use dockview_platform::source_machine::PlatformSources;
 use dockview_platform::stats_log::StatsLog;
 use dockview_platform::system_lang::detect_system_lang;
+use dockview_platform::tray::PlatformTrayHost;
 use winit::event_loop::{ControlFlow, EventLoop};
 
 use crate::shell::host::{HostShared, ShellHost};
@@ -89,6 +91,8 @@ pub fn run() {
             .and_then(|path| StatsLog::create(path).ok())
             .map(|log| Box::new(log) as Box<dyn StatsSink>),
         host: Box::new(ShellHost::new(Rc::clone(&host))),
+        capture_hotkeys: Box::new(PlatformCaptureHotkeys),
+        tray: Box::new(PlatformTrayHost),
     };
     let core = Core::new(slot, saved, ports, cli, detect_system_lang());
     dockview_domain::log_info!("application ready");

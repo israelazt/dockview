@@ -56,6 +56,12 @@ pub struct HostWorld {
     pub window_size: (u32, u32),
     pub monitor_hz: Option<f32>,
     pub gpu_ms: Option<f32>,
+    /// Screenshots the application asked for.
+    pub captures: Vec<dockview_domain::select::Mode>,
+    /// How many times it asked for the window to be shown.
+    pub shown: u32,
+    /// How many times it asked to quit.
+    pub quits: u32,
 }
 
 impl Default for HostWorld {
@@ -69,6 +75,9 @@ impl Default for HostWorld {
             window_size: (1280, 720),
             monitor_hz: Some(60.0),
             gpu_ms: Some(1.0),
+            captures: Vec::new(),
+            shown: 0,
+            quits: 0,
         }
     }
 }
@@ -102,6 +111,15 @@ impl Host for RecordingHost {
     }
     fn request_redraw(&self) {
         self.0.lock().unwrap().redraws += 1;
+    }
+    fn start_capture(&self, mode: dockview_domain::select::Mode) {
+        self.0.lock().unwrap().captures.push(mode);
+    }
+    fn show_window(&self) {
+        self.0.lock().unwrap().shown += 1;
+    }
+    fn quit(&self) {
+        self.0.lock().unwrap().quits += 1;
     }
 }
 

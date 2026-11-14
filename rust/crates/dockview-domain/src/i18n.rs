@@ -189,6 +189,11 @@ strings! {
     TipScenes => "Scenes: arrange several sources in one picture", "Escenas: combina varias fuentes en una sola imagen";
     TipSceneDelete => "Delete this scene", "Borrar esta escena";
     SceneEditLayers => "Edit layers on the picture", "Editar capas en la imagen";
+    ToastHotkeyBusy => "The capture hotkey is used by another program", "Otro programa usa el atajo de captura";
+    ToastPrintScreenWindows => "Windows keeps Print Screen: turn off \"Use the Print screen button to open screen capture\" in Accessibility > Keyboard", "Windows se queda con Impr Pant: desactiva «Usar el botón Impr Pant para abrir la captura de pantalla» en Accesibilidad > Teclado";
+    ToastScreenshotSaved => "Screenshot saved", "Captura guardada";
+    ToastScreenshotCopied => "Screenshot copied", "Captura copiada";
+    ToastScreenshotFailed => "Could not take the screenshot", "No se pudo hacer la captura";
     TrayTip => "Dockview", "Dockview";
     TrayNewCapture => "New screenshot", "Nueva captura";
     TrayOpen => "Open Dockview", "Abrir Dockview";

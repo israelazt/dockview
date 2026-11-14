@@ -56,6 +56,7 @@ S-E  sección «Capturas» en Estudio, selector de retardo con cuenta atrás,
 | 3-3 | Mostrar la versión en Ajustes; número de versión del formato de `settings.json` | S |
 | 3-4 | Separar datos de desarrollo y de la copia instalada (variable de entorno) | S |
 | 3-5 | Exploraciones de rendimiento 7-5 (MJPEG por hardware) y 7-6 (pantallas en la GPU) | M |
+| 3-6 | Reposo del modo residente: pausar la captura cuando la ventana está oculta y ni la repetición ni la grabación la necesitan (hoy 54 MB y 1,9 % con la repetición apagada; 112 MB y 6 % con ella) | S |
 
 ## Fase 4 · Funciones opcionales (según tus ganas; ninguna bloquea 1.0)
 

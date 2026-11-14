@@ -11,6 +11,7 @@ pub mod cli;
 mod core;
 pub mod keys;
 pub mod replay_service;
+pub mod resident_service;
 mod scenes_service;
 mod settings_storage;
 pub mod snap_service;

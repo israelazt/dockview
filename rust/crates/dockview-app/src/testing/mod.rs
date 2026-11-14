@@ -7,6 +7,7 @@
 //! rig survives a change of how `Core` is built inside.
 
 pub mod replay;
+pub mod resident;
 pub mod rig;
 pub mod sources;
 pub mod system;

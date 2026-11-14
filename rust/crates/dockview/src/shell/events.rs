@@ -7,7 +7,7 @@ use windows::Win32::Foundation::HWND;
 use winit::application::ApplicationHandler;
 use winit::dpi::{LogicalSize, PhysicalSize};
 use winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
-use winit::event_loop::ActiveEventLoop;
+use winit::event_loop::{ActiveEventLoop, ControlFlow};
 use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use winit::window::{Window, WindowId};
 
@@ -89,13 +89,22 @@ impl ApplicationHandler for Shell {
         self.core.apply_capture_exclusion();
         self.core.restore_fullscreen();
         self.apply_host_requests();
+        // Started with `--tray`: only the icon, until someone opens the window.
+        if self.core.cli().tray && self.core.keeps_in_tray() {
+            self.hide_window();
+        }
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
         match event {
             WindowEvent::CloseRequested => {
                 self.core.save_settings();
-                event_loop.exit();
+                if self.core.keeps_in_tray() {
+                    // The icon in the tray brings it back; the hotkey keeps working.
+                    self.hide_window();
+                } else {
+                    event_loop.exit();
+                }
             }
             WindowEvent::Resized(size) => {
                 self.needs_redraw = true;
@@ -182,6 +191,18 @@ impl ApplicationHandler for Shell {
         self.core.tick(lists_shown);
         self.show_events();
         self.apply_host_requests();
+        if self.hidden {
+            // Only in the tray: the hotkey and the icon are polled by the tick
+            // above a few times a second, and no picture is drawn. The latest
+            // picture is taken so the sources keep flowing.
+            let slot = self.core.output_slot();
+            if let Some(frame) = slot.take_latest() {
+                slot.recycle(frame);
+            }
+            event_loop.set_control_flow(ControlFlow::WaitUntil(Instant::now() + HIDDEN_TICK));
+            return;
+        }
+        event_loop.set_control_flow(ControlFlow::Poll);
         // Redraw for new video, for input, and while the controls are on
         // screen (hover, drag and fade animations need steady frames).
         let mut new_frame = self.core.output_slot().wait_for_frame(FRAME_WAIT);

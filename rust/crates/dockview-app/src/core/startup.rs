@@ -63,6 +63,7 @@ impl Core {
             cli,
             host: ports.host,
             replay: ReplayService::new(ports.replay),
+            resident: ResidentService::new(ports.capture_hotkeys, ports.tray),
             total_ram: system.total_ram_bytes(),
             events: Vec::new(),
         };
@@ -118,6 +119,7 @@ impl Core {
     /// microphone and the recording if the command line asked for them.
     fn finish_startup(&mut self) {
         self.start_replay_services();
+        self.maintain_resident();
         if self.cli.mic {
             self.set_mic(true);
         }

@@ -24,6 +24,12 @@ pub enum HostRequest {
     Fullscreen(bool),
     Preset(RenderPreset),
     Redraw,
+    /// Start a screenshot in this mode.
+    Capture(dockview_domain::select::Mode),
+    /// Show the window and bring it forward.
+    ShowWindow,
+    /// End the program.
+    Quit,
 }
 
 /// What the shell and the application share about the window.
@@ -92,5 +98,17 @@ impl Host for ShellHost {
 
     fn request_redraw(&self) {
         self.ask(HostRequest::Redraw);
+    }
+
+    fn start_capture(&self, mode: dockview_domain::select::Mode) {
+        self.ask(HostRequest::Capture(mode));
+    }
+
+    fn show_window(&self) {
+        self.ask(HostRequest::ShowWindow);
+    }
+
+    fn quit(&self) {
+        self.ask(HostRequest::Quit);
     }
 }

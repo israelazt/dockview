@@ -2,6 +2,7 @@
 //! interface, the pointer and the cursor. It feeds the application core what
 //! happens (frames, keys, clicks, ticks) and draws what the core shows.
 
+mod capture;
 mod cursor;
 mod events;
 mod keys;
@@ -36,6 +37,9 @@ use present::{report_startup_failure, toast_for, StartupFailure};
 
 /// How long the event loop waits for a new frame before checking events.
 const FRAME_WAIT: Duration = Duration::from_millis(4);
+/// How often the application is ticked while the window is hidden in the tray
+/// (the hotkey and the icon are polled then).
+const HIDDEN_TICK: Duration = Duration::from_millis(50);
 /// How long to wait before trying to rebuild a renderer that could not be built.
 const GRAPHICS_RETRY: Duration = Duration::from_secs(1);
 /// Frames to render before a `--screenshot` is taken.
@@ -64,6 +68,8 @@ pub struct Shell {
     cursor_icon: CursorIcon,
     /// The layer editor over the picture, and the keys that modify its drags.
     scene_editor: SceneEditor,
+    /// The window is hidden: Dockview is only in the tray.
+    hidden: bool,
     edit_mods: dockview_domain::layer_edit::Modifiers,
     /// Ctrl is held (it turns letters into chords).
     ctrl: bool,
@@ -106,6 +112,7 @@ impl Shell {
             needs_redraw: true,
             cursor_icon: CursorIcon::Default,
             scene_editor: SceneEditor::new(),
+            hidden: false,
             edit_mods: Default::default(),
             ctrl: false,
             cursor_hidden: false,
@@ -147,6 +154,12 @@ impl Shell {
                     }
                 }
                 HostRequest::Redraw => self.needs_redraw = true,
+                HostRequest::Capture(mode) => self.start_capture(mode),
+                HostRequest::ShowWindow => self.show_window(),
+                HostRequest::Quit => {
+                    self.core.save_settings();
+                    self.exit_requested = true;
+                }
             }
         }
     }

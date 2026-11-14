@@ -12,6 +12,7 @@ use dockview_domain::sources::MonitorInfo;
 use dockview_domain::stats::Stats;
 
 use super::replay::{self, FakeMachine};
+use super::resident;
 use super::sources::{FakeSources, SharedSources};
 use super::system::{FakeStats, FakeSystem, RecordingHost, SharedHost};
 use crate::cli::Cli;
@@ -48,6 +49,9 @@ pub struct Rig {
     pub sources: SharedSources,
     /// What the application asked of the window.
     pub host: SharedHost,
+    /// The fake capture hotkey and tray icon: what they were asked, and what
+    /// the user does with them.
+    pub resident: resident::Shared,
     /// Every measurement written to the stats log.
     pub stats: Arc<Mutex<Vec<Stats>>>,
     /// Where the settings are saved.
@@ -121,6 +125,7 @@ impl RigBuilder {
             audio: self.audio,
         };
         let host = SharedHost::default();
+        let resident = resident::Shared::default();
         let stats = FakeStats::default();
         let stats_log = Arc::clone(&stats.0);
         let store = Arc::new(MemoryStore::new());
@@ -138,6 +143,8 @@ impl RigBuilder {
             system: Arc::clone(&system) as Arc<_>,
             stats_sink: Some(Box::new(stats)),
             host: Box::new(RecordingHost(Arc::clone(&host))),
+            capture_hotkeys: Box::new(resident::FakeHotkeys(Arc::clone(&resident))),
+            tray: Box::new(resident::FakeTrayHost(Arc::clone(&resident))),
         };
         let core = Core::new(
             Arc::new(FrameSlot::new()),
@@ -151,6 +158,7 @@ impl RigBuilder {
             replay,
             sources,
             host,
+            resident,
             stats: stats_log,
             store,
             store_fails,

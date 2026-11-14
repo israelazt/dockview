@@ -70,6 +70,10 @@ impl Shell {
     }
 
     pub(super) fn render(&mut self) {
+        // Hidden in the tray: nothing to draw.
+        if self.hidden {
+            return;
+        }
         self.refresh_host_info();
         let model = self.core.model();
         let rec = model.rec;

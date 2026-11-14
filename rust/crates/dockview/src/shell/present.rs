@@ -90,6 +90,11 @@ pub fn toast_for(event: AppEvent) -> (Key, ToastKind) {
         AppEvent::AudioLost => (Key::ToastAudioLost, ToastKind::Error),
         AppEvent::AudioBack => (Key::ToastAudioBack, ToastKind::Success),
         AppEvent::SettingsNotSaved => (Key::ToastSettingsNotSaved, ToastKind::Error),
+        AppEvent::CaptureHotkeyBusy => (Key::ToastHotkeyBusy, ToastKind::Error),
+        AppEvent::PrintScreenIsWindows => (Key::ToastPrintScreenWindows, ToastKind::Error),
+        AppEvent::ScreenshotSaved => (Key::ToastScreenshotSaved, ToastKind::Success),
+        AppEvent::ScreenshotCopied => (Key::ToastScreenshotCopied, ToastKind::Success),
+        AppEvent::ScreenshotFailed => (Key::ToastScreenshotFailed, ToastKind::Error),
     }
 }
 
@@ -139,6 +144,11 @@ mod tests {
             AudioLost,
             AudioBack,
             SettingsNotSaved,
+            CaptureHotkeyBusy,
+            PrintScreenIsWindows,
+            ScreenshotSaved,
+            ScreenshotCopied,
+            ScreenshotFailed,
         ] {
             let (key, _) = toast_for(event);
             assert!(!i18n::tr(i18n::Lang::En, key).is_empty(), "{event:?}");

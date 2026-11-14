@@ -12,6 +12,9 @@ use dockview_domain::ports::{ImageOutput, PickOptions, ScreenGrabber, SelectionO
 use dockview_domain::select::Mode;
 use dockview_domain::snap::{find_window, SnapJob, SnapTarget};
 
+/// What `take` answers when the user cancelled the selection.
+pub const CANCELLED: &str = "cancelled";
+
 /// The format of the file called `path`, by its extension.
 pub fn format_of(path: &Path) -> Result<ImageFormat, String> {
     path.file_name()
@@ -92,7 +95,7 @@ pub fn take(
     let image = match job.target {
         SnapTarget::Select(mode) => match choose(job, mode, lang, screen, overlay, own_pid)? {
             Some(image) => image,
-            None => return Ok("cancelled".into()),
+            None => return Ok(CANCELLED.into()),
         },
         _ => grab(job, screen, own_pid)?,
     };

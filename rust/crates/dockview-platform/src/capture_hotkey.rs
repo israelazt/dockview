@@ -201,6 +201,10 @@ impl CaptureHotkeys for PlatformCaptureHotkeys {
     fn register(&self, spec: &HotkeySpec) -> Result<Box<dyn CaptureTrigger>, String> {
         CaptureHotkey::register(*spec).map(|h| Box::new(h) as Box<dyn CaptureTrigger>)
     }
+
+    fn kept_by_system(&self, spec: &HotkeySpec) -> bool {
+        *spec == HotkeySpec::DEFAULT_CAPTURE && windows_owns_print_screen()
+    }
 }
 
 #[cfg(test)]

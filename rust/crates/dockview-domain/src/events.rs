@@ -47,6 +47,16 @@ pub enum AppEvent {
     AudioBack,
     /// The settings could not be written to disk.
     SettingsNotSaved,
+    /// The capture hotkey is already used by another program.
+    CaptureHotkeyBusy,
+    /// Windows keeps Print Screen for its own Snipping Tool.
+    PrintScreenIsWindows,
+    /// A screenshot was saved to a file.
+    ScreenshotSaved,
+    /// A screenshot was put on the clipboard (and not saved).
+    ScreenshotCopied,
+    /// A screenshot could not be taken or saved.
+    ScreenshotFailed,
 }
 
 /// What to tell the user when a recording (or one of its files) ends, if

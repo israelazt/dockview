@@ -13,6 +13,28 @@ use windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_EXTENDED_FRAME_
 
 use crate::{imagefile, snapshot, targets};
 
+/// The folder screenshots go to unless the user chose another: the Screenshots
+/// folder inside Pictures (the same one Windows' own tool uses).
+pub fn pictures_screenshots_folder() -> Option<std::path::PathBuf> {
+    use windows::Win32::System::Com::CoTaskMemFree;
+    use windows::Win32::UI::Shell::{FOLDERID_Pictures, SHGetKnownFolderPath, KF_FLAG_DEFAULT};
+    // SAFETY: the returned string is read and then freed as the API requires.
+    unsafe {
+        let path = SHGetKnownFolderPath(&FOLDERID_Pictures, KF_FLAG_DEFAULT, None).ok()?;
+        let text = path.to_string().ok();
+        CoTaskMemFree(Some(path.0.cast()));
+        text.map(|p| std::path::PathBuf::from(p).join("Screenshots"))
+    }
+}
+
+/// The local date and time, as `((year, month, day), (hour, minute, second))`.
+pub fn local_time() -> ((u16, u16, u16), (u16, u16, u16)) {
+    use windows::Win32::System::SystemInformation::GetLocalTime;
+    // SAFETY: a plain query with no arguments.
+    let t = unsafe { GetLocalTime() };
+    ((t.wYear, t.wMonth, t.wDay), (t.wHour, t.wMinute, t.wSecond))
+}
+
 /// The real screen of this PC.
 pub struct PlatformScreen;
 
@@ -88,6 +110,15 @@ mod tests {
             }
         }
         assert!(screen.window_rect(0x1234_5678).is_none());
+    }
+
+    #[test]
+    fn the_screenshots_folder_is_inside_pictures_and_the_clock_is_sane() {
+        let folder = pictures_screenshots_folder().expect("a Pictures folder");
+        assert!(folder.ends_with("Screenshots"), "{folder:?}");
+        let ((year, month, day), (hour, minute, second)) = local_time();
+        assert!(year >= 2024 && (1..=12).contains(&month) && (1..=31).contains(&day));
+        assert!(hour < 24 && minute < 60 && second < 61);
     }
 
     #[test]
