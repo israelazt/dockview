@@ -67,6 +67,128 @@ fn an_unusable_rename_changes_nothing() {
     assert_eq!(rig.core.model().scenes.names, ["One"]);
 }
 
+// -- Editing the layers of a scene -----------------------------------------
+
+use dockview_domain::scene::{NormRect, Scene, SourceRef};
+use dockview_domain::view::SceneAction;
+
+/// A rig whose active scene has a base and two layers over it.
+fn rig_editing() -> Rig {
+    let mut scene = Scene::with_base(
+        "Edit",
+        SourceRef::Window {
+            title: "Base".into(),
+        },
+    );
+    scene.add_layer(SourceRef::Window {
+        title: "One".into(),
+    });
+    scene.add_layer(SourceRef::Window {
+        title: "Two".into(),
+    });
+    Rig::builder()
+        .settings(AppSettings {
+            scenes: vec![scene],
+            active_scene: Some(0),
+            ..AppSettings::default()
+        })
+        .build()
+}
+
+fn layers_of(rig: &mut Rig) -> Vec<NormRect> {
+    rig.saved_soon().expect("saved").scenes[0]
+        .layers
+        .iter()
+        .map(|l| l.rect)
+        .collect()
+}
+
+#[test]
+fn a_dragged_layer_is_placed_saved_and_kept_inside_the_picture() {
+    let mut rig = rig_editing();
+    rig.core.apply(Action::Scene(SceneAction::SetLayerRect(
+        1,
+        [1000, 2000, 3000, 2500],
+    )));
+    let rects = layers_of(&mut rig);
+    assert_eq!(rects[1], NormRect::new(0.1, 0.2, 0.3, 0.25));
+    // Nonsense is pulled back inside.
+    rig.core.apply(Action::Scene(SceneAction::SetLayerRect(
+        2,
+        [-9000, 99000, 500, 90000],
+    )));
+    let rects = layers_of(&mut rig);
+    assert!(rects[2].x >= 0.0 && rects[2].y + rects[2].h <= 1.0 + 1e-6);
+    // The base can be placed too; a layer that does not exist is ignored.
+    rig.core.apply(Action::Scene(SceneAction::SetLayerRect(
+        0,
+        [0, 0, 5000, 5000],
+    )));
+    rig.core.apply(Action::Scene(SceneAction::SetLayerRect(
+        9,
+        [0, 0, 5000, 5000],
+    )));
+    assert_eq!(layers_of(&mut rig)[0], NormRect::new(0.0, 0.0, 0.5, 0.5));
+}
+
+#[test]
+fn layers_move_up_and_down_but_the_base_stays_at_the_bottom() {
+    let mut rig = rig_editing();
+    let names = |rig: &Rig| {
+        rig.core
+            .model()
+            .scenes
+            .layers
+            .iter()
+            .map(|l| l.name.clone())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(names(&rig), ["Base", "One", "Two"]);
+    rig.core
+        .apply(Action::Scene(SceneAction::SelectLayer(Some(1))));
+    rig.core.apply(Action::Scene(SceneAction::MoveLayer(1, 1)));
+    assert_eq!(names(&rig), ["Base", "Two", "One"]);
+    assert_eq!(
+        rig.core.model().scenes.selected,
+        Some(2),
+        "the selection follows"
+    );
+    // The top one cannot go higher, nor the base anywhere, nor under the base.
+    rig.core.apply(Action::Scene(SceneAction::MoveLayer(2, 1)));
+    rig.core.apply(Action::Scene(SceneAction::MoveLayer(0, 1)));
+    rig.core.apply(Action::Scene(SceneAction::MoveLayer(1, -1)));
+    assert_eq!(names(&rig), ["Base", "Two", "One"]);
+    rig.core.apply(Action::Scene(SceneAction::MoveLayer(2, -1)));
+    assert_eq!(names(&rig), ["Base", "One", "Two"]);
+}
+
+#[test]
+fn the_editor_is_a_switch_and_the_selection_only_counts_for_existing_layers() {
+    let mut rig = rig_editing();
+    assert!(!rig.core.model().scenes.editing);
+    rig.core.apply(Action::Scene(SceneAction::ToggleEdit));
+    assert!(rig.core.model().scenes.editing);
+    rig.core
+        .apply(Action::Scene(SceneAction::SelectLayer(Some(2))));
+    assert_eq!(rig.core.model().scenes.selected, Some(2));
+    rig.core
+        .apply(Action::Scene(SceneAction::SelectLayer(Some(7))));
+    assert_eq!(
+        rig.core.model().scenes.selected,
+        None,
+        "there is no layer 7"
+    );
+    rig.core.apply(Action::Scene(SceneAction::ToggleEdit));
+    assert!(!rig.core.model().scenes.editing);
+}
+
+#[test]
+fn the_editor_is_off_when_no_scene_is_in_use() {
+    let mut rig = Rig::new();
+    rig.core.apply(Action::Scene(SceneAction::ToggleEdit));
+    assert!(!rig.core.model().scenes.editing);
+}
+
 // -- Studio mode ---------------------------------------------------------
 
 #[test]

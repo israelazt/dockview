@@ -49,6 +49,8 @@ impl Core {
                 system_appearance: Appearance::Dark,
                 system_lang,
                 stats_open: show_stats,
+                layer_selected: None,
+                scene_editing: false,
             },
             measures: Measurements {
                 stats: Stats::default(),

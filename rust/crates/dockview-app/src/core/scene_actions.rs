@@ -7,6 +7,7 @@ use std::sync::Arc;
 use dockview_domain::device_names;
 use dockview_domain::events::AppEvent;
 use dockview_domain::frame::FrameSlot;
+use dockview_domain::layer_edit;
 use dockview_domain::scene::{clean_scene_name, Scene, SourceRef, MAX_SCENE_LAYERS};
 
 use dockview_domain::i18n;
@@ -59,6 +60,7 @@ impl Core {
                     .map(|l| LayerView {
                         name: self.source_label(&l.source, lang),
                         visible: l.visible,
+                        rect: l.rect,
                     })
                     .collect()
             })
@@ -72,6 +74,8 @@ impl Core {
                 .collect(),
             active,
             can_add: active.is_some() && layers.len() < MAX_SCENE_LAYERS,
+            selected: self.view.layer_selected.filter(|i| *i < layers.len()),
+            editing: self.view.scene_editing && active.is_some(),
             layers,
         }
     }
@@ -85,6 +89,16 @@ impl Core {
             SceneAction::Delete(index) => self.delete_scene(index),
             SceneAction::ToggleLayer(index) => self.toggle_layer(index),
             SceneAction::RemoveLayer(index) => self.remove_layer(index),
+            SceneAction::SetLayerRect(index, units) => self.set_layer_rect(index, units),
+            SceneAction::MoveLayer(index, delta) => self.move_layer(index, delta),
+            SceneAction::SelectLayer(index) => {
+                self.view.layer_selected = index;
+                return;
+            }
+            SceneAction::ToggleEdit => {
+                self.view.scene_editing = !self.view.scene_editing;
+                return;
+            }
             SceneAction::AddCapture(i) => {
                 let source = self
                     .sources
@@ -169,6 +183,43 @@ impl Core {
         layer.visible = !layer.visible;
         let visible = layer.visible;
         self.scenes.set_layer_visible(index, visible);
+        self.sync_compositor();
+    }
+
+    /// Puts a layer where the editor dragged it.
+    fn set_layer_rect(&mut self, index: usize, units: [i32; 4]) {
+        let rect = layer_edit::from_units(units);
+        let Some(layer) = self
+            .active_scene_mut()
+            .and_then(|scene| scene.layers.get_mut(index))
+        else {
+            return;
+        };
+        if layer.rect == rect {
+            return;
+        }
+        layer.rect = rect;
+        self.scenes.set_layer_rect(index, rect);
+        self.sync_compositor();
+    }
+
+    /// Moves an overlay one step in the drawing order; the selection follows it.
+    fn move_layer(&mut self, index: usize, delta: i32) {
+        let Some(scene) = self.active_scene_mut() else {
+            return;
+        };
+        let target = index as i64 + i64::from(delta.signum());
+        if index == 0 || target < 1 || target >= scene.layers.len() as i64 {
+            return;
+        }
+        let target = target as usize;
+        scene.layers.swap(index, target);
+        self.scenes.swap_overlays(index, target);
+        if self.view.layer_selected == Some(index) {
+            self.view.layer_selected = Some(target);
+        } else if self.view.layer_selected == Some(target) {
+            self.view.layer_selected = Some(index);
+        }
         self.sync_compositor();
     }
 

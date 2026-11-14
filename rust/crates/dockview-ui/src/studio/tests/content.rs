@@ -515,6 +515,7 @@ fn layer(name: &str, visible: bool) -> LayerView {
     LayerView {
         name: name.into(),
         visible,
+        rect: dockview_domain::scene::NormRect::FULL,
     }
 }
 
@@ -534,6 +535,7 @@ fn two_scenes_second_in_use() -> ScenesView {
         active: Some(1),
         layers: vec![layer("UGREEN 25173", true), layer("Screen 1", false)],
         can_add: true,
+        ..ScenesView::default()
     }
 }
 
@@ -723,6 +725,7 @@ fn without_a_scene_in_use_there_are_no_layers_and_nothing_to_delete() {
         active: None,
         layers: vec![],
         can_add: false,
+        ..ScenesView::default()
     });
     assert_eq!(
         rig.panel.items,

@@ -5,6 +5,7 @@
 use crate::settings::{LangMode, RecordingQuality, RenderPreset, VideoModePref};
 
 use crate::i18n::Lang;
+use crate::scene::NormRect;
 use crate::theme::{Theme, ThemeMode};
 
 /// How healthy the video source is, for the status dot.
@@ -249,6 +250,16 @@ pub enum SceneAction {
     AddCapture(usize),
     AddMonitor(usize),
     AddWindow(usize),
+    /// Place the layer at this position: `[x, y, width, height]` in
+    /// ten-thousandths of the picture (see `layer_edit::to_units`).
+    SetLayerRect(usize, [i32; 4]),
+    /// Move the layer one step up (+1) or down (-1) in the drawing order. The
+    /// base always stays at the bottom.
+    MoveLayer(usize, i32),
+    /// Choose the layer the editor works on (or none).
+    SelectLayer(Option<usize>),
+    /// Turn the layer editor over the picture on or off.
+    ToggleEdit,
 }
 
 /// One layer as the popover shows it.
@@ -256,6 +267,7 @@ pub enum SceneAction {
 pub struct LayerView {
     pub name: String,
     pub visible: bool,
+    pub rect: NormRect,
 }
 
 /// The scenes and the layers of the one in use.
@@ -267,6 +279,10 @@ pub struct ScenesView {
     pub layers: Vec<LayerView>,
     /// Whether another layer fits in the active scene.
     pub can_add: bool,
+    /// The layer the editor works on.
+    pub selected: Option<usize>,
+    /// The editor is on, over the picture.
+    pub editing: bool,
 }
 
 #[cfg(test)]

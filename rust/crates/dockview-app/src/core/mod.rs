@@ -128,6 +128,10 @@ struct ViewState {
     system_appearance: Appearance,
     system_lang: Lang,
     stats_open: bool,
+    /// The layer of the active scene the editor works on.
+    layer_selected: Option<usize>,
+    /// The layer editor is on, over the picture.
+    scene_editing: bool,
 }
 
 /// What is measured once a second and acted on (see `stats`).

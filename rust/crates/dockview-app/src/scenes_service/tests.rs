@@ -222,6 +222,29 @@ fn layers_are_shown_hidden_and_removed_with_the_numbering_kept() {
 }
 
 #[test]
+fn a_layer_is_placed_and_two_overlays_swap_their_drawing_order() {
+    let world = World::new();
+    let mut service = ScenesService::new();
+    running_with_base(&mut service);
+    for (index, name) in [(1, "a"), (2, "b"), (3, "c")] {
+        service.overlays.push(world.screen_overlay(index, name));
+    }
+    let r = NormRect::new(0.1, 0.2, 0.3, 0.4);
+    service.set_layer_rect(0, r);
+    service.set_layer_rect(2, r);
+    assert_eq!(service.base.as_ref().unwrap().rect, r);
+    assert_eq!(service.overlays[1].layer.rect, r);
+    assert_ne!(service.overlays[0].layer.rect, r);
+
+    // Swapping 1 and 3 makes the overlay that was third the first one drawn.
+    let third = service.overlays[2].layer.source.clone();
+    service.swap_overlays(1, 3);
+    assert_eq!(service.overlays[0].layer.source, third);
+    let indexes: Vec<_> = service.overlays.iter().map(|o| o.index).collect();
+    assert_eq!(indexes, [1, 2, 3], "still in drawing order");
+}
+
+#[test]
 fn a_screen_overlay_that_ended_is_taken_off_and_a_card_that_dropped_is_reopened() {
     let world = World::new();
     let mut service = ScenesService::new();

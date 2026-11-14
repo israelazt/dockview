@@ -210,6 +210,30 @@ impl ScenesService {
         }
     }
 
+    /// Places the layer at `index` (0 is the base) in `rect`.
+    pub fn set_layer_rect(&mut self, index: usize, rect: NormRect) {
+        if index == 0 {
+            if let Some(base) = self.base.as_mut() {
+                base.rect = rect;
+            }
+        } else if let Some(overlay) = self.overlays.iter_mut().find(|o| o.index == index) {
+            overlay.layer.rect = rect;
+        }
+    }
+
+    /// Swaps the drawing order of the overlays at positions `a` and `b`.
+    pub fn swap_overlays(&mut self, a: usize, b: usize) {
+        for overlay in &mut self.overlays {
+            if overlay.index == a {
+                overlay.index = b;
+            } else if overlay.index == b {
+                overlay.index = a;
+            }
+        }
+        // `layers` draws them in this order.
+        self.overlays.sort_by_key(|o| o.index);
+    }
+
     /// Drops the overlay at `index` and renumbers the ones after it.
     pub fn remove_overlay(&mut self, index: usize) {
         self.overlays.retain(|o| o.index != index);
