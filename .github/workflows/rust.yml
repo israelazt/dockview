@@ -35,3 +35,27 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Tests
         run: cargo test --workspace
+
+  # The layers that must stay portable (Linux is a requirement of 1.0): the
+  # domain, the application and the interface build and pass their tests on
+  # Linux, and the platform crate builds there (with only its portable parts).
+  # The program itself and the Windows adapters are not built here.
+  linux:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: rust
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+      - name: Clippy (portable layers)
+        run: >
+          cargo clippy -p dockview-domain -p dockview-app -p dockview-ui --all-targets -- -D warnings
+          && cargo clippy -p dockview-platform --lib --tests -- -D warnings
+      - name: Tests (portable layers)
+        run: cargo test -p dockview-domain -p dockview-app -p dockview-ui -p dockview-platform --lib --tests

@@ -10,6 +10,7 @@ pub mod capture;
 pub mod capture_hotkey;
 #[cfg(windows)]
 pub mod clips;
+#[cfg(windows)]
 pub mod compose;
 #[cfg(windows)]
 pub mod console;
@@ -17,6 +18,7 @@ pub mod console;
 pub mod device_watch;
 #[cfg(windows)]
 pub mod encode;
+#[cfg(windows)]
 pub mod gpu;
 #[cfg(windows)]
 pub mod hotkey;
@@ -58,7 +60,7 @@ pub mod system_lang;
 pub mod tap_capture;
 #[cfg(windows)]
 pub mod targets;
-#[cfg(test)]
+#[cfg(all(test, windows))]
 mod test_support;
 pub mod testsrc;
 #[cfg(windows)]
