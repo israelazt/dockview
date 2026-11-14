@@ -205,6 +205,43 @@ fn the_editor_is_off_when_no_scene_is_in_use() {
     assert!(!rig.core.model().scenes.editing);
 }
 
+// -- Scene hotkeys ---------------------------------------------------------
+
+fn press_scene_hotkey(rig: &mut Rig, slot: usize) {
+    rig.replay.lock().unwrap().scene_hotkey = Some(slot);
+    rig.advance(std::time::Duration::from_millis(50));
+}
+
+#[test]
+fn the_scene_hotkeys_pick_a_scene_the_plain_source_or_nothing() {
+    let mut rig = rig_with_scenes(&["One", "Two"]);
+    assert_eq!(rig.core.model().scenes.active, None);
+    press_scene_hotkey(&mut rig, 2);
+    assert_eq!(
+        rig.core.model().scenes.active,
+        Some(1),
+        "F2 is the second scene"
+    );
+    press_scene_hotkey(&mut rig, 1);
+    assert_eq!(rig.core.model().scenes.active, Some(0));
+    // A slot with no scene behind it does nothing; pressing the same one again
+    // keeps it.
+    press_scene_hotkey(&mut rig, 7);
+    assert_eq!(rig.core.model().scenes.active, Some(0));
+    press_scene_hotkey(&mut rig, 1);
+    assert_eq!(rig.core.model().scenes.active, Some(0));
+    // F12 goes back to the plain source.
+    press_scene_hotkey(&mut rig, 0);
+    assert_eq!(rig.core.model().scenes.active, None);
+}
+
+#[test]
+fn a_scene_hotkey_is_a_scene_change_and_gets_saved() {
+    let mut rig = rig_with_scenes(&["One", "Two"]);
+    press_scene_hotkey(&mut rig, 2);
+    assert_eq!(rig.saved_soon().expect("saved").active_scene, Some(1));
+}
+
 // -- Studio mode ---------------------------------------------------------
 
 #[test]

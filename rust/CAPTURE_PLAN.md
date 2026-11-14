@@ -204,7 +204,7 @@ Lo que se quiere: componer **varias fuentes a la vez** (por ejemplo el juego a p
 | E-3b ✅ | Botón y popover de escenas: activar, crear, borrar y añadir una fuente en una esquina (módulo `ui/scenes.rs`) | Clics reales y capturas |
 | E-3c | Editor libre sobre la vista previa: mover, redimensionar y panel de capas (módulo `ui/scene_editor.rs`). **Diseño y tareas más abajo (E-3c-1..5)** | Clics reales y capturas |
 | E-3d ✅ (parcial) | Pulido y pruebas con clics reales | Grabar una escena editada. Hecho con dos pantallas; falta repetirlo con la capturadora y lo de la lista de pendientes |
-| E-4 | Cambio de escena con tecla global y transición suave opcional | Pruebas |
+| E-4 | Cambio de escena con tecla global y transición suave opcional | **Tecla global hecha (E-4a)**; falta la opción de corte sin transición (E-4b). Pruebas |
 
 ### Riesgos
 - Más GPU y RAM con dos fuentes más el compositor, en una GTX 1660 Ti con el juego abierto: se mide en E-1 antes de seguir.
@@ -258,6 +258,13 @@ Con una escena activa, un botón **Editar** en la sección Escenas del panel (y 
 - **Prueba con la app real, ratón y atajo globales** (`APPDATA` apuntando a una carpeta temporal para no tocar los ajustes del usuario, con una escena de dos pantallas): `--edit-layers`, un arrastre con el ratón de la capa de la pantalla 2 de (0,60; 0,55) a (0,15; 0,15), grabación con Ctrl+Alt+R durante 8 s. Los ajustes guardaron el rectángulo nuevo y un fotograma del MP4 (34 MB) muestra la pantalla 2 en esa esquina, sobre la pantalla 1 de base: **lo editado se graba tal cual**.
 - **Trampa para quien repita la prueba:** un `settings.json` escrito a mano con un JSON inválido se sustituye por los valores por defecto sin avisar (el log no dice nada). Conviene generarlo con `ConvertTo-Json`; las barras invertidas del nombre del monitor se escapan mal a mano.
 - **Pendiente de E-3d:** repetir con la capturadora y un juego abierto (coste de GPU/CPU con el compositor y el editor); flechas del teclado para empujar una capa; deshacer; duración y curva del morph configurables; la verificación con clics del morph entre escenas (arriba).
+
+### Resultados de E-4a — atajos globales de escena (2026-11-14)
+
+- **Ctrl+Alt+F1 … F9** activan las escenas 1 a 9 y **Ctrl+Alt+F12** vuelve a la fuente simple. Teclas de función a propósito: con Ctrl+Alt (que es AltGr en muchos teclados) los dígitos robarían caracteres como `@`, `|` o `#` al escribir. Si otro programa tiene alguna, solo esa se queda sin atajo y el resto funciona.
+- **Dónde está:** `ReplayHotkeys::take_scene_pressed` (puerto), `hotkey.rs` (registro en el mismo hilo que Ctrl+Alt+S/R), `scene::scene_for_slot` (la elección, pura) y `Core::poll_replay` (aplica `SceneAction::Activate`, así que se guarda y hace el morph como un clic). La sección Escenas muestra la tecla de cada fila (F12, F1, F2…).
+- **Verificado:** 3 tests del núcleo con el mundo falso y una prueba real con la app (APPDATA temporal, ventana en el otro monitor): Ctrl+Alt+F2 cambió `activeScene` de 0 a 1 en los ajustes guardados.
+- **Pendiente (E-4b):** la opción «Corte» frente a la transición suave.
 
 ### Resultados de E-3a
 

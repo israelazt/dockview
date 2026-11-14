@@ -14,7 +14,7 @@ use crate::{Rect, TextStyle, Ui};
 
 /// Size of the small icon buttons inside a layer's row.
 const ICON_BUTTON: f32 = 26.0;
-const TAG: TextStyle = TextStyle::new(11.5, Weight::Medium);
+pub(super) const TAG: TextStyle = TextStyle::new(11.5, Weight::Medium);
 const ICON_EYE: char = '\u{e0ba}';
 const ICON_EYE_OFF: char = '\u{e0bb}';
 const ICON_CLOSE: char = '\u{e1b2}';

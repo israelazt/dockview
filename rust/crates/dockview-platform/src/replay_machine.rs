@@ -159,4 +159,8 @@ impl ReplayHotkeys for Hotkey {
     fn take_record_pressed(&self) -> bool {
         Hotkey::take_record_pressed(self)
     }
+
+    fn take_scene_pressed(&self) -> Option<usize> {
+        Hotkey::take_scene_pressed(self)
+    }
 }

@@ -60,6 +60,9 @@ pub trait ReplayHotkeys {
     fn take_save_pressed(&self) -> bool;
     /// Whether "record" was pressed since the last call.
     fn take_record_pressed(&self) -> bool;
+    /// The slot of the scene hotkey pressed since the last call: 0 is the plain
+    /// source, 1 to 9 the scenes (`scene::scene_for_slot` says which).
+    fn take_scene_pressed(&self) -> Option<usize>;
 }
 
 /// Everything the replay needs from the machine.

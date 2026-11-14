@@ -31,6 +31,8 @@ pub struct World {
     pub mic_cleared: u32,
     pub mic_level: f32,
     pub hotkeys: (bool, bool),
+    /// The scene slot whose hotkey was pressed.
+    pub scene_hotkey: Option<usize>,
     pub free_bytes: Option<u64>,
     pub folder_ok: bool,
     pub shown: Vec<(Option<PathBuf>, PathBuf)>,
@@ -168,5 +170,8 @@ impl ReplayHotkeys for FakeHotkeys {
     }
     fn take_record_pressed(&self) -> bool {
         std::mem::take(&mut self.0.lock().unwrap().hotkeys.1)
+    }
+    fn take_scene_pressed(&self) -> Option<usize> {
+        self.0.lock().unwrap().scene_hotkey.take()
     }
 }

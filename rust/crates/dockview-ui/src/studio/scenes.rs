@@ -7,6 +7,7 @@ use dockview_domain::i18n::{tr, Key, Lang};
 use dockview_domain::theme::{Color, Theme};
 use dockview_domain::view::{Action, Model, SceneAction};
 
+use super::scene_layers::TAG;
 use super::widgets::{list_height, GAP, LABEL_H, ROW_H};
 use super::{intersect, PanelHit, StudioPanel, PAD};
 use crate::fit::fit_text;
@@ -70,6 +71,7 @@ impl StudioPanel {
         let s = &m.scenes;
 
         let selected = Some(s.active.map_or(0, |i| i + 1));
+        self.hotkey_hints(ui, t, s.names.len(), (x, y, w));
         y += self.list(
             ui,
             t,
@@ -159,6 +161,22 @@ impl StudioPanel {
             y,
             w,
         );
+    }
+
+    /// The global hotkey of each row of the list, at its right: Ctrl+Alt+F12 for
+    /// the plain source, Ctrl+Alt+F1 to F9 for the scenes (the first nine).
+    fn hotkey_hints(&self, ui: &mut Ui, t: &Theme, scenes: usize, (x, y, w): (f32, f32, f32)) {
+        let line_h = ui.measure("Ag", TAG).1;
+        for row in 0..=scenes.min(MAX_SCENES).min(9) {
+            let label = if row == 0 {
+                "F12".to_owned()
+            } else {
+                format!("F{row}")
+            };
+            let text_w = ui.measure(&label, TAG).0;
+            let top = y + row as f32 * ROW_H + (ROW_H - line_h) / 2.0;
+            ui.text(&label, x + w - 36.0 - text_w, top, TAG, t.text_dim);
+        }
     }
 
     /// The switch of the layer editor over the picture: lit while it is on.

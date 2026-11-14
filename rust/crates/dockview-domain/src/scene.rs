@@ -118,6 +118,17 @@ pub fn clean_scene_name(typed: &str) -> Option<String> {
     (!name.is_empty()).then_some(name)
 }
 
+/// The scene a scene hotkey asks for, given how many scenes there are. Slot 0
+/// is the plain source (`Some(None)`), slot `n` the `n`-th scene (`Some(Some(n - 1))`);
+/// a slot with no scene behind it asks for nothing.
+pub fn scene_for_slot(slot: usize, scenes: usize) -> Option<Option<usize>> {
+    match slot {
+        0 => Some(None),
+        n if n <= scenes => Some(Some(n - 1)),
+        _ => None,
+    }
+}
+
 /// A named arrangement of layers.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -185,6 +196,15 @@ impl Scene {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_hotkey_slot_picks_the_plain_source_a_scene_or_nothing() {
+        assert_eq!(scene_for_slot(0, 0), Some(None));
+        assert_eq!(scene_for_slot(1, 3), Some(Some(0)));
+        assert_eq!(scene_for_slot(3, 3), Some(Some(2)));
+        assert_eq!(scene_for_slot(4, 3), None);
+        assert_eq!(scene_for_slot(1, 0), None);
+    }
 
     #[test]
     fn a_typed_name_is_trimmed_cut_and_never_empty() {

@@ -168,6 +168,11 @@ impl ReplayService {
         })
     }
 
+    /// The scene slot whose hotkey was pressed since the last call.
+    pub fn take_scene_hotkey(&self) -> Option<usize> {
+        self.hotkeys.as_ref().and_then(|h| h.take_scene_pressed())
+    }
+
     // -- the buffer -----------------------------------------------------
 
     pub fn is_on(&self) -> bool {

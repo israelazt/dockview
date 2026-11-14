@@ -2,6 +2,8 @@
 //! feeds the settings to the `ReplayService` and shows what it reports.
 
 use super::*;
+use dockview_domain::scene::scene_for_slot;
+use dockview_domain::view::SceneAction;
 
 impl Core {
     /// Registers the hotkey and starts the replay buffer if it is enabled.
@@ -218,6 +220,12 @@ impl Core {
         }
         if record {
             self.toggle_record();
+        }
+        if let Some(slot) = self.replay.take_scene_hotkey() {
+            let scenes = self.settings.scenes.len();
+            if let Some(scene) = scene_for_slot(slot, scenes) {
+                self.apply_scene_action(SceneAction::Activate(scene));
+            }
         }
         let folder = self.clips_folder();
         self.replay.poll(&folder);
