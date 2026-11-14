@@ -62,6 +62,8 @@ pub mod targets;
 mod test_support;
 pub mod testsrc;
 #[cfg(windows)]
+pub mod tray;
+#[cfg(windows)]
 pub mod ui_gpu;
 pub mod worker;
 

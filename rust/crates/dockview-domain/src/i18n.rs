@@ -189,6 +189,10 @@ strings! {
     TipScenes => "Scenes: arrange several sources in one picture", "Escenas: combina varias fuentes en una sola imagen";
     TipSceneDelete => "Delete this scene", "Borrar esta escena";
     SceneEditLayers => "Edit layers on the picture", "Editar capas en la imagen";
+    TrayTip => "Dockview", "Dockview";
+    TrayNewCapture => "New screenshot", "Nueva captura";
+    TrayOpen => "Open Dockview", "Abrir Dockview";
+    TrayQuit => "Quit", "Salir";
     SnapModeRect => "Rectangle", "Rectángulo";
     SnapModeWindow => "Window", "Ventana";
     SnapModeFull => "Full screen", "Pantalla completa";

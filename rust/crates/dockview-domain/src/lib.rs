@@ -37,4 +37,5 @@ pub mod stats;
 pub mod stream;
 pub mod theme;
 pub mod transition;
+pub mod tray;
 pub mod view;
