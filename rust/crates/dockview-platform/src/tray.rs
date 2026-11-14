@@ -14,7 +14,8 @@ use windows::core::{w, PCWSTR};
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, POINT, WPARAM};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::Shell::{
-    Shell_NotifyIconW, NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NIM_DELETE, NOTIFYICONDATAW,
+    Shell_NotifyIconW, NIF_ICON, NIF_INFO, NIF_MESSAGE, NIF_TIP, NIIF_LARGE_ICON, NIIF_USER,
+    NIM_ADD, NIM_DELETE, NIM_MODIFY, NOTIFYICONDATAW,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     AppendMenuW, CreatePopupMenu, CreateWindowExW, DefWindowProcW, DestroyMenu, DestroyWindow,
@@ -47,9 +48,50 @@ pub struct PlatformTray {
     thread: Option<JoinHandle<()>>,
 }
 
+/// What the shell sends us when the user clicks a balloon (`WM_USER + 5`).
+const NIN_BALLOONUSERCLICK: u32 = 0x0405;
+
+/// A notification balloon from the icon: `title` and `text` are cut to what
+/// Windows allows (63 and 255 characters).
+fn balloon_data(hwnd: HWND, title: &str, text: &str) -> NOTIFYICONDATAW {
+    let mut data = NOTIFYICONDATAW {
+        cbSize: std::mem::size_of::<NOTIFYICONDATAW>() as u32,
+        hWnd: hwnd,
+        uID: ICON_ID,
+        uFlags: NIF_INFO,
+        // The program's own icon, large, instead of the generic "i".
+        dwInfoFlags: NIIF_USER | NIIF_LARGE_ICON,
+        hBalloonIcon: app_icon(),
+        ..Default::default()
+    };
+    for (slot, unit) in data
+        .szInfoTitle
+        .iter_mut()
+        .zip(title.encode_utf16().take(63))
+    {
+        *slot = unit;
+    }
+    for (slot, unit) in data.szInfo.iter_mut().zip(text.encode_utf16().take(255)) {
+        *slot = unit;
+    }
+    data
+}
+
 impl Tray for PlatformTray {
     fn poll(&self) -> Vec<TrayEvent> {
         std::mem::take(&mut *self.events.lock().unwrap_or_else(|e| e.into_inner()))
+    }
+
+    fn notify(&self, title: &str, text: &str) {
+        let hwnd = self.hwnd.load(Ordering::Relaxed);
+        if hwnd == 0 {
+            return;
+        }
+        // SAFETY: modifies our own icon, owned by the tray window of that handle.
+        unsafe {
+            let data = balloon_data(HWND(hwnd as *mut c_void), title, text);
+            let _ = Shell_NotifyIconW(NIM_MODIFY, &data);
+        }
     }
 }
 
@@ -278,6 +320,7 @@ unsafe extern "system" fn window_proc(
             // The low word of lparam is what the mouse did on the icon.
             match (lparam.0 & 0xFFFF) as u32 {
                 WM_LBUTTONUP => push(TrayEvent::Open),
+                NIN_BALLOONUSERCLICK => push(TrayEvent::NotificationClicked),
                 WM_RBUTTONUP | WM_CONTEXTMENU => {
                     // SAFETY: shows a menu on this thread, which owns the window.
                     if let Some(event) = unsafe { show_menu(hwnd, &state.labels) } {
@@ -330,6 +373,18 @@ mod tests {
         if let Ok(again) = host.show(&TrayLabels::new(Lang::Es)) {
             assert!(again.poll().is_empty());
         }
+    }
+
+    #[test]
+    fn a_balloon_is_cut_to_what_windows_allows() {
+        let long = "x".repeat(400);
+        let data = balloon_data(HWND::default(), &long, &long);
+        assert_eq!(data.szInfoTitle[62], u16::from(b'x'));
+        assert_eq!(data.szInfoTitle[63], 0, "the title ends with a zero");
+        assert_eq!(data.szInfo[254], u16::from(b'x'));
+        assert_eq!(data.szInfo[255], 0, "the text ends with a zero");
+        let short = balloon_data(HWND::default(), "Hi", "there");
+        assert_eq!(&short.szInfoTitle[..3], &[72, 105, 0]);
     }
 
     #[test]

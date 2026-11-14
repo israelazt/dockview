@@ -21,11 +21,7 @@ impl Shell {
             Ok(done) if done == dockview_app::snap_service::CANCELLED => {}
             Ok(done) => {
                 dockview_domain::log_info!("screenshot: {done}");
-                self.core.report(if job.out.is_some() {
-                    AppEvent::ScreenshotSaved
-                } else {
-                    AppEvent::ScreenshotCopied
-                });
+                self.core.screenshot_taken(job.out.clone(), job.copy);
             }
             Err(e) => {
                 dockview_domain::log_error!("screenshot: {e}");
@@ -43,6 +39,7 @@ impl Shell {
             window.focus_window();
         }
         self.hidden = false;
+        self.core.set_window_hidden(false);
         self.needs_redraw = true;
     }
 
@@ -52,5 +49,6 @@ impl Shell {
             window.set_visible(false);
         }
         self.hidden = true;
+        self.core.set_window_hidden(true);
     }
 }

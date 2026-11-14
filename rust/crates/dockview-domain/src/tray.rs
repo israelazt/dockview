@@ -13,6 +13,8 @@ pub enum TrayEvent {
     Capture(Mode),
     /// Quit the program.
     Quit,
+    /// The user clicked the notification the icon showed.
+    NotificationClicked,
 }
 
 /// One entry of the menu.
@@ -58,6 +60,9 @@ impl TrayLabels {
 pub trait Tray {
     /// What the user did since the last call, oldest first.
     fn poll(&self) -> Vec<TrayEvent>;
+    /// Shows a short notification from the icon (a click on it is reported as
+    /// [`TrayEvent::NotificationClicked`]).
+    fn notify(&self, title: &str, text: &str);
 }
 
 /// Shows the icon.

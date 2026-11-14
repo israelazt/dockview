@@ -163,6 +163,59 @@ fn a_tray_that_cannot_be_shown_is_not_retried_every_tick_and_closing_then_quits(
 }
 
 #[test]
+fn with_the_window_hidden_a_screenshot_is_told_by_the_icon_and_a_click_shows_the_file() {
+    let mut rig = Rig::new();
+    rig.core.take_events();
+    rig.core.set_window_hidden(true);
+    let file = std::path::PathBuf::from("Pictures/Screenshots/Screenshot 2026-11-14 163012.png");
+    rig.core.screenshot_taken(Some(file.clone()), true);
+    assert!(
+        rig.core.take_events().is_empty(),
+        "no toast: nobody sees it"
+    );
+    {
+        let world = rig.resident.lock().unwrap();
+        assert_eq!(
+            world.notifications,
+            [(
+                "Saved and copied".to_string(),
+                "Screenshot 2026-11-14 163012.png".to_string()
+            )]
+        );
+    }
+    // Clicking the notification shows the file.
+    rig.resident.lock().unwrap().tray_events = vec![TrayEvent::NotificationClicked];
+    tick(&mut rig);
+    assert_eq!(rig.host.lock().unwrap().revealed, [file]);
+}
+
+#[test]
+fn with_the_window_showing_it_is_a_toast_and_not_a_notification() {
+    let mut rig = Rig::new();
+    rig.core.take_events();
+    rig.core.screenshot_taken(Some("a.png".into()), false);
+    assert_eq!(rig.core.take_events(), [AppEvent::ScreenshotSaved]);
+    rig.core.screenshot_taken(None, true);
+    assert_eq!(rig.core.take_events(), [AppEvent::ScreenshotCopied]);
+    assert!(rig.resident.lock().unwrap().notifications.is_empty());
+}
+
+#[test]
+fn a_copy_only_screenshot_has_no_file_to_show() {
+    let mut rig = Rig::new();
+    rig.core.set_window_hidden(true);
+    rig.core.screenshot_taken(None, true);
+    {
+        let world = rig.resident.lock().unwrap();
+        assert_eq!(world.notifications.len(), 1);
+        assert_eq!(world.notifications[0].0, "Screenshot copied");
+    }
+    rig.resident.lock().unwrap().tray_events = vec![TrayEvent::NotificationClicked];
+    tick(&mut rig);
+    assert!(rig.host.lock().unwrap().revealed.is_empty());
+}
+
+#[test]
 fn an_interface_preview_touches_no_hotkey_and_no_tray() {
     let rig = Rig::builder()
         .cli(Cli {

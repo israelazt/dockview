@@ -21,6 +21,8 @@ pub enum ResidentEvent {
     OpenWindow,
     /// End the program.
     Quit,
+    /// The user clicked the notification of the last screenshot.
+    NotificationClicked,
 }
 
 pub struct ResidentService {
@@ -101,6 +103,13 @@ impl ResidentService {
         events
     }
 
+    /// Shows a notification from the tray icon (when there is one).
+    pub fn notify(&self, title: &str, text: &str) {
+        if let Some(tray) = &self.tray {
+            tray.notify(title, text);
+        }
+    }
+
     /// What the user did since the last call. The hotkey starts a capture in
     /// `mode`; the tray menu chooses its own.
     pub fn poll(&mut self, mode: Mode) -> Vec<ResidentEvent> {
@@ -113,6 +122,7 @@ impl ResidentService {
                 TrayEvent::Open => ResidentEvent::OpenWindow,
                 TrayEvent::Capture(m) => ResidentEvent::Capture(m),
                 TrayEvent::Quit => ResidentEvent::Quit,
+                TrayEvent::NotificationClicked => ResidentEvent::NotificationClicked,
             }));
         }
         events

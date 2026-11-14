@@ -15,10 +15,8 @@ fn main() {
         .set_icon("assets/icon.ico")
         .set_manifest_file("assets/dockview.manifest")
         .set("ProductName", "Dockview")
-        .set(
-            "FileDescription",
-            "Low-latency viewer for UVC capture cards",
-        )
+        // The name Windows shows for the program (notifications, Task Manager).
+        .set("FileDescription", "Dockview")
         .set("LegalCopyright", "MIT License");
     // Without the Windows SDK's resource compiler the program still builds,
     // only with no icon: a contributor should not be blocked by that.

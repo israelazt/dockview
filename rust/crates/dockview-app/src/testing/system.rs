@@ -60,6 +60,8 @@ pub struct HostWorld {
     pub captures: Vec<dockview_domain::select::Mode>,
     /// How many times it asked for the window to be shown.
     pub shown: u32,
+    /// Files it asked to be shown in the file manager.
+    pub revealed: Vec<PathBuf>,
     /// How many times it asked to quit.
     pub quits: u32,
 }
@@ -77,6 +79,7 @@ impl Default for HostWorld {
             gpu_ms: Some(1.0),
             captures: Vec::new(),
             shown: 0,
+            revealed: Vec::new(),
             quits: 0,
         }
     }
@@ -117,6 +120,9 @@ impl Host for RecordingHost {
     }
     fn show_window(&self) {
         self.0.lock().unwrap().shown += 1;
+    }
+    fn reveal_file(&self, path: &Path) {
+        self.0.lock().unwrap().revealed.push(path.to_owned());
     }
     fn quit(&self) {
         self.0.lock().unwrap().quits += 1;

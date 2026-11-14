@@ -1,5 +1,6 @@
 //! The app's side of living in the tray: the capture hotkey and the icon.
 
+use dockview_domain::events::AppEvent;
 use dockview_domain::i18n::Lang;
 
 use super::*;
@@ -45,8 +46,57 @@ impl Core {
             match event {
                 ResidentEvent::Capture(mode) => self.host.start_capture(mode),
                 ResidentEvent::OpenWindow => self.host.show_window(),
+                ResidentEvent::NotificationClicked => self.reveal_last_screenshot(),
                 ResidentEvent::Quit => self.host.quit(),
             }
+        }
+    }
+}
+
+impl Core {
+    /// A screenshot was taken: `saved` is the file it went to (if it was saved)
+    /// and `copied` whether it is on the clipboard. The user is told with the
+    /// toast of the window, or, with the window hidden in the tray, with a
+    /// notification from the icon (a click on it shows the file).
+    pub fn screenshot_taken(&mut self, saved: Option<std::path::PathBuf>, copied: bool) {
+        use dockview_domain::i18n::{tr, Key};
+        let lang = self.resident_lang();
+        let event = match (&saved, copied) {
+            (Some(_), _) => AppEvent::ScreenshotSaved,
+            (None, _) => AppEvent::ScreenshotCopied,
+        };
+        if self.view.window_hidden {
+            let title = tr(
+                lang,
+                if saved.is_some() && copied {
+                    Key::ToastScreenshotSavedCopied
+                } else if saved.is_some() {
+                    Key::ToastScreenshotSaved
+                } else {
+                    Key::ToastScreenshotCopied
+                },
+            );
+            let text = saved
+                .as_deref()
+                .and_then(|p| p.file_name())
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            self.resident.notify(title, &text);
+        } else {
+            self.emit(event);
+        }
+        self.view.last_screenshot = saved;
+    }
+
+    /// The window is hidden in the tray (or shown again).
+    pub fn set_window_hidden(&mut self, hidden: bool) {
+        self.view.window_hidden = hidden;
+    }
+
+    /// Shows the last screenshot in the file manager, if it was saved.
+    pub(super) fn reveal_last_screenshot(&mut self) {
+        if let Some(path) = self.view.last_screenshot.clone() {
+            self.host.reveal_file(&path);
         }
     }
 }

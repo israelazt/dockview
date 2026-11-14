@@ -194,6 +194,7 @@ strings! {
     ToastScreenshotSaved => "Screenshot saved", "Captura guardada";
     ToastScreenshotCopied => "Screenshot copied", "Captura copiada";
     ToastScreenshotFailed => "Could not take the screenshot", "No se pudo hacer la captura";
+    ToastScreenshotSavedCopied => "Saved and copied", "Guardada y copiada";
     TrayTip => "Dockview", "Dockview";
     TrayNewCapture => "New screenshot", "Nueva captura";
     TrayOpen => "Open Dockview", "Abrir Dockview";

@@ -225,6 +225,8 @@ pub trait Host {
     fn start_capture(&self, mode: crate::select::Mode);
     /// Shows the window and brings it forward (it may be hidden in the tray).
     fn show_window(&self);
+    /// Shows `path` in the file manager, selected.
+    fn reveal_file(&self, path: &Path);
     /// Ends the program.
     fn quit(&self);
 }
@@ -252,6 +254,7 @@ impl Host for NullHost {
     fn request_redraw(&self) {}
     fn start_capture(&self, _: crate::select::Mode) {}
     fn show_window(&self) {}
+    fn reveal_file(&self, _: &Path) {}
     fn quit(&self) {}
 }
 

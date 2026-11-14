@@ -147,6 +147,10 @@ struct ViewState {
     layer_selected: Option<usize>,
     /// The layer editor is on, over the picture.
     scene_editing: bool,
+    /// The window is hidden: Dockview is only in the tray.
+    window_hidden: bool,
+    /// The file of the last screenshot, if it was saved.
+    last_screenshot: Option<std::path::PathBuf>,
     /// Where layers were before the editor moved them, most recent last: (the
     /// scene, the layer, its rectangle).
     layer_undo: Vec<(usize, usize, dockview_domain::scene::NormRect)>,

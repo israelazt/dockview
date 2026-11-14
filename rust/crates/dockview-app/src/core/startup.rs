@@ -51,6 +51,8 @@ impl Core {
                 stats_open: show_stats,
                 layer_selected: cli.edit_layers.then_some(1),
                 scene_editing: cli.edit_layers,
+                window_hidden: false,
+                last_screenshot: None,
                 layer_undo: Vec::new(),
                 edit_pending: None,
             },

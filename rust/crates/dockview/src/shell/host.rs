@@ -108,6 +108,10 @@ impl Host for ShellHost {
         self.ask(HostRequest::ShowWindow);
     }
 
+    fn reveal_file(&self, path: &Path) {
+        clips::reveal_file(path);
+    }
+
     fn quit(&self) {
         self.ask(HostRequest::Quit);
     }

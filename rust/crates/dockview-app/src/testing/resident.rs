@@ -27,6 +27,8 @@ pub struct ResidentWorld {
     pub tray_events: Vec<TrayEvent>,
     /// Make showing the icon fail.
     pub tray_fails: bool,
+    /// What the icon was asked to notify: (title, text).
+    pub notifications: Vec<(String, String)>,
 }
 
 pub type Shared = Arc<Mutex<ResidentWorld>>;
@@ -79,7 +81,17 @@ impl Tray for FakeTray {
     fn poll(&self) -> Vec<TrayEvent> {
         std::mem::take(&mut self.0.lock().unwrap().tray_events)
     }
+
+    fn notify(&self, title: &str, text: &str) {
+        self.0
+            .lock()
+            .unwrap()
+            .notifications
+            .push((title.to_owned(), text.to_owned()));
+    }
 }
+
+impl FakeTray {}
 
 impl Drop for FakeTray {
     fn drop(&mut self) {
