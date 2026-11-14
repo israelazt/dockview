@@ -2,11 +2,13 @@
 //! a body that opens and closes. Pure arithmetic, tested without a window.
 
 use dockview_domain::i18n::Key;
+use dockview_domain::stats::Stats;
+use dockview_domain::view::Model;
+
+use crate::Ui;
 
 /// Height of a section's header row, in logical pixels.
 pub const HEADER_H: f32 = 42.0;
-/// Height of a section's body until its content is made (see the plan).
-const BODY_H: f32 = 76.0;
 
 /// One of the sections of the panel.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -30,6 +32,19 @@ impl StudioSection {
         Self::Stats,
     ];
 
+    /// The section called `name` on the command line (case does not matter).
+    pub fn from_name(name: &str) -> Option<Self> {
+        match name.to_ascii_lowercase().as_str() {
+            "sources" => Some(Self::Sources),
+            "scenes" => Some(Self::Scenes),
+            "audio" => Some(Self::Audio),
+            "recording" => Some(Self::Recording),
+            "settings" => Some(Self::Settings),
+            "stats" => Some(Self::Stats),
+            _ => None,
+        }
+    }
+
     /// The words on its header.
     pub fn title(self) -> Key {
         match self {
@@ -42,9 +57,18 @@ impl StudioSection {
         }
     }
 
-    /// How tall its body is when fully open.
-    pub fn body_height(self) -> f32 {
-        BODY_H
+    /// How tall its body is when fully open (it can depend on what the model
+    /// lists, such as how many devices there are, and on how the text of the
+    /// statistics wraps in a panel `width` wide).
+    pub fn body_height(self, ui: &mut Ui, m: &Model, stats: &Stats, width: f32) -> f32 {
+        match self {
+            Self::Settings => super::settings::body_height(),
+            Self::Sources => super::sources::body_height(m),
+            Self::Audio => super::audio::body_height(m),
+            Self::Scenes => super::scenes::body_height(m),
+            Self::Recording => super::recording::body_height(ui, m, width),
+            Self::Stats => super::stats::body_height(ui, m, stats, width),
+        }
     }
 }
 
@@ -56,6 +80,8 @@ pub struct SectionRow {
     pub top: f32,
     /// Height of the body now (between 0, folded, and its full height).
     pub body: f32,
+    /// Height of the body when fully open.
+    pub full: f32,
 }
 
 impl SectionRow {
@@ -66,16 +92,18 @@ impl SectionRow {
 }
 
 /// Stacks the sections. `expanded[i]` goes from 0 (folded) to 1 (open) for
-/// `StudioSection::ALL[i]`, so the folding can be animated. Returns the rows
-/// and the height of the whole list.
-pub fn stack(expanded: &[f32; 6]) -> (Vec<SectionRow>, f32) {
+/// `StudioSection::ALL[i]`, so the folding can be animated, and `heights[i]`
+/// is how tall its body is when open. Returns the rows and the height of the
+/// whole list.
+pub fn stack(expanded: &[f32; 6], heights: &[f32; 6]) -> (Vec<SectionRow>, f32) {
     let mut rows = Vec::with_capacity(StudioSection::ALL.len());
     let mut top = 0.0;
-    for (section, open) in StudioSection::ALL.into_iter().zip(expanded) {
+    for ((section, open), full) in StudioSection::ALL.into_iter().zip(expanded).zip(heights) {
         let row = SectionRow {
             section,
             top,
-            body: (section.body_height() * open.clamp(0.0, 1.0)).round(),
+            body: (full * open.clamp(0.0, 1.0)).round(),
+            full: *full,
         };
         top = row.bottom();
         rows.push(row);
@@ -87,9 +115,12 @@ pub fn stack(expanded: &[f32; 6]) -> (Vec<SectionRow>, f32) {
 mod tests {
     use super::*;
 
+    /// A height to stack sections with, in the tests of the stacking.
+    const BODY_H: f32 = 76.0;
+
     #[test]
     fn folded_sections_are_just_their_headers() {
-        let (rows, height) = stack(&[0.0; 6]);
+        let (rows, height) = stack(&[0.0; 6], &[BODY_H; 6]);
         assert_eq!(rows.len(), 6);
         assert_eq!(height, HEADER_H * 6.0);
         assert_eq!(rows[2].top, HEADER_H * 2.0);
@@ -100,7 +131,7 @@ mod tests {
     fn opening_a_section_pushes_the_ones_below_it_down() {
         let mut open = [0.0; 6];
         open[1] = 1.0;
-        let (rows, height) = stack(&open);
+        let (rows, height) = stack(&open, &[BODY_H; 6]);
         assert_eq!(rows[1].body, BODY_H);
         assert_eq!(rows[2].top, rows[1].bottom());
         assert_eq!(rows[2].top, HEADER_H * 2.0 + BODY_H);
@@ -111,15 +142,46 @@ mod tests {
     fn a_half_open_section_is_half_as_tall() {
         let mut open = [0.0; 6];
         open[0] = 0.5;
-        let (rows, _) = stack(&open);
+        let (rows, _) = stack(&open, &[BODY_H; 6]);
         assert_eq!(rows[0].body, (BODY_H / 2.0).round());
     }
 
     #[test]
     fn out_of_range_amounts_are_kept_in_range() {
-        let (rows, _) = stack(&[2.0, -1.0, 0.0, 0.0, 0.0, 0.0]);
+        let (rows, _) = stack(&[2.0, -1.0, 0.0, 0.0, 0.0, 0.0], &[BODY_H; 6]);
         assert_eq!(rows[0].body, BODY_H);
         assert_eq!(rows[1].body, 0.0);
+    }
+
+    #[test]
+    fn each_section_can_have_its_own_height() {
+        let mut heights = [BODY_H; 6];
+        heights[0] = 200.0;
+        let (rows, height) = stack(&[1.0; 6], &heights);
+        assert_eq!(rows[0].body, 200.0);
+        assert_eq!(rows[0].full, 200.0);
+        assert_eq!(rows[1].top, HEADER_H + 200.0);
+        assert_eq!(height, HEADER_H * 6.0 + 200.0 + BODY_H * 5.0);
+        // Folded, a tall body takes no room however tall it would be.
+        let (rows, _) = stack(&[0.0; 6], &heights);
+        assert_eq!((rows[0].body, rows[0].full), (0.0, 200.0));
+    }
+
+    #[test]
+    fn sections_can_be_named_on_the_command_line() {
+        assert_eq!(
+            StudioSection::from_name("Settings"),
+            Some(StudioSection::Settings)
+        );
+        assert_eq!(
+            StudioSection::from_name("STATS"),
+            Some(StudioSection::Stats)
+        );
+        assert_eq!(StudioSection::from_name("nope"), None);
+        for section in StudioSection::ALL {
+            let name = format!("{section:?}");
+            assert_eq!(StudioSection::from_name(&name), Some(section), "{name}");
+        }
     }
 
     #[test]
@@ -138,6 +200,7 @@ mod tests {
             section: StudioSection::Audio,
             top: 100.0,
             body: 30.0,
+            full: 30.0,
         };
         assert_eq!(row.bottom(), 100.0 + HEADER_H + 30.0);
     }

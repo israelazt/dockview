@@ -1,6 +1,8 @@
 //! Tests of the Studio panel.
 
+use dockview_domain::i18n::{tr, Key};
 use dockview_domain::layout::{studio_layout, PANEL_WIDTH};
+use dockview_domain::stats::Stats;
 use dockview_domain::view::{Action, Model};
 
 use super::sections::{StudioSection, HEADER_H};
@@ -8,6 +10,15 @@ use super::*;
 use crate::test_model::model;
 
 const WINDOW: (u32, u32) = (1280, 720);
+
+/// The height of the body of `section` in a panel of the usual width.
+fn section_height(section: StudioSection, m: &Model) -> f32 {
+    section.body_height(&mut Ui::new(), m, &Stats::default(), PANEL_WIDTH)
+}
+
+fn heights_of(m: &Model) -> [f32; 6] {
+    StudioSection::ALL.map(|s| section_height(s, m))
+}
 
 /// A panel driven the way the window drives it: it opens, the layout gives it
 /// its room, and it draws into it.
@@ -40,8 +51,15 @@ impl Rig {
         let layout = studio_layout(self.window, 1.0, self.panel.openness());
         let area = layout.panel.map(|r| Rect::new(r.x, r.y, r.w, r.h));
         let full = studio_layout(self.window, 1.0, 1.0).panel.unwrap().w;
-        self.panel
-            .frame(&mut self.ui, &self.model, area, full, &self.pointer, dt);
+        self.panel.frame(
+            &mut self.ui,
+            &self.model,
+            &Stats::default(),
+            area,
+            full,
+            &self.pointer,
+            dt,
+        );
         self.pointer.end_frame();
     }
 
@@ -278,8 +296,9 @@ fn tall_window(rig: &mut Rig) {
 fn the_wheel_scrolls_a_list_that_does_not_fit_and_stops_at_the_ends() {
     let mut rig = Rig::new();
     tall_window(&mut rig);
-    // Audio is the third section: it stays on show while the list scrolls.
-    let audio = PanelHit::Header(StudioSection::Audio);
+    // The second section's header stays on show while the list scrolls a
+    // notch (the first one's is gone by then).
+    let audio = PanelHit::Header(StudioSection::Scenes);
     let before = rig.rect_of(audio).y;
 
     rig.wheel(-1.0);
@@ -291,7 +310,7 @@ fn the_wheel_scrolls_a_list_that_does_not_fit_and_stops_at_the_ends() {
     assert_eq!(rig.rect_of(audio).y, before, "not above the top");
 
     rig.wheel(-100.0);
-    let (_, content_h) = stack(&rig.panel.amount);
+    let (_, content_h) = stack(&rig.panel.amount, &heights_of(&rig.model));
     let list_h = 400.0 - TOP_H;
     assert_eq!(rig.panel.scroll, content_h - list_h, "not past the end");
 }
@@ -314,7 +333,7 @@ fn folding_a_section_while_scrolled_to_the_end_pulls_the_scroll_back() {
     rig.click_on(PanelHit::Header(StudioSection::Stats));
     rig.frame(0.016);
     assert!(rig.panel.scroll < far);
-    let (_, content_h) = stack(&rig.panel.amount);
+    let (_, content_h) = stack(&rig.panel.amount, &heights_of(&rig.model));
     assert!(rig.panel.scroll <= scroll::max_scroll(content_h, 400.0 - TOP_H));
 }
 
@@ -342,7 +361,9 @@ fn a_header_scrolled_under_the_top_cannot_be_clicked_where_it_is_cut() {
     let mut rig = Rig::new();
     tall_window(&mut rig);
     // Scrolled so that the second header straddles the top of the list.
-    rig.panel.scroll_target = 140.0;
+    let heights = heights_of(&rig.model);
+    let (rows, _) = stack(&[1.0; 6], &heights);
+    rig.panel.scroll_target = rows[1].top + HEADER_H / 2.0;
     rig.frame(0.016);
     let scenes = rig.rect_of(PanelHit::Header(StudioSection::Scenes));
     assert_eq!(scenes.y, TOP_H, "only the part on show can be clicked");
@@ -414,3 +435,5 @@ fn the_texts_come_in_the_language_of_the_model() {
     let title = tr(rig.model.lang, Key::StudioTitle);
     assert_eq!(title, "Estudio");
 }
+
+mod content;

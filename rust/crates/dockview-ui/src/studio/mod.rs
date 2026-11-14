@@ -10,24 +10,33 @@
 //! draws. What goes inside each section is made block by block (the bodies are
 //! empty for now).
 
+mod audio;
+mod body;
+mod draw;
+mod inputs;
+mod recording;
 mod route;
+mod scenes;
 mod scroll;
 mod sections;
+mod settings;
+mod sources;
+mod stats;
+mod widgets;
 
 use std::collections::HashMap;
 
-use dockview_domain::i18n::{tr, Key};
-use dockview_domain::theme::Theme;
+use dockview_domain::stats::Stats;
 use dockview_domain::view::{Action, Model};
 
 pub use route::route_pointer;
 pub use sections::StudioSection;
 
 use crate::input::Pointer;
-use crate::motion::{ease_out_cubic, lerp_color, move_toward, smooth};
+use crate::motion::{ease_out_cubic, move_toward, smooth};
 use crate::text::Weight;
 use crate::{Rect, TextStyle, Ui};
-use sections::{stack, SectionRow, HEADER_H};
+use sections::stack;
 
 /// Height of the panel's own header (the title and the close button).
 const TOP_H: f32 = 52.0;
@@ -55,6 +64,11 @@ const ICON_CLOSE: char = '\u{e1b2}';
 enum PanelHit {
     Close,
     Header(StudioSection),
+    /// A control inside a section: its position among this frame's items (see
+    /// `StudioPanel::item`).
+    Item(usize),
+    /// A slider inside a section: its position among this frame's sliders.
+    Slider(usize),
 }
 
 pub struct StudioPanel {
@@ -70,6 +84,17 @@ pub struct StudioPanel {
     /// Rectangles of the previous frame; later entries are on top.
     hits: Vec<(PanelHit, Rect)>,
     next_hits: Vec<(PanelHit, Rect)>,
+    /// What each control of the sections asks for when clicked, in the order
+    /// they were drawn (the previous frame's, and the one being drawn).
+    items: Vec<Action>,
+    next_items: Vec<Action>,
+    /// The sliders of the sections, likewise.
+    sliders: Vec<inputs::SliderInfo>,
+    next_sliders: Vec<inputs::SliderInfo>,
+    /// The part of the list on show, which cuts what is drawn and clicked.
+    clip: Rect,
+    /// Where the indicator of each segmented control is, by name.
+    slide: HashMap<&'static str, f32>,
     hovered: Option<PanelHit>,
     pressed: Option<PanelHit>,
     /// Smoothed hover amount of each pointed-at thing.
@@ -91,12 +116,26 @@ impl StudioPanel {
             animations: true,
             hits: Vec::new(),
             next_hits: Vec::new(),
+            items: Vec::new(),
+            next_items: Vec::new(),
+            sliders: Vec::new(),
+            next_sliders: Vec::new(),
+            clip: Rect::new(0.0, 0.0, 0.0, 0.0),
+            slide: HashMap::new(),
             hovered: None,
             pressed: None,
             hover: HashMap::new(),
             actions: Vec::new(),
             area: None,
             dt: 0.0,
+        }
+    }
+
+    /// Unfolds `section` (for the command line, which starts with one open).
+    pub fn unfold(&mut self, section: StudioSection) {
+        if let Some(i) = StudioSection::ALL.iter().position(|s| *s == section) {
+            self.open[i] = true;
+            self.amount[i] = 1.0;
         }
     }
 
@@ -160,10 +199,12 @@ impl StudioPanel {
     /// now (from the layout, in logical pixels; `None` when it is closed);
     /// `full_width` is what it is when fully open. The panel is laid out at its
     /// full width and slides in by its left edge.
+    #[allow(clippy::too_many_arguments)]
     pub fn frame(
         &mut self,
         ui: &mut Ui,
         m: &Model,
+        stats: &Stats,
         area: Option<Rect>,
         full_width: f32,
         pointer: &Pointer,
@@ -186,7 +227,15 @@ impl StudioPanel {
         );
 
         self.step_sections();
-        let (rows, content_h) = stack(&self.amount);
+        // Only a section that is open, or still folding, has a body to measure
+        // (some of them wrap text, which is not free).
+        let mut heights = [0.0; 6];
+        for (i, section) in StudioSection::ALL.into_iter().enumerate() {
+            if self.open[i] || self.amount[i] > 0.0 {
+                heights[i] = section.body_height(ui, m, stats, full_width);
+            }
+        }
+        let (rows, content_h) = stack(&self.amount, &heights);
         self.scroll_target = scroll::clamp_scroll(self.scroll_target, content_h, list.h);
         self.hovered = self.hit_at(pointer.pos);
         self.interact(pointer, visible, content_h, list.h);
@@ -199,14 +248,18 @@ impl StudioPanel {
         let t = &m.theme;
         let fade = self.openness();
         self.next_hits.clear();
+        self.next_items.clear();
+        self.next_sliders.clear();
         ui.set_opacity(fade);
         self.draw_frame(ui, t, panel);
         self.draw_top(ui, m, panel);
-        self.draw_sections(ui, m, &rows, list);
+        self.draw_sections(ui, m, stats, &rows, list);
         self.draw_scroll_bar(ui, t, list, content_h);
         ui.set_clip(None);
         ui.set_opacity(1.0);
         std::mem::swap(&mut self.hits, &mut self.next_hits);
+        std::mem::swap(&mut self.items, &mut self.next_items);
+        std::mem::swap(&mut self.sliders, &mut self.next_sliders);
     }
 
     /// Moves each section's opening towards what it is meant to be.
@@ -234,6 +287,12 @@ impl StudioPanel {
         if pointer.just_pressed {
             self.pressed = self.hovered;
         }
+        // A slider follows the pointer for as long as it is held.
+        if let (Some(PanelHit::Slider(i)), Some((x, _))) = (self.pressed, pointer.pos) {
+            if pointer.down || pointer.just_pressed {
+                self.drag_slider(i, x);
+            }
+        }
         if pointer.just_released {
             if let (Some(pressed), Some(hovered)) = (self.pressed, self.hovered) {
                 if pressed == hovered {
@@ -249,9 +308,31 @@ impl StudioPanel {
         }
     }
 
+    /// Asks for the value of slider `i` that the pointer at `x` points at.
+    fn drag_slider(&mut self, i: usize, x: f32) {
+        let Some(slider) = self.sliders.get(i).copied() else {
+            return;
+        };
+        let value = slider.value_at(x);
+        if (value - slider.value).abs() > f32::EPSILON {
+            self.actions.push((slider.make)(value));
+            // Until the application answers, the slider shows where it was
+            // dragged to (so a fast drag is not asked for twice).
+            if let Some(shown) = self.sliders.get_mut(i) {
+                shown.value = value;
+            }
+        }
+    }
+
     fn activate(&mut self, hit: PanelHit) {
         match hit {
             PanelHit::Close => self.actions.push(Action::ToggleStudio),
+            PanelHit::Slider(_) => {}
+            PanelHit::Item(i) => {
+                if let Some(action) = self.items.get(i) {
+                    self.actions.push(action.clone());
+                }
+            }
             PanelHit::Header(section) => {
                 if let Some(i) = StudioSection::ALL.iter().position(|s| *s == section) {
                     self.open[i] = !self.open[i];
@@ -276,128 +357,6 @@ impl StudioPanel {
         };
         self.hover.insert(hit, next);
         next
-    }
-
-    // -- Drawing -----------------------------------------------------------
-
-    /// The background and the line along its left edge.
-    fn draw_frame(&self, ui: &mut Ui, t: &Theme, panel: Rect) {
-        ui.rect(panel, 0.0, t.surface_solid);
-        ui.rect(Rect::new(panel.x, panel.y, 1.0, panel.h), 0.0, t.border);
-    }
-
-    /// The title and the close button, over a line.
-    fn draw_top(&mut self, ui: &mut Ui, m: &Model, panel: Rect) {
-        let t = &m.theme;
-        let line_h = ui.measure("Ag", TITLE).1;
-        ui.text(
-            tr(m.lang, Key::StudioTitle),
-            panel.x + PAD,
-            panel.y + (TOP_H - line_h) / 2.0,
-            TITLE,
-            t.text,
-        );
-        let button = Rect::new(
-            panel.x + panel.w - PAD - BUTTON,
-            panel.y + (TOP_H - BUTTON) / 2.0,
-            BUTTON,
-            BUTTON,
-        );
-        self.register(PanelHit::Close, button);
-        let hover = self.hover_amount(PanelHit::Close);
-        ui.rect(button, BUTTON / 2.0, t.hover.with_alpha(t.hover.a * hover));
-        let (cx, cy) = button.center();
-        ui.icon(
-            ICON_CLOSE,
-            cx,
-            cy,
-            ICON_SIZE,
-            lerp_color(t.text_dim, t.text, hover),
-        );
-        ui.rect(
-            Rect::new(panel.x, panel.y + TOP_H - 1.0, panel.w, 1.0),
-            0.0,
-            t.border,
-        );
-    }
-
-    /// The sections, cut off at the list's edges and moved by the scroll.
-    fn draw_sections(&mut self, ui: &mut Ui, m: &Model, rows: &[SectionRow], list: Rect) {
-        let t = &m.theme;
-        let fade = self.openness();
-        for row in rows {
-            let top = list.y + row.top - self.scroll;
-            if top + HEADER_H + row.body < list.y || top > list.y + list.h {
-                continue; // out of sight
-            }
-            ui.set_clip(Some(list));
-            let header = Rect::new(list.x, top, list.w, HEADER_H);
-            // Only the part of the header on show can be pointed at.
-            if let Some(shown) = intersect(header, list) {
-                self.register(PanelHit::Header(row.section), shown);
-            }
-            let hover = self.hover_amount(PanelHit::Header(row.section));
-            let wash = Rect::new(
-                header.x + 8.0,
-                header.y + 3.0,
-                header.w - 16.0,
-                HEADER_H - 6.0,
-            );
-            ui.rect(wash, 8.0, t.hover.with_alpha(t.hover.a * hover));
-            let open = self.is_open(row.section);
-            let chevron = if open {
-                ICON_CHEVRON_DOWN
-            } else {
-                ICON_CHEVRON_RIGHT
-            };
-            let cy = header.y + HEADER_H / 2.0;
-            ui.icon(chevron, header.x + PAD + 6.0, cy, 15.0, t.text_dim);
-            let line_h = ui.measure("Ag", SECTION).1;
-            ui.text(
-                tr(m.lang, row.section.title()),
-                header.x + PAD + 26.0,
-                cy - line_h / 2.0,
-                SECTION,
-                t.text,
-            );
-            if row.body > 0.0 {
-                let body = Rect::new(list.x, header.y + HEADER_H, list.w, row.body);
-                if let Some(shown) = intersect(body, list) {
-                    ui.set_clip(Some(shown));
-                    let amount = row.body / row.section.body_height();
-                    ui.set_opacity(fade * amount);
-                    let note_h = ui.measure("Ag", NOTE).1;
-                    ui.text(
-                        tr(m.lang, Key::StudioEmpty),
-                        body.x + PAD + 26.0,
-                        body.y + (row.section.body_height() - note_h) / 2.0,
-                        NOTE,
-                        t.text_dim,
-                    );
-                    ui.set_opacity(fade);
-                }
-                ui.set_clip(Some(list));
-            }
-            let end = header.y + HEADER_H + row.body;
-            ui.rect(Rect::new(list.x, end - 1.0, list.w, 1.0), 0.0, t.border);
-        }
-    }
-
-    fn is_open(&self, section: StudioSection) -> bool {
-        StudioSection::ALL
-            .iter()
-            .position(|s| *s == section)
-            .is_some_and(|i| self.open[i])
-    }
-
-    /// A thin bar at the right edge while the list is longer than the room.
-    fn draw_scroll_bar(&self, ui: &mut Ui, t: &Theme, list: Rect, content_h: f32) {
-        ui.set_clip(None);
-        let Some((offset, length)) = scroll::thumb(content_h, list.h, self.scroll) else {
-            return;
-        };
-        let bar = Rect::new(list.x + list.w - 6.0, list.y + offset, 3.0, length);
-        ui.rect(bar, 1.5, t.text_dim.with_alpha(0.45));
     }
 }
 

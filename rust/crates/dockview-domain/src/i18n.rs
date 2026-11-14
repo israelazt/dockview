@@ -160,13 +160,15 @@ strings! {
     ToastAudioLost => "The capture card's sound stopped: reconnecting", "El sonido de la capturadora se detuvo: reconectando";
     ToastSettingsNotSaved => "Your settings could not be saved", "No se pudieron guardar tus ajustes";
     StudioTitle => "Studio", "Estudio";
+    StudioVolume => "Volume", "Volumen";
+    StudioRecord => "Record", "Grabar";
+    StudioStopRecording => "Stop recording", "Detener grabación";
     StudioSources => "Sources", "Fuentes";
     StudioScenes => "Scenes", "Escenas";
     StudioAudio => "Audio", "Audio";
     StudioRecording => "Recording", "Grabación";
     StudioSettings => "Settings", "Ajustes";
     StudioStats => "Statistics", "Estadísticas";
-    StudioEmpty => "Nothing here yet", "Aún no hay nada aquí";
     TipStudio => "Open the Studio panel with every tool (Tab)", "Abrir el panel Estudio con todas las herramientas (Tab)";
     TipStudioClose => "Close the Studio panel (Tab)", "Cerrar el panel Estudio (Tab)";
     StartupFailedTitle => "Dockview could not start", "Dockview no pudo iniciar";

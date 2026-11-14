@@ -1,9 +1,5 @@
 //! Sizes, timings, icons and text styles of the controls.
 
-use dockview_domain::settings::{LangMode, RenderPreset, VideoModePref};
-
-use dockview_domain::theme::ThemeMode;
-
 use super::super::text::Weight;
 use super::super::TextStyle;
 
@@ -82,11 +78,4 @@ pub(super) const MIC_ROW: f32 = 30.0;
 pub(super) const MIC_METER: f32 = 14.0;
 pub(super) const SECTION: TextStyle = TextStyle::new(12.0, Weight::Medium);
 
-pub(super) const PRESETS: [RenderPreset; 3] = [
-    RenderPreset::Performance,
-    RenderPreset::Balanced,
-    RenderPreset::Quality,
-];
-pub(super) const THEMES: [ThemeMode; 3] = [ThemeMode::Auto, ThemeMode::Dark, ThemeMode::Light];
-pub(super) const LANGS: [LangMode; 3] = [LangMode::Auto, LangMode::En, LangMode::Es];
-pub(super) const VIDEO_MODES: [VideoModePref; 2] = [VideoModePref::Auto, VideoModePref::Compressed];
+pub(super) use crate::options::{LANGS, PRESETS, THEMES, VIDEO_MODES};

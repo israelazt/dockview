@@ -154,6 +154,7 @@ impl Shell {
                 studio.frame(
                     ui,
                     &model,
+                    stats,
                     place.panel,
                     place.full_width,
                     &panel_pointer,

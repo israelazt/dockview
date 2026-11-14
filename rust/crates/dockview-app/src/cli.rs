@@ -72,6 +72,9 @@ pub struct Cli {
     pub open_scenes: bool,
     /// Start with the Studio side panel open.
     pub open_studio: bool,
+    /// Start with this section of the Studio panel unfolded (`sources`,
+    /// `scenes`, `audio`, `recording`, `settings` or `stats`).
+    pub studio_section: Option<String>,
     /// Start with the microphone on (for tests and screenshots; it is off by default).
     pub mic: bool,
     /// Start recording right away (for tests and screenshots).
@@ -153,6 +156,10 @@ impl Cli {
                 "--open-sources" => cli.open_sources = true,
                 "--open-scenes" => cli.open_scenes = true,
                 "--open-studio" => cli.open_studio = true,
+                "--studio-section" => {
+                    cli.studio_section = Some(value("--studio-section")?);
+                    cli.open_studio = true;
+                }
                 "--mic" => cli.mic = true,
                 "--record" => cli.record = true,
                 "--screen" => {
@@ -255,6 +262,15 @@ mod tests {
     fn open_studio_is_a_flag() {
         assert!(parse(&["--open-studio"]).unwrap().open_studio);
         assert!(!parse(&[]).unwrap().open_studio);
+    }
+
+    #[test]
+    fn a_studio_section_opens_the_panel_too_and_needs_a_name() {
+        let cli = parse(&["--studio-section", "audio"]).unwrap();
+        assert_eq!(cli.studio_section.as_deref(), Some("audio"));
+        assert!(cli.open_studio);
+        assert!(parse(&["--studio-section"]).is_err());
+        assert_eq!(parse(&[]).unwrap().studio_section, None);
     }
 
     #[test]

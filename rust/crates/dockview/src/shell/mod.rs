@@ -23,7 +23,7 @@ use dockview_platform::ui_gpu::UiGpu;
 use dockview_ui::controls::Controls;
 use dockview_ui::input::Pointer;
 use dockview_ui::stats::StatsPanel;
-use dockview_ui::studio::StudioPanel;
+use dockview_ui::studio::{StudioPanel, StudioSection};
 use dockview_ui::toast::{ToastHost, ToastKind};
 use dockview_ui::Ui;
 use winit::window::Window;
@@ -77,6 +77,10 @@ impl Shell {
         controls.set_animations(animations);
         let mut studio = StudioPanel::new();
         studio.set_animations(animations);
+        let section = core.cli().studio_section.clone();
+        if let Some(section) = section.as_deref().and_then(StudioSection::from_name) {
+            studio.unfold(section);
+        }
         open_requested_popover(&mut core, &mut controls);
         Self {
             core,

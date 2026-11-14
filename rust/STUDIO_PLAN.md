@@ -73,14 +73,22 @@ Cada sección se construye en el panel **sin quitar** todavía su popover.
 
 | Tarea | Sección | Contenido |
 |---|---|---|
-| C-1 | Ajustes | Tema, idioma, calidad de render |
-| C-2 | Fuentes | Capturadoras, pantallas y ventanas (hoy en el popover de fuentes) |
-| C-3 | Grabación y replay | Calidad, carpeta, última grabación, repetición instantánea |
-| C-4 | Audio | Volumen, sincronía, micrófono y su nivel |
-| C-5 | Escenas | Lista, activar, crear, borrar, añadir fuente |
-| C-6 | Estadísticas | FPS, latencia, CPU/GPU (hoy un panel flotante aparte) |
+| C-1 ✅ | Ajustes | Tema, idioma, calidad de render |
+| C-2 ✅ | Fuentes | Capturadoras, pantallas y ventanas (hoy en el popover de fuentes) |
+| C-3 ✅ | Grabación y replay | Calidad, carpeta, última grabación, repetición instantánea |
+| C-4 ✅ | Audio | Volumen, sincronía, micrófono y su nivel |
+| C-5 ✅ | Escenas | Lista, activar, crear, borrar, añadir fuente |
+| C-6 ✅ | Estadísticas | FPS, latencia, CPU/GPU (hoy un panel flotante aparte) |
 
 Por tarea: la sección usa las mismas `Action` que el popover (no se duplica lógica), tiene tests con el `Rig` de `controls/tests.rs` y una captura.
+
+**Estado (2026-11-13):** C-1 a C-6 hechos, cada uno con sus tests y una captura en la vista previa (`--ui-preview --studio-section NOMBRE`; sin hardware). `ui` pasó de 163 a 208 tests y el workspace está en verde. Cómo quedó:
+- El panel tiene widgets propios (selector segmentado, lista, deslizador arrastrable, interruptor, botón) y cada uno pide la misma `Action` que el popover o la píldora: no se duplicó lógica. Los popovers siguen intactos hasta el bloque D.
+- **Ajustes** añade el modo de vídeo (auto o comprimido), que el plan no nombraba, para que no desaparezca al quitar el popover. **Escenas** lista todo en línea (sin la vista «añadir fuente» del popover): escenas, nueva, borrar, capas con ojo y quitar, y las fuentes que se pueden añadir. **Grabación** lleva el interruptor de la repetición, su longitud, la calidad, guardar clip, grabar y la carpeta; el micrófono está en **Audio**. **Estadísticas** reutiliza las mismas filas y frases que el panel flotante (que sigue existiendo).
+- Las alturas de los cuerpos son dinámicas (dependen de lo que hay que listar y de cómo se ajusta el texto) y solo se miden las secciones abiertas o en movimiento.
+- Pendiente de la pausa: probarlo con la app real (clics, arrastrar el volumen, rueda con varias secciones abiertas) y decidir qué popovers sobran.
+
+**Dónde nos quedamos (2026-11-13):** el bloque C está hecho, commiteado y subido; el usuario hace una pausa y lo probará con la app real (clics, arrastrar el volumen, rueda con varias secciones abiertas). Siguiente paso al volver: revisar eso, decidir qué popovers sobran y empezar el bloque D. Propuesta para D: quitar los popovers de Ajustes, Fuentes, Replay y Escenas y dejar la píldora corta (estado, volumen, sincronía, guardar clip, grabar, Estudio, pantalla completa); D-3 y D-4 (confirmar al borrar una escena y renombrarla) también.
 
 **Pausa C:** revisar las seis secciones juntas; decidir qué popovers sobran.
 

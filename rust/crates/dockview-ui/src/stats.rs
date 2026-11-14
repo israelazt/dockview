@@ -317,7 +317,7 @@ fn fit(ui: &mut Ui, text: &str, style: TextStyle, max_w: f32) -> String {
     "…".to_owned()
 }
 
-fn tone_color(finding: Finding, theme: &Theme) -> dockview_domain::theme::Color {
+pub(crate) fn tone_color(finding: Finding, theme: &Theme) -> dockview_domain::theme::Color {
     match finding {
         Finding::Healthy => theme.live,
         Finding::NoVideo | Finding::VideoLost | Finding::AudioLost => theme.error,
