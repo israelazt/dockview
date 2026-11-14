@@ -243,7 +243,7 @@ Con una escena activa, un botón **Editar** en la sección Escenas del panel (y 
 | E-3c-1 ✅ | `layer_edit.rs`: geometría pura | Tests de asas, mover, redimensionar, mínimo, proporción, imán |
 | E-3c-2 ✅ | Acciones y estado: `SetLayerRect`, `MoveLayer`, `SelectLayer`, `Action::ToggleSceneEdit`, rectángulo y selección en `ScenesView` | Tests del núcleo con el `Rig` |
 | E-3c-3 ✅ | `scene_editor.rs`: contornos, asas y arrastre | Tests con puntero simulado y capturas |
-| E-3c-4 | Panel: botón Editar, selección y orden de capas | Tests y captura |
+| E-3c-4 ✅ | Panel: botón Editar, selección y orden de capas | Tests y captura |
 | E-3c-5 | Cableado en el shell (rectángulo de la imagen, prioridad del puntero, Esc) | Prueba con la app real y clics |
 
 ### Resultados de E-3a

@@ -549,7 +549,10 @@ fn the_scenes_offer_what_the_popover_offers_with_the_same_actions() {
             scene(SceneAction::Activate(Some(0))),
             scene(SceneAction::Activate(Some(1))),
             scene(SceneAction::New),
+            scene(SceneAction::ToggleEdit),
+            scene(SceneAction::SelectLayer(Some(0))),
             scene(SceneAction::ToggleLayer(0)),
+            scene(SceneAction::SelectLayer(Some(1))),
             scene(SceneAction::ToggleLayer(1)),
             scene(SceneAction::RemoveLayer(1)),
             scene(SceneAction::AddCapture(0)),
@@ -705,6 +708,63 @@ fn choosing_another_scene_or_closing_the_panel_ends_the_rename() {
     assert!(!rig.panel.is_editing());
 }
 
+fn three_layers_with_the_middle_one_chosen() -> ScenesView {
+    ScenesView {
+        names: vec!["Scene".into()],
+        active: Some(0),
+        layers: vec![
+            layer("Base", true),
+            layer("Middle", true),
+            layer("Top", true),
+        ],
+        can_add: false,
+        selected: Some(1),
+        ..ScenesView::default()
+    }
+}
+
+fn index_of(rig: &Rig, action: SceneAction) -> Option<usize> {
+    rig.panel.items.iter().position(|a| *a == scene(action))
+}
+
+#[test]
+fn a_layer_moves_up_and_down_unless_it_is_at_an_end_and_the_base_never_moves() {
+    let rig = scenes_open(three_layers_with_the_middle_one_chosen());
+    assert!(index_of(&rig, SceneAction::MoveLayer(1, 1)).is_some());
+    assert!(index_of(&rig, SceneAction::MoveLayer(2, -1)).is_some());
+    // The first over the base cannot go lower, the top one cannot go higher,
+    // and the base has no buttons.
+    assert!(index_of(&rig, SceneAction::MoveLayer(1, -1)).is_none());
+    assert!(index_of(&rig, SceneAction::MoveLayer(2, 1)).is_none());
+    assert!(index_of(&rig, SceneAction::MoveLayer(0, 1)).is_none());
+    assert!(index_of(&rig, SceneAction::MoveLayer(0, -1)).is_none());
+}
+
+#[test]
+fn clicking_a_layer_chooses_it_and_the_edit_button_switches_the_editor() {
+    let mut rig = scenes_open(three_layers_with_the_middle_one_chosen());
+    let pick = index_of(&rig, SceneAction::SelectLayer(Some(2))).unwrap();
+    rig.click_on(PanelHit::Item(pick));
+    assert_eq!(
+        rig.panel.take_actions(),
+        [scene(SceneAction::SelectLayer(Some(2)))]
+    );
+    let edit = index_of(&rig, SceneAction::ToggleEdit).unwrap();
+    rig.click_on(PanelHit::Item(edit));
+    assert_eq!(rig.panel.take_actions(), [scene(SceneAction::ToggleEdit)]);
+}
+
+#[test]
+fn the_buttons_of_a_layer_do_not_also_choose_it() {
+    let mut rig = scenes_open(three_layers_with_the_middle_one_chosen());
+    let eye = index_of(&rig, SceneAction::ToggleLayer(2)).unwrap();
+    rig.click_on(PanelHit::Item(eye));
+    assert_eq!(
+        rig.panel.take_actions(),
+        [scene(SceneAction::ToggleLayer(2))]
+    );
+}
+
 #[test]
 fn the_base_layer_can_be_hidden_but_not_removed() {
     let rig = scenes_open(two_scenes_second_in_use());
@@ -753,7 +813,13 @@ fn the_buttons_ask_for_what_they_say() {
     let mut rig = scenes_open(two_scenes_second_in_use());
     rig.click_on(PanelHit::Item(3));
     assert_eq!(rig.panel.take_actions(), [scene(SceneAction::New)]);
-    rig.click_on(PanelHit::Item(6));
+    let remove = rig
+        .panel
+        .items
+        .iter()
+        .position(|a| *a == scene(SceneAction::RemoveLayer(1)))
+        .unwrap();
+    rig.click_on(PanelHit::Item(remove));
     assert_eq!(
         rig.panel.take_actions(),
         [scene(SceneAction::RemoveLayer(1))]

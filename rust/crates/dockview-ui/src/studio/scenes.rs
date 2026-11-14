@@ -30,6 +30,9 @@ const ICON_EYE: char = '\u{e0ba}';
 const ICON_EYE_OFF: char = '\u{e0bb}';
 const ICON_TRASH: char = '\u{e18d}';
 const ICON_PENCIL: char = '\u{e1f9}';
+const ICON_MOVE: char = '\u{e121}';
+const ICON_UP: char = '\u{e070}';
+const ICON_DOWN: char = '\u{e06d}';
 const ICON_CLOSE: char = '\u{e1b2}';
 
 /// The scenes as a list: the plain source first, then each scene.
@@ -50,7 +53,7 @@ pub fn body_height(m: &Model) -> f32 {
     let s = &m.scenes;
     let mut height = PAD_TOP + list_height(1 + s.names.len(), MAX_SCENES + 1) + GAP + ROW_H;
     if s.active.is_some() {
-        height += ROW_H * 2.0; // rename and delete this scene
+        height += ROW_H * 3.0; // edit the layers, rename and delete this scene
         height += GAP + LABEL_H + s.layers.len() as f32 * ROW_H;
         if s.can_add {
             let group = |n: usize| LABEL_H + list_height(n, MAX_ADD);
@@ -105,14 +108,15 @@ impl StudioPanel {
         if self.editing.as_ref().is_some_and(|(i, _)| *i != active) {
             self.editing = None;
         }
+        y += self.edit_row(ui, t, lang, s.editing, (x, y, w));
         let name = s.names.get(active).map_or("", String::as_str);
         y += self.rename_row(ui, t, lang, (active, name), (x, y, w));
         y += self.delete_row(ui, t, lang, active, (x, y, w));
 
         y += GAP;
         y += self.caption(ui, t, tr(lang, Key::SceneLayers), x, y);
-        for (i, layer) in s.layers.iter().enumerate() {
-            self.layer_row(ui, m, i, layer.visible, &layer.name, (x, y, w));
+        for i in 0..s.layers.len() {
+            self.layer_row(ui, m, i, (x, y, w));
             y += ROW_H;
         }
         if !s.can_add {
@@ -163,6 +167,36 @@ impl StudioPanel {
             y,
             w,
         );
+    }
+
+    /// The switch of the layer editor over the picture: lit while it is on.
+    fn edit_row(
+        &mut self,
+        ui: &mut Ui,
+        t: &Theme,
+        lang: Lang,
+        on: bool,
+        (x, y, w): (f32, f32, f32),
+    ) -> f32 {
+        let row = Rect::new(x, y, w, ROW_H);
+        let hit = self.item(row, Action::Scene(SceneAction::ToggleEdit));
+        let hover = self.hover_amount(hit);
+        if on {
+            ui.rect(row, 9.0, t.accent.with_alpha(0.16));
+        }
+        ui.rect(row, 9.0, t.hover.with_alpha(t.hover.a * hover));
+        let color = if on { t.accent } else { t.text_dim };
+        ui.icon(ICON_MOVE, x + 18.0, y + ROW_H / 2.0, 15.0, color);
+        let line_h = ui.measure("Ag", ROW_TEXT).1;
+        let text = fit_text(ui, tr(lang, Key::SceneEditLayers), ROW_TEXT, w - 48.0);
+        ui.text(
+            &text,
+            x + 38.0,
+            y + (ROW_H - line_h) / 2.0,
+            ROW_TEXT,
+            t.text,
+        );
+        ROW_H
     }
 
     /// The row that renames the scene in use: a button, which becomes a text
@@ -310,19 +344,26 @@ impl StudioPanel {
     }
 
     /// A layer of the scene in use: an eye that shows or hides it, its name
-    /// (with a tag on the base) and, but for the base, a button that removes it.
-    fn layer_row(
-        &mut self,
-        ui: &mut Ui,
-        m: &Model,
-        index: usize,
-        visible: bool,
-        name: &str,
-        (x, y, w): (f32, f32, f32),
-    ) {
+    /// (choosing it for the editor when clicked, with a tag on the base) and,
+    /// but for the base, buttons that move it up or down in the drawing order
+    /// and remove it.
+    fn layer_row(&mut self, ui: &mut Ui, m: &Model, index: usize, (x, y, w): (f32, f32, f32)) {
         let t = &m.theme;
+        let layer = &m.scenes.layers[index];
+        let (visible, name) = (layer.visible, layer.name.as_str());
+        let layers = m.scenes.layers.len();
+        let chosen = m.scenes.selected == Some(index);
         let line_h = ui.measure("Ag", ROW_TEXT).1;
         let button_y = y + (ROW_H - ICON_BUTTON) / 2.0;
+
+        // The row itself chooses the layer; the buttons are on top of it.
+        let row = Rect::new(x, y, w, ROW_H);
+        let pick = self.item(row, Action::Scene(SceneAction::SelectLayer(Some(index))));
+        let hover = self.hover_amount(pick);
+        if chosen {
+            ui.rect(row, 9.0, t.accent.with_alpha(0.16));
+        }
+        ui.rect(row, 9.0, t.hover.with_alpha(t.hover.a * hover));
 
         let eye = Rect::new(x, button_y, ICON_BUTTON, ICON_BUTTON);
         let hit = self.item(eye, Action::Scene(SceneAction::ToggleLayer(index)));
@@ -341,11 +382,40 @@ impl StudioPanel {
         let mut right = x + w;
         if index > 0 {
             let remove = Rect::new(right - ICON_BUTTON, button_y, ICON_BUTTON, ICON_BUTTON);
-            let hit = self.item(remove, Action::Scene(SceneAction::RemoveLayer(index)));
-            let hover = self.hover_amount(hit);
-            ui.rect(remove, 8.0, t.hover.with_alpha(t.hover.a * hover));
-            let (cx, cy) = remove.center();
-            ui.icon(ICON_CLOSE, cx, cy, 14.0, t.text_dim);
+            self.icon_item(
+                ui,
+                t,
+                remove,
+                ICON_CLOSE,
+                14.0,
+                Action::Scene(SceneAction::RemoveLayer(index)),
+            );
+            right -= ICON_BUTTON + 2.0;
+            // Down is towards the base; the top layer cannot go higher and the
+            // first one over the base cannot go lower.
+            if index + 1 < layers {
+                let up = Rect::new(right - ICON_BUTTON, button_y, ICON_BUTTON, ICON_BUTTON);
+                self.icon_item(
+                    ui,
+                    t,
+                    up,
+                    ICON_UP,
+                    14.0,
+                    Action::Scene(SceneAction::MoveLayer(index, 1)),
+                );
+            }
+            right -= ICON_BUTTON;
+            if index > 1 {
+                let down = Rect::new(right - ICON_BUTTON, button_y, ICON_BUTTON, ICON_BUTTON);
+                self.icon_item(
+                    ui,
+                    t,
+                    down,
+                    ICON_DOWN,
+                    14.0,
+                    Action::Scene(SceneAction::MoveLayer(index, -1)),
+                );
+            }
             right -= ICON_BUTTON + 4.0;
         } else {
             let tag = tr(m.lang, Key::SceneBaseTag);
@@ -363,5 +433,22 @@ impl StudioPanel {
         let label = fit_text(ui, name, ROW_TEXT, (right - text_x).max(0.0));
         let color = if visible { t.text } else { t.text_dim };
         ui.text(&label, text_x, y + (ROW_H - line_h) / 2.0, ROW_TEXT, color);
+    }
+
+    /// A small square button with an icon that asks for `action`.
+    fn icon_item(
+        &mut self,
+        ui: &mut Ui,
+        t: &Theme,
+        rect: Rect,
+        icon: char,
+        size: f32,
+        action: Action,
+    ) {
+        let hit = self.item(rect, action);
+        let hover = self.hover_amount(hit);
+        ui.rect(rect, 8.0, t.hover.with_alpha(t.hover.a * hover));
+        let (cx, cy) = rect.center();
+        ui.icon(icon, cx, cy, size, t.text_dim);
     }
 }
