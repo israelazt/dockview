@@ -3,7 +3,8 @@
 use crate::desktop::PxRect;
 
 /// A file format a picture can be saved in.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum ImageFormat {
     #[default]
     Png,

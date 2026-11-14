@@ -93,14 +93,15 @@ Pedido: que el menú de captura sea igual al de la app (bordes curvos, iconos, a
 
 **Pausa S-B.**
 
-## Bloque S-C — Lanzamiento y residencia
+## Bloque S-C — Lanzamiento y residencia (D1: Impr Pant; D2: dentro de Dockview)
 
 | Tarea | Qué | Listo cuando |
 |---|---|---|
-| S-C1 | Icono de bandeja con menú (Nuevo, modos, abrir Dockview, salir) | Prueba real |
-| S-C2 | Atajo global configurable (Impr Pant y alternativa a Win+Shift+S) | Funciona con la ventana minimizada; aviso si lo ocupa otra app |
-| S-C3 | Arranque oculto y «iniciar con Windows» (opcional) | Mide memoria y CPU en reposo |
-| S-C4 | Aviso tras capturar (vista previa, clic abre el editor) | Prueba real |
+| S-C1 ✅ | `domain`: `HotkeySpec` (leer y escribir «Ctrl+Shift+S», reglas: tecla que escribe necesita modificador, Ctrl+Alt+letra se rechaza por AltGr, las de Dockview están reservadas) y `CaptureSettings` (atajo, guardar, carpeta, formato, copiar, cursor, retardo, modo, quedarse en la bandeja) dentro de `AppSettings`, con `job()` que arma el trabajo de captura. Un atajo mal escrito en el archivo no rompe la carga de los demás ajustes | Tests |
+| S-C2 | `platform`: atajo global configurable (puerto `CaptureHotkey`, hilo propio, se vuelve a registrar al cambiar el ajuste); aviso si lo ocupa otra app | Funciona con la ventana minimizada; el aviso sale |
+| S-C3 | `platform`: icono de bandeja con menú (Nuevo recorte: rectángulo / ventana / pantalla completa / forma libre; Abrir Dockview; Salir) y sus eventos | Prueba real |
+| S-C4 | Residente: cerrar la ventana la deja en la bandeja (`keepInTray`), arranque oculto (`--tray`), y capturar desde el atajo o la bandeja (guarda en Imágenes\Screenshots y copia) | Mide memoria y CPU en reposo |
+| S-C5 | Aviso tras capturar (guardada y copiada; clic abre la carpeta o el editor), con el aspecto de la app | Prueba real |
 
 **Pausa S-C:** revisar el coste en reposo.
 

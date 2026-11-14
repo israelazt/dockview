@@ -14,7 +14,8 @@ pub const MIN_SIDE: u32 = 3;
 const PATH_STEP: i32 = 2;
 
 /// How the area is chosen.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Mode {
     /// Drag a rectangle.
     #[default]

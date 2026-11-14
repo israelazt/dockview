@@ -10,6 +10,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
+use crate::capture_settings::CaptureSettings;
 use crate::scene::Scene;
 
 /// Maximum audio sync offset in either direction, in milliseconds.
@@ -251,6 +252,9 @@ pub struct AppSettings {
     pub video_mode: VideoModePref,
     /// How the picture changes from one scene to another.
     pub scene_transition: SceneTransition,
+    /// What the user chose about screenshots.
+    #[serde(skip_serializing_if = "CaptureSettings::is_default")]
+    pub capture: CaptureSettings,
     /// Whether the instant-replay buffer runs. On by default; the user turns it
     /// off by hand.
     pub replay_enabled: bool,
@@ -290,6 +294,7 @@ impl Default for AppSettings {
             language: LangMode::default(),
             video_mode: VideoModePref::default(),
             scene_transition: SceneTransition::default(),
+            capture: CaptureSettings::default(),
             replay_enabled: true,
             replay_seconds: DEFAULT_REPLAY_SECONDS,
             replay_bitrate_mbps: DEFAULT_REPLAY_MBPS,
@@ -323,6 +328,7 @@ impl AppSettings {
             .map(Scene::sanitized)
             .filter(|s| !s.layers.is_empty())
             .collect();
+        self.capture = self.capture.sanitized();
         self.device_aliases = crate::device_names::sanitize_aliases(self.device_aliases);
         // The scene in use must exist.
         self.active_scene = self.active_scene.filter(|&i| i < self.scenes.len());
@@ -462,6 +468,11 @@ mod tests {
             language: LangMode::Es,
             video_mode: VideoModePref::Compressed,
             scene_transition: SceneTransition::Cut,
+            capture: CaptureSettings {
+                copy: false,
+                folder: Some(r"D:\shots".into()),
+                ..CaptureSettings::default()
+            },
             replay_enabled: false,
             replay_seconds: 120,
             replay_bitrate_mbps: 25,
