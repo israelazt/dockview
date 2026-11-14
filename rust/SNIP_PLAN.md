@@ -131,12 +131,13 @@ Pedido: que el menú de captura sea igual al de la app (bordes curvos, iconos, a
 
 **Pausa S-E:** revisión final y prueba comparativa completa contra la Herramienta Recortes.
 
-## Decisiones abiertas
+## Decisiones (tomadas el 2026-11-14)
 
-1. **¿Atajo?** Win+Shift+S y la tecla Impr Pant los usa el propio Windows; `RegisterHotKey` puede fallar con ellos. Hace falta decidir si se reclama Impr Pant (el usuario debe desactivarla en la configuración de Windows) o se usa otra combinación.
-2. **¿Ventana propia o parte de Dockview?** El editor y la bandeja obligan a un proceso residente. Alternativa: un segundo ejecutable ligero que comparta las bibliotecas.
-3. **¿Cuándo?** Se propone después del modo Estudio (bloques D y E) y antes de retomar `CAPTURE_PLAN.md`; o en paralelo si se prefiere.
-4. **Alcance del OCR y la redacción:** son lo más caro; podrían quedar para el final o una segunda versión.
+1. **Atajo: Impr Pant, configurable.** Se registra Impr Pant (el usuario desactiva la de Windows en su configuración); si otro programa la tiene, la app avisa y deja elegir otra combinación en Ajustes. Win+Shift+S queda descartada (la reserva Windows).
+2. **Residente: dentro de Dockview.** Un solo programa; la ventana del visor se abre y se cierra y el proceso sigue en la bandeja. Se mide el reposo en S-C y solo si pesa se separa en un ejecutable ligero.
+3. **Cuándo:** S-C ahora (desbloqueado), luego S-D (editor) y S-E.
+4. **OCR y ocultar datos: segunda versión.** La primera versión llega con editor, guardar y copiar.
+5. **Plataformas:** Windows y Linux antes de 1.0 (iOS no aplica a este capturador). En Linux, captura y selección pasan por el portal `xdg-desktop-portal` en Wayland.
 
 ## Riesgos
 

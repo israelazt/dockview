@@ -23,28 +23,29 @@ Es lo que más riesgo acumula: mucho código verificado solo con tests y captura
 | 0-7 | Un Windows limpio: arranca sin instalar nada y solo escribe en `%APPDATA%\Dockview` | HARDENING 6-9 | S |
 | 0-8 | Capturar con monitores a distinta escala (125/150 %) y con HDR, si tienes | SNIP S-A/S-B | S |
 
-## Fase 1 · Decisiones tuyas (bloquean la Fase 2 y la 5)
+## Fase 1 · Decisiones (tomadas el 2026-11-14)
 
-| # | Decisión | Opciones | Mi recomendación |
-|---|---|---|---|
-| D1 | Atajo global de captura | Impr Pant (hay que desactivar el de Windows), Win+Shift+S (Windows lo reserva), otra combinación | Impr Pant configurable, con aviso si está ocupado |
-| D2 | Proceso residente | Dentro de Dockview, o un ejecutable ligero aparte que comparta las bibliotecas | Dentro de Dockview al principio (un solo programa); separar si pesa en reposo |
-| D3 | OCR y ocultar datos | En la primera versión o en una segunda | Segunda versión: son lo más caro |
-| D4 | Plataformas antes de 1.0 | Solo Windows, Windows + Linux, o las tres | Windows + Linux; iOS solo si encuentras un sentido (visor/editor) |
-| D5 | Firma de código | Comprar certificado, o distribuir sin firmar | Firmar antes del primer lanzamiento público |
-| D6 | Política de versiones | Estable y beta, número de formato de ajustes | Dos canales y número de versión en `settings.json` |
+| # | Decisión | Resultado |
+|---|---|---|
+| D1 | Atajo global de captura | **Impr Pant, configurable**: se registra Impr Pant (el usuario desactiva la de Windows en su configuración); si otro programa la tiene, la app avisa y deja elegir otra combinación en Ajustes |
+| D2 | Proceso residente | **Dentro de Dockview**: un solo programa; la ventana del visor se abre y se cierra y el proceso sigue en la bandeja. Se separa en un ejecutable ligero solo si pesa en reposo (se mide en S-C) |
+| D3 | OCR y ocultar datos | **Segunda versión** del capturador: primero editor, guardar y copiar |
+| D4 | Plataformas antes de 1.0 | **Windows y Linux**; iOS se decide después de 1.0. Consecuencia: la Fase 5 pasa a ser requisito de 1.0 y conviene poner el renderizador y el codificador detrás de puertos pronto |
+| D5 | Firma de código | **Decidirlo antes del lanzamiento público**. Referencia de coste (2026, a confirmar): certificado OV ~220-300 $/año, EV ~290-500 $/año, Azure Artifact Signing ~10 $/mes (si eres elegible); alternativas por mirar: Microsoft Store y SignPath |
+| D6 | Versiones y actualizaciones | **Estable y beta** (tags `v1.2.0` y `v1.3.0-beta.1`, elegible en Ajustes) y **número de versión del formato** en `settings.json` para migrar sin perder nada |
 
-## Fase 2 · Capturador de pantallazos (`SNIP_PLAN.md`) — necesita D1, D2
+## Fase 2 · Capturador de pantallazos (`SNIP_PLAN.md`) — D1 y D2 decididas: desbloqueado
 
 ```
-S-C  bandeja + atajo global + residente + aviso tras capturar   (M)   ← D1, D2
+S-C  bandeja + atajo global (Impr Pant) + residente dentro de Dockview
+     + aviso tras capturar                                       (M)   ← D1, D2 ✔
 S-D  editor: lienzo, capas, bolígrafo, resaltador, borrador, recorte,
      texto, regla, forma automática, guardar/copiar/compartir   (L)   ← S-C
 S-E  sección «Capturas» en Estudio, selector de retardo con cuenta atrás,
      grabación de pantalla desde el mismo flujo                 (M)   ← S-C
-     OCR y ocultar datos                                        (M)   ← D3, S-D
+     OCR y ocultar datos (segunda versión, D3)                  (M)   ← S-D
 ```
-Mientras esté sin decidir D1/D2 se puede adelantar **S-D** (el editor no depende del atajo) y el selector de retardo.
+**Orden:** S-C, luego S-D y S-E. En S-C se mide el reposo del proceso residente para confirmar D2.
 
 ## Fase 3 · Pulido que no bloquea nada (cuando haga falta)
 
@@ -65,7 +66,7 @@ Mientras esté sin decidir D1/D2 se puede adelantar **S-D** (el editor no depend
 | 4-3 | Plugins: cargador y primer plugin (hoy solo hay estructura, `PLUGINS_PLAN.md`) | L |
 | 4-4 | Audio de salida con ganancia (aparcado) | S |
 
-## Fase 5 · Multiplataforma (según D4) — lo que más condiciona el diseño
+## Fase 5 · Linux (requisito de 1.0 por D4) — lo que más condiciona el diseño
 
 Hoy: solo Windows; el binario se niega a compilar en otro sistema. Hecho: la regla de arquitectura y los puertos neutros del capturador.
 
@@ -77,9 +78,14 @@ Hoy: solo Windows; el binario se niega a compilar en otro sistema. Hecho: la reg
 5-3  Captura de pantalla y audio en Linux (X11/Wayland con portal, PipeWire)   (L)
 5-4  Codificador y grabación en Linux (VAAPI/NVENC/software)                   (L)
 5-5  Atajos, bandeja y superposición del capturador en Linux                   (M)
-5-6  iOS: decidir qué es Dockview allí (← D4) y, si procede, visor/editor       (L)
+5-6  iOS: fuera de 1.0 (D4); decidir después qué sería Dockview allí           (—)
 ```
-**Riesgo grande:** el renderizador y el codificador están muy ligados a Direct3D 11 y Media Foundation; 5-2 y 5-4 son reescrituras, no portes. Conviene decidir D4 pronto porque cambia cuánto invertir en abstraer **ahora** (por ejemplo, el renderizador detrás de un puerto) en vez de arrepentirse luego.
+**Riesgo grande:** el renderizador y el codificador están muy ligados a Direct3D 11 y Media Foundation; 5-2 y 5-4 son reescrituras, no portes. Con D4 (Linux en 1.0) hay que **abstraer ahora**: el renderizador y el codificador detrás de puertos (paso 5-0, ver abajo) antes de seguir añadiendo funciones que dependan de ellos.
+
+```
+5-0  Poner el renderizador y el codificador detrás de puertos neutros
+     (hoy `Renderer` y la grabación son tipos concretos de Windows)             (M)
+```
 
 ## Etapa final (no antes)
 
@@ -92,9 +98,9 @@ Hoy: solo Windows; el binario se niega a compilar en otro sistema. Hecho: la reg
 ## Orden propuesto
 
 1. **Fase 0** en una sesión tuya (desbloquea saber si lo hecho funciona de verdad).
-2. **Fase 1**: D1-D6 (media hora de decisiones).
-3. **Fase 2** (S-C, luego S-E; S-D puede ir antes si D1/D2 tardan) y en paralelo **3-1** y **3-3**.
-4. **Fase 5** empieza con 5-1 en cuanto D4 diga que Linux entra (y, antes, el renderizador detrás de un puerto si es que sí).
+2. ~~Fase 1~~ ✔ decidida.
+3. **Fase 2** (S-C, luego S-D y S-E) y en paralelo **3-1** y **3-3**.
+4. **5-0** (puertos del renderizador y el codificador) entra antes de que crezca más código que dependa de Direct3D; después 5-1 y siguientes.
 5. **Fase 4** a demanda; **etapa final** al cerrar lo anterior.
 
 ## Reglas de trabajo (no cambian)
