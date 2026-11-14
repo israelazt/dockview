@@ -98,8 +98,8 @@ pub fn desktop() -> Desktop {
 // ---------------------------------------------------------------------------
 
 /// A device context with a top-down 32-bit bitmap selected, released on drop.
-struct Canvas {
-    dc: HDC,
+pub(crate) struct Canvas {
+    pub(crate) dc: HDC,
     bitmap: HBITMAP,
     previous: HGDIOBJ,
     bits: *mut c_void,
@@ -108,7 +108,25 @@ struct Canvas {
 }
 
 impl Canvas {
-    fn new(width: u32, height: u32) -> Result<Self, String> {
+    /// A surface holding the picture `image` (opaque pixels as they are).
+    pub(crate) fn from_image(image: &Image) -> Result<Self, String> {
+        let canvas = Self::new(image.width, image.height)?;
+        if !image.is_valid() {
+            return Err("the picture is damaged".into());
+        }
+        // SAFETY: `bits` holds exactly width * height * 4 bytes, the length of
+        // a valid image.
+        unsafe {
+            std::ptr::copy_nonoverlapping(
+                image.bgra.as_ptr(),
+                canvas.bits.cast::<u8>(),
+                image.bgra.len(),
+            );
+        }
+        Ok(canvas)
+    }
+
+    pub(crate) fn new(width: u32, height: u32) -> Result<Self, String> {
         if width == 0 || height == 0 || width > 32_000 || height > 32_000 {
             return Err(format!("a picture of {width}x{height} cannot be made"));
         }
@@ -149,7 +167,7 @@ impl Canvas {
     }
 
     /// The pixels drawn so far, with the alpha made opaque (GDI leaves it 0).
-    fn into_image(self) -> Image {
+    pub(crate) fn into_image(self) -> Image {
         let len = self.width as usize * self.height as usize * 4;
         // SAFETY: `bits` points to `len` bytes owned by the DIB section, which
         // lives until `self` is dropped at the end of this function.

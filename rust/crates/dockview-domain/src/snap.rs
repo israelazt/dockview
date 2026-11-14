@@ -5,6 +5,7 @@
 use std::path::PathBuf;
 
 use crate::desktop::PxRect;
+use crate::select::Mode;
 use crate::sources::WindowInfo;
 
 /// What to take a picture of.
@@ -18,14 +19,19 @@ pub enum SnapTarget {
     Window(String),
     /// A rectangle of the virtual screen, in pixels.
     Rect(PxRect),
+    /// Let the user choose on the dimmed screen, starting in this mode.
+    Select(Mode),
 }
 
 impl SnapTarget {
-    /// `full`, `monitor:N`, `window:TEXT` or `rect:X,Y,W,H`.
+    /// `full`, `monitor:N`, `window:TEXT`, `rect:X,Y,W,H` or `select[:rect|window|full|free]`.
     pub fn parse(text: &str) -> Result<Self, String> {
         let text = text.trim();
         if text.eq_ignore_ascii_case("full") {
             return Ok(Self::Full);
+        }
+        if text.eq_ignore_ascii_case("select") {
+            return Ok(Self::Select(Mode::Rectangle));
         }
         let (kind, value) = text.split_once(':').ok_or_else(|| {
             format!("'{text}': expected full, monitor:N, window:TEXT or rect:X,Y,W,H")
@@ -35,6 +41,15 @@ impl SnapTarget {
                 .parse()
                 .map(Self::Monitor)
                 .map_err(|_| format!("monitor needs a number, got '{value}'")),
+            "select" => match value.to_ascii_lowercase().as_str() {
+                "rect" | "rectangle" => Ok(Self::Select(Mode::Rectangle)),
+                "window" => Ok(Self::Select(Mode::Window)),
+                "full" => Ok(Self::Select(Mode::Full)),
+                "free" | "freeform" => Ok(Self::Select(Mode::Freeform)),
+                other => Err(format!(
+                    "unknown selection mode '{other}' (rect, window, full, free)"
+                )),
+            },
             "window" if !value.is_empty() => Ok(Self::Window(value.to_owned())),
             "window" => Err("window needs part of its title".into()),
             "rect" => {
@@ -113,6 +128,27 @@ mod tests {
             SnapTarget::parse("rect:-100,20,300,200"),
             Ok(SnapTarget::Rect(PxRect::new(-100, 20, 300, 200)))
         );
+    }
+
+    #[test]
+    fn select_asks_the_user_in_the_mode_named_or_by_rectangle() {
+        assert_eq!(
+            SnapTarget::parse("select"),
+            Ok(SnapTarget::Select(Mode::Rectangle))
+        );
+        assert_eq!(
+            SnapTarget::parse("select:window"),
+            Ok(SnapTarget::Select(Mode::Window))
+        );
+        assert_eq!(
+            SnapTarget::parse("select:FULL"),
+            Ok(SnapTarget::Select(Mode::Full))
+        );
+        assert_eq!(
+            SnapTarget::parse("select:free"),
+            Ok(SnapTarget::Select(Mode::Freeform))
+        );
+        assert!(SnapTarget::parse("select:circle").is_err());
     }
 
     #[test]

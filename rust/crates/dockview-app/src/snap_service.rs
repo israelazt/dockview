@@ -5,8 +5,10 @@
 
 use std::path::Path;
 
+use dockview_domain::desktop::PxRect;
 use dockview_domain::image::{Image, ImageFormat};
-use dockview_domain::ports::{ImageOutput, ScreenGrabber};
+use dockview_domain::ports::{ImageOutput, ScreenGrabber, SelectionOverlay};
+use dockview_domain::select::Mode;
 use dockview_domain::snap::{find_window, SnapJob, SnapTarget};
 
 /// The format of the file called `path`, by its extension.
@@ -22,10 +24,35 @@ pub fn format_of(path: &Path) -> Result<ImageFormat, String> {
         })
 }
 
+/// The user chooses on the dimmed screen: the whole screen is frozen first, so
+/// what is cut is exactly what was shown. `None` when it was cancelled.
+fn choose(
+    job: &SnapJob,
+    mode: Mode,
+    screen: &dyn ScreenGrabber,
+    overlay: &dyn SelectionOverlay,
+    own_pid: u32,
+) -> Result<Option<Image>, String> {
+    let desktop = screen.desktop();
+    let bounds = desktop.bounds().ok_or("there is no monitor")?;
+    let frozen = screen.grab_rect(bounds, job.cursor)?;
+    let windows: Vec<PxRect> = screen
+        .windows()
+        .iter()
+        .filter(|w| w.process_id != own_pid)
+        .filter_map(|w| screen.window_rect(w.handle))
+        .collect();
+    let Some(selection) = overlay.pick(&frozen, &desktop, windows, mode) else {
+        return Ok(None);
+    };
+    Ok(selection.cut(&frozen, (bounds.x, bounds.y)))
+}
+
 /// Takes the picture `job` asks for.
 fn grab(job: &SnapJob, screen: &dyn ScreenGrabber, own_pid: u32) -> Result<Image, String> {
     let desktop = screen.desktop();
     match &job.target {
+        SnapTarget::Select(_) => Err("the selection is not a plain grab".into()),
         SnapTarget::Full => {
             let all = desktop.bounds().ok_or("there is no monitor")?;
             screen.grab_rect(all, job.cursor)
@@ -52,12 +79,19 @@ fn grab(job: &SnapJob, screen: &dyn ScreenGrabber, own_pid: u32) -> Result<Image
 pub fn take(
     job: &SnapJob,
     screen: &dyn ScreenGrabber,
+    overlay: &dyn SelectionOverlay,
     out: &dyn ImageOutput,
     own_pid: u32,
 ) -> Result<String, String> {
     // Check the file name before spending time on the capture.
     let format = job.out.as_deref().map(format_of).transpose()?;
-    let image = grab(job, screen, own_pid)?;
+    let image = match job.target {
+        SnapTarget::Select(mode) => match choose(job, mode, screen, overlay, own_pid)? {
+            Some(image) => image,
+            None => return Ok("cancelled".into()),
+        },
+        _ => grab(job, screen, own_pid)?,
+    };
     if image.is_all_black() {
         dockview_domain::log_warn!(
             "the picture is all black: the target may be protected or not showing"
@@ -79,6 +113,7 @@ pub fn take(
 mod tests {
     use super::*;
     use dockview_domain::desktop::{Desktop, DesktopMonitor, PxRect};
+    use dockview_domain::select::Selection;
     use dockview_domain::sources::WindowInfo;
     use std::cell::RefCell;
     use std::path::PathBuf;
@@ -130,6 +165,36 @@ mod tests {
     /// A file written: where, in what format and how big.
     type Written = (PathBuf, ImageFormat, (u32, u32));
 
+    /// An overlay that answers with a ready choice (or a cancel) and notes what it was shown.
+    struct FakeOverlay {
+        answer: Option<Selection>,
+        shown: RefCell<Vec<(PxRect, usize, Mode)>>,
+    }
+
+    impl FakeOverlay {
+        fn answering(answer: Option<Selection>) -> Self {
+            Self {
+                answer,
+                shown: RefCell::new(Vec::new()),
+            }
+        }
+    }
+
+    impl SelectionOverlay for FakeOverlay {
+        fn pick(
+            &self,
+            frozen: &Image,
+            desktop: &Desktop,
+            windows: Vec<PxRect>,
+            mode: Mode,
+        ) -> Option<Selection> {
+            let bounds = desktop.bounds().unwrap();
+            assert_eq!((frozen.width, frozen.height), (bounds.w, bounds.h));
+            self.shown.borrow_mut().push((bounds, windows.len(), mode));
+            self.answer.clone()
+        }
+    }
+
     #[derive(Default)]
     struct FakeOutput {
         saved: RefCell<Vec<Written>>,
@@ -153,6 +218,16 @@ mod tests {
         }
     }
 
+    /// Takes a job that never opens the overlay.
+    fn take_plain(
+        job: &SnapJob,
+        screen: &FakeScreen,
+        out: &FakeOutput,
+        pid: u32,
+    ) -> Result<String, String> {
+        take(job, screen, &FakeOverlay::answering(None), out, pid)
+    }
+
     fn job(target: SnapTarget, out: Option<&str>, copy: bool) -> SnapJob {
         SnapJob {
             target,
@@ -165,7 +240,7 @@ mod tests {
     #[test]
     fn the_whole_screen_is_every_monitor_together() {
         let (screen, out) = (FakeScreen::default(), FakeOutput::default());
-        let done = take(
+        let done = take_plain(
             &job(SnapTarget::Full, Some("a.png"), false),
             &screen,
             &out,
@@ -183,7 +258,7 @@ mod tests {
     #[test]
     fn a_monitor_is_found_by_position_and_a_missing_one_is_an_error() {
         let (screen, out) = (FakeScreen::default(), FakeOutput::default());
-        take(
+        take_plain(
             &job(SnapTarget::Monitor(1), Some("m.jpg"), false),
             &screen,
             &out,
@@ -192,7 +267,7 @@ mod tests {
         .unwrap();
         assert_eq!(screen.grabs.borrow()[0], PxRect::new(100, 0, 100, 50));
         assert_eq!(out.saved.borrow()[0].1, ImageFormat::Jpeg);
-        let e = take(
+        let e = take_plain(
             &job(SnapTarget::Monitor(5), Some("m.png"), false),
             &screen,
             &out,
@@ -205,7 +280,7 @@ mod tests {
     #[test]
     fn a_window_is_found_by_its_title_and_never_our_own() {
         let (screen, out) = (FakeScreen::default(), FakeOutput::default());
-        take(
+        take_plain(
             &job(SnapTarget::Window("editor".into()), Some("w.gif"), false),
             &screen,
             &out,
@@ -213,7 +288,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(*screen.window_grabs.borrow(), [2]);
-        let e = take(
+        let e = take_plain(
             &job(SnapTarget::Window("dockview".into()), Some("w.png"), false),
             &screen,
             &out,
@@ -227,7 +302,7 @@ mod tests {
     fn a_rectangle_is_grabbed_as_asked_and_can_also_be_copied() {
         let (screen, out) = (FakeScreen::default(), FakeOutput::default());
         let rect = PxRect::new(10, 5, 30, 20);
-        let done = take(&job(SnapTarget::Rect(rect), None, true), &screen, &out, 1).unwrap();
+        let done = take_plain(&job(SnapTarget::Rect(rect), None, true), &screen, &out, 1).unwrap();
         assert_eq!(done, "30x20, copied");
         assert_eq!(screen.grabs.borrow()[0], rect);
         assert_eq!(*out.copied.borrow(), 1);
@@ -237,7 +312,7 @@ mod tests {
     #[test]
     fn a_bad_file_name_fails_before_anything_is_grabbed() {
         let (screen, out) = (FakeScreen::default(), FakeOutput::default());
-        let e = take(
+        let e = take_plain(
             &job(SnapTarget::Full, Some("x.bmp"), false),
             &screen,
             &out,
@@ -257,7 +332,7 @@ mod tests {
             fail_save: true,
             ..FakeOutput::default()
         };
-        let e = take(
+        let e = take_plain(
             &job(SnapTarget::Full, Some("a.png"), true),
             &screen,
             &out,
@@ -266,5 +341,60 @@ mod tests {
         .unwrap_err();
         assert_eq!(e, "disk full");
         assert_eq!(*out.copied.borrow(), 0);
+    }
+
+    #[test]
+    fn choosing_freezes_the_whole_screen_shows_it_and_saves_what_was_picked() {
+        let (screen, out) = (FakeScreen::default(), FakeOutput::default());
+        let overlay = FakeOverlay::answering(Some(Selection::Rect(PxRect::new(20, 10, 30, 15))));
+        let done = take(
+            &job(SnapTarget::Select(Mode::Window), Some("p.png"), false),
+            &screen,
+            &overlay,
+            &out,
+            50,
+        )
+        .unwrap();
+        assert_eq!(done, "30x15, saved p.png");
+        // The overlay got the whole screen (200x50) and the mode asked for; the
+        // window of our own process (50) is not offered, the other one is.
+        assert_eq!(overlay.shown.borrow()[0].2, Mode::Window);
+        assert_eq!(screen.grabs.borrow()[0], PxRect::new(0, 0, 200, 50));
+        // `window_rect` gives nothing in the fake, so no window rectangles.
+        assert_eq!(overlay.shown.borrow()[0].1, 0);
+        assert_eq!(out.saved.borrow()[0].2, (30, 15));
+    }
+
+    #[test]
+    fn a_cancelled_choice_saves_and_copies_nothing_and_is_not_an_error() {
+        let (screen, out) = (FakeScreen::default(), FakeOutput::default());
+        let overlay = FakeOverlay::answering(None);
+        let done = take(
+            &job(SnapTarget::Select(Mode::Rectangle), Some("p.png"), true),
+            &screen,
+            &overlay,
+            &out,
+            1,
+        )
+        .unwrap();
+        assert_eq!(done, "cancelled");
+        assert!(out.saved.borrow().is_empty());
+        assert_eq!(*out.copied.borrow(), 0);
+    }
+
+    #[test]
+    fn a_free_form_choice_comes_out_transparent_outside_its_shape() {
+        let (screen, out) = (FakeScreen::default(), FakeOutput::default());
+        let triangle = Selection::Freeform(vec![(10, 10), (40, 10), (10, 40)]);
+        let overlay = FakeOverlay::answering(Some(triangle));
+        let done = take(
+            &job(SnapTarget::Select(Mode::Freeform), Some("t.png"), false),
+            &screen,
+            &overlay,
+            &out,
+            1,
+        )
+        .unwrap();
+        assert!(done.starts_with("31x31"), "{done}");
     }
 }

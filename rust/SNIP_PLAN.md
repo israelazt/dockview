@@ -64,10 +64,10 @@ Igual que el resto: tarea atómica = un commit + push, con `fmt`, `clippy` sin a
 
 | Tarea | Qué | Listo cuando |
 |---|---|---|
-| S-B1 | Superposición atenuada sobre todos los monitores con imagen congelada | Captura con 2 monitores y escalas distintas |
-| S-B2 | Rectángulo: arrastrar, mover, redimensionar, tamaño visible, Esc cancela | Tests de la lógica; prueba real |
-| S-B3 | Ventana: resalta la ventana bajo el cursor y la captura entera | Prueba con ventanas solapadas |
-| S-B4 | Pantalla completa y forma libre | Forma libre recorta con transparencia |
+| S-B1 ✅ | Superposición atenuada sobre todos los monitores con imagen congelada | Captura con 2 monitores y escalas distintas |
+| S-B2 ✅ | Rectángulo: arrastrar, mover, redimensionar, tamaño visible, Esc cancela | Tests de la lógica; prueba real |
+| S-B3 ✅ | Ventana: resalta la ventana bajo el cursor y la captura entera | Prueba con ventanas solapadas |
+| S-B4 ✅ | Pantalla completa y forma libre | Forma libre recorta con transparencia |
 | S-B5 | Barra flotante de modos y retardo (3/5/10 s) con cuenta atrás | Captura con retardo de un menú desplegable |
 
 **Pausa S-B.**

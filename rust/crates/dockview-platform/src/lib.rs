@@ -27,6 +27,10 @@ pub mod mf;
 #[cfg(windows)]
 pub mod mmcss;
 #[cfg(windows)]
+pub mod overlay;
+#[cfg(windows)]
+mod overlay_paint;
+#[cfg(windows)]
 pub mod perf;
 #[cfg(windows)]
 pub mod recorder;
