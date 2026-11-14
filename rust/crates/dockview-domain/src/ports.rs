@@ -311,3 +311,22 @@ pub trait SelectionOverlay {
         options: &PickOptions,
     ) -> Option<crate::select::Selection>;
 }
+
+// ---------------------------------------------------------------------------
+// The capture hotkey
+// ---------------------------------------------------------------------------
+
+/// A registered global hotkey: it is pressed whatever window has the focus.
+pub trait CaptureTrigger {
+    /// Whether it was pressed since the last call.
+    fn take_pressed(&self) -> bool;
+}
+
+/// Registers the global hotkey that starts a screenshot.
+pub trait CaptureHotkeys {
+    /// Registers `spec`. The trigger stops working (the hotkey is given back)
+    /// when it is dropped. The error says why it could not be had, usually
+    /// because another program already owns that combination.
+    fn register(&self, spec: &crate::hotkey::HotkeySpec)
+        -> Result<Box<dyn CaptureTrigger>, String>;
+}

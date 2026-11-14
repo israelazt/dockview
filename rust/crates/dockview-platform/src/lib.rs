@@ -7,6 +7,8 @@ pub mod audio;
 #[cfg(windows)]
 pub mod capture;
 #[cfg(windows)]
+pub mod capture_hotkey;
+#[cfg(windows)]
 pub mod clips;
 pub mod compose;
 #[cfg(windows)]
