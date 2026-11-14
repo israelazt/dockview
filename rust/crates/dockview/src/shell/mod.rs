@@ -69,20 +69,18 @@ pub struct Shell {
 }
 
 impl Shell {
-    pub fn new(mut core: Core, host: Rc<RefCell<HostShared>>) -> Self {
+    pub fn new(core: Core, host: Rc<RefCell<HostShared>>) -> Self {
         let preview = core.cli().ui_preview;
         // Screenshots must show the settled state, not a mid-transition frame.
         let animations = core.cli().screenshot.is_none() && system_animations_enabled();
         let mut controls = Controls::new(preview);
         controls.set_animations(animations);
-        controls.set_opens_panel(true);
         let mut studio = StudioPanel::new();
         studio.set_animations(animations);
         let section = core.cli().studio_section.clone();
         if let Some(section) = section.as_deref().and_then(StudioSection::from_name) {
             studio.unfold(section);
         }
-        open_requested_popover(&mut core, &mut controls);
         Self {
             core,
             host,
@@ -169,32 +167,5 @@ impl Shell {
         let lang = self.core.lang();
         self.toasts.show(i18n::tr(lang, key), kind);
         self.needs_redraw = true;
-    }
-}
-
-/// Opens the popover asked for on the command line (for screenshots).
-fn open_requested_popover(core: &mut Core, controls: &mut Controls) {
-    let (settings, replay, sources, scenes) = {
-        let cli = core.cli();
-        (
-            cli.open_settings,
-            cli.open_replay,
-            cli.open_sources,
-            cli.open_scenes,
-        )
-    };
-    if settings {
-        controls.toggle_settings();
-    }
-    if replay {
-        controls.toggle_replay();
-    }
-    if sources {
-        core.refresh_sources();
-        controls.toggle_sources();
-    }
-    if scenes {
-        core.refresh_sources();
-        controls.toggle_scenes();
     }
 }

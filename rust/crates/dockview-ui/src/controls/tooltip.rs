@@ -24,17 +24,6 @@ impl Controls {
         if self.tip_time < TOOLTIP_DELAY_SECS {
             return;
         }
-        // The button that opened a popover needs no explanation any more.
-        let opened_it = match hit {
-            Hit::Replay => self.replay_open,
-            Hit::Settings => self.settings_open,
-            Hit::Sources => self.sources_open,
-            Hit::Scenes(SceneHit::Button) => self.scenes_open,
-            _ => false,
-        };
-        if opened_it {
-            return;
-        }
         let Some(text) = tooltip_for(hit, m) else {
             return;
         };
@@ -58,19 +47,9 @@ impl Controls {
         let (w, h) = (text_w + 20.0, lines.len() as f32 * line_h + 14.0);
         let (screen_w, _) = ui.logical_size();
 
-        // Items inside a popover get their tooltip to the left of it (so it
-        // does not cover the neighbouring rows); the pill's buttons get it above.
-        let popover = self
-            .next_hits
-            .iter()
-            .rev()
-            .find(|(h, _)| *h == Hit::Popover)
-            .map(|(_, r)| *r);
-        let beside = popover.filter(|p| hit.in_popover() && p.x - w - 10.0 >= 8.0);
-        let (x, y) = match beside {
-            Some(p) => (p.x - w - 10.0, anchor.y + anchor.h / 2.0 - h / 2.0),
-            None => (anchor.x + anchor.w / 2.0 - w / 2.0, anchor.y - h - 8.0),
-        };
+        // The tooltip goes above the pill's button.
+        let x = anchor.x + anchor.w / 2.0 - w / 2.0;
+        let y = anchor.y - h - 8.0;
         let x = x.clamp(8.0, (screen_w - w - 8.0).max(8.0)).round();
         let y = y.max(8.0).round();
 
@@ -96,10 +75,10 @@ pub(super) fn tooltip_for(hit: Hit, m: &Model) -> Option<String> {
     let r = &m.replay;
     let key = match hit {
         Hit::Sources => Key::TipSources,
-        Hit::Scenes(h) => scenes::tooltip_key(h, m)?,
+        Hit::Scenes => Key::TipScenes,
         Hit::Replay => Key::TipReplay,
-        Hit::ReplaySave | Hit::ReplayPopSave if r.is_on() => Key::TipSave,
-        Hit::ReplaySave | Hit::ReplayPopSave => Key::TipSaveOff,
+        Hit::ReplaySave if r.is_on() => Key::TipSave,
+        Hit::ReplaySave => Key::TipSaveOff,
         Hit::Record => match m.rec.state {
             RecState::Idle => Key::TipRecord,
             RecState::Starting => Key::TipRecordCancel,
@@ -113,20 +92,6 @@ pub(super) fn tooltip_for(hit: Hit, m: &Model) -> Option<String> {
         Hit::Volume => Key::TipVolume,
         Hit::SyncMinus => Key::TipSyncEarlier,
         Hit::SyncPlus => Key::TipSyncLater,
-        Hit::ReplayToggle => Key::TipReplayToggle,
-        Hit::ReplayShorter => Key::TipReplayShorter,
-        Hit::ReplayLonger => Key::TipReplayLonger,
-        Hit::MicToggle => Key::TipMicToggle,
-        Hit::ReplayFolder => Key::TipFolderOpen,
-        Hit::ReplayChangeFolder => Key::TipFolderChange,
-        Hit::Quality(0) => Key::TipQualityNormal,
-        Hit::Quality(_) => Key::TipQualityHigh,
-        Hit::VideoMode(0) => Key::TipVideoAuto,
-        Hit::VideoMode(_) => Key::TipVideoCompressed,
-        Hit::Stats => Key::TipStats,
-        Hit::Preset(0) => Key::TipPresetPerformance,
-        Hit::Preset(1) => Key::TipPresetBalanced,
-        Hit::Preset(_) => Key::TipPresetQuality,
         _ => return None,
     };
     let hotkey = match hit {

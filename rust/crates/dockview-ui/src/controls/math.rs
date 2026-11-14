@@ -2,7 +2,7 @@
 //! easing are in `crate::motion`).
 
 use super::consts::FADE_SECS;
-pub(super) use crate::motion::{ease_out_cubic, lerp_color, move_toward, smooth};
+pub(super) use crate::motion::smooth;
 
 /// Moves `visibility` towards shown/hidden at the fade speed.
 pub(super) fn step_visibility(visibility: f32, show: bool, dt: f32) -> f32 {

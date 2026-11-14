@@ -75,7 +75,7 @@ Una interfaz elegante y mínima que casi no se ve: el video ocupa toda la ventan
 
 ```powershell
 dockview.exe --ui-preview --theme dark|light|auto --lang en|es|auto --scale 1.5
-dockview.exe --ui-preview --open-settings           # con el popover abierto
+dockview.exe --ui-preview --studio-section settings  # con el panel Estudio abierto en Ajustes
 dockview.exe --ui-preview --screenshot salida.png   # guarda la ventana y sale
 ```
 

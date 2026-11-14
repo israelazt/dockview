@@ -2,7 +2,6 @@
 
 use std::ffi::c_void;
 
-use dockview_app::keys::KeyCommand;
 use dockview_platform::render::Renderer;
 use windows::Win32::Foundation::HWND;
 use winit::application::ApplicationHandler;
@@ -142,12 +141,7 @@ impl ApplicationHandler for Shell {
             }
             WindowEvent::KeyboardInput { event, .. } if event.state == ElementState::Pressed => {
                 if let Some(command) = command_for(&event.logical_key) {
-                    // Escape closes an open popover first.
-                    let closed_a_popover =
-                        command == KeyCommand::Escape && self.controls.close_settings();
-                    if !closed_a_popover {
-                        self.core.on_key(command);
-                    }
+                    self.core.on_key(command);
                 }
                 self.apply_host_requests();
                 self.needs_redraw = true;
@@ -168,9 +162,8 @@ impl ApplicationHandler for Shell {
             self.recreate_graphics();
         }
         self.refresh_host_info();
-        let lists_shown = self.controls.sources_open()
-            || self.studio.shows(StudioSection::Sources)
-            || self.studio.shows(StudioSection::Scenes);
+        let lists_shown =
+            self.studio.shows(StudioSection::Sources) || self.studio.shows(StudioSection::Scenes);
         self.core.tick(lists_shown);
         self.show_events();
         self.apply_host_requests();

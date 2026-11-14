@@ -2,7 +2,7 @@
 //!
 //! ```text
 //! dockview.exe [--test-pattern] [--ui-preview] [--theme auto|dark|light]
-//!              [--lang auto|en|es] [--scale N] [--open-settings] [--open-studio]
+//!              [--lang auto|en|es] [--scale N] [--open-studio]
 //!              [--stats]
 //!              [--log-stats FILE.csv] [--video NAME]
 //!              [--screenshot FILE.png] [--pip SOURCE] [--pip-size N]
@@ -62,14 +62,6 @@ pub struct Cli {
     pub lang: Option<LangMode>,
     /// Overrides the Windows display scale for the interface and window size.
     pub scale: Option<f32>,
-    /// Start with the settings popover open.
-    pub open_settings: bool,
-    /// Start with the instant-replay popover open.
-    pub open_replay: bool,
-    /// Start with the source popover open.
-    pub open_sources: bool,
-    /// Start with the scenes popover open.
-    pub open_scenes: bool,
     /// Start with the Studio side panel open.
     pub open_studio: bool,
     /// Start with this section of the Studio panel unfolded (`sources`,
@@ -151,10 +143,6 @@ impl Cli {
                     }
                     cli.scale = Some(scale);
                 }
-                "--open-settings" => cli.open_settings = true,
-                "--open-replay" => cli.open_replay = true,
-                "--open-sources" => cli.open_sources = true,
-                "--open-scenes" => cli.open_scenes = true,
                 "--open-studio" => cli.open_studio = true,
                 "--studio-section" => {
                     cli.studio_section = Some(value("--studio-section")?);
@@ -250,12 +238,6 @@ mod tests {
         assert_eq!(a.theme, Some(ThemeMode::Light));
         assert_eq!(a.lang, Some(LangMode::Es));
         assert_eq!(a.scale, Some(1.5));
-    }
-
-    #[test]
-    fn open_settings_is_a_flag() {
-        assert!(parse(&["--open-settings"]).unwrap().open_settings);
-        assert!(!parse(&[]).unwrap().open_settings);
     }
 
     #[test]

@@ -20,10 +20,10 @@ $looks = @(
 )
 $views = @(
   @{ name = "pill";     args = @() },
-  @{ name = "settings"; args = @("--open-settings") },
-  @{ name = "replay";   args = @("--open-replay") },
-  @{ name = "sources";  args = @("--open-sources") },
-  @{ name = "scenes";   args = @("--open-scenes") },
+  @{ name = "settings"; args = @("--studio-section", "settings") },
+  @{ name = "replay";   args = @("--studio-section", "recording") },
+  @{ name = "sources";  args = @("--studio-section", "sources") },
+  @{ name = "scenes";   args = @("--studio-section", "scenes") },
   @{ name = "stats";    args = @("--stats","--demo-findings") }
 )
 foreach ($look in $looks) {

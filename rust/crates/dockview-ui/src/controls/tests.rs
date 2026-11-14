@@ -1,12 +1,11 @@
 //! Tests of the live controls.
 
-use super::popover_settings::*;
 use super::tooltip::*;
 use super::*;
+use crate::motion::{ease_out_cubic, lerp_color, move_toward};
 use crate::test_model::model;
 use dockview_domain::i18n::Lang;
-use dockview_domain::settings::{LangMode, RecordingQuality, RenderPreset, VideoModePref};
-use dockview_domain::theme::{Theme, ThemeMode};
+use dockview_domain::theme::Color;
 
 pub(super) struct Rig {
     ui: Ui,
@@ -111,34 +110,6 @@ fn fade_steps_take_the_configured_time() {
 }
 
 #[test]
-fn clicking_settings_opens_then_closes_the_popover() {
-    let mut rig = Rig::new(true);
-    assert!(!rig.controls.settings_open());
-    rig.click_on(Hit::Settings);
-    assert!(rig.controls.settings_open());
-    rig.click_on(Hit::Settings);
-    assert!(!rig.controls.settings_open());
-}
-
-#[test]
-fn clicking_outside_closes_the_popover() {
-    let mut rig = Rig::new(true);
-    rig.click_on(Hit::Settings);
-    assert!(rig.controls.settings_open());
-    rig.click(40.0, 40.0);
-    assert!(!rig.controls.settings_open());
-}
-
-#[test]
-fn clicking_inside_the_popover_keeps_it_open() {
-    let mut rig = Rig::new(true);
-    rig.click_on(Hit::Settings);
-    let popover = rig.controls.rect_of(Hit::Popover);
-    rig.click(popover.x + 4.0, popover.y + 4.0);
-    assert!(rig.controls.settings_open());
-}
-
-#[test]
 fn dragging_the_slider_sets_the_volume_from_the_pointer() {
     let mut rig = Rig::new(true);
     let track = rig.controls.volume_track;
@@ -213,119 +184,19 @@ fn sync_buttons_step_by_ten_and_clamp() {
 }
 
 #[test]
-fn the_video_mode_selector_emits_the_choice() {
-    let mut rig = Rig::new(true);
-    rig.click_on(Hit::Settings);
-    rig.click_on(Hit::VideoMode(1));
-    assert_eq!(
-        rig.actions(),
-        vec![Action::SetVideoMode(VideoModePref::Compressed)]
-    );
-    rig.click_on(Hit::VideoMode(0));
-    assert_eq!(
-        rig.actions(),
-        vec![Action::SetVideoMode(VideoModePref::Auto)]
-    );
-}
-
-#[test]
-fn a_two_option_selector_slides_to_its_second_segment() {
-    let mut rig = Rig::new(true);
-    rig.click_on(Hit::Settings);
-    for _ in 0..30 {
-        rig.frame(0.016);
-    }
-    assert_eq!(rig.controls.segments.unwrap()[3], 0.0);
-    rig.model.video_mode = VideoModePref::Compressed;
-    for _ in 0..60 {
-        rig.frame(0.016);
-    }
-    assert_eq!(rig.controls.segments.unwrap()[3], 1.0);
-}
-
-fn recording_model(rig: &mut Rig) {
-    rig.model.replay = ReplayView {
-        state: ReplayState::Recording,
-        buffered_seconds: 42.0,
-        buffered_mb: 210.0,
-        keep_seconds: 30,
-        folder: r"C:\Users\Someone\Videos\Dockview".into(),
-        ..ReplayView::off("Ctrl+Alt+S")
-    };
-    rig.frame(0.016);
-}
-
-#[test]
-fn the_replay_button_opens_its_own_popover_and_closes_settings() {
-    let mut rig = Rig::new(true);
-    rig.click_on(Hit::Settings);
-    assert!(rig.controls.settings_open() && !rig.controls.replay_open());
-    rig.click_on(Hit::Replay);
-    assert!(rig.controls.replay_open(), "replay popover is open");
-    assert!(!rig.controls.settings_open(), "only one popover at a time");
-    rig.click_on(Hit::Replay);
-    assert!(!rig.controls.replay_open(), "the button toggles it closed");
-}
-
-#[test]
-fn clicking_outside_closes_the_replay_popover_too() {
-    let mut rig = Rig::new(true);
-    rig.click_on(Hit::Replay);
-    assert!(rig.controls.replay_open());
-    rig.click(40.0, 40.0);
-    assert!(!rig.controls.replay_open());
-}
-
-#[test]
-fn escape_style_closing_handles_either_popover() {
-    let mut rig = Rig::new(true);
-    assert!(!rig.controls.close_settings(), "nothing was open");
-    rig.click_on(Hit::Replay);
-    assert!(rig.controls.close_settings());
-    rig.click_on(Hit::Settings);
-    assert!(rig.controls.close_settings());
-}
-
-fn many_sources() -> SourcesView {
-    SourcesView {
-        monitors: vec![
-            "Screen 1 · 1920×1080 (primary)".into(),
-            "Screen 2 · 1920×1080".into(),
-        ],
-        windows: (0..12)
-            .map(|i| format!("Application window number {i}"))
-            .collect(),
-        current: CurrentSource::Capture,
-    }
-}
-
-#[test]
 fn every_control_has_a_tooltip_in_both_languages_with_nothing_left_to_fill_in() {
     let hits = [
         Hit::Sources,
+        Hit::Scenes,
+        Hit::Studio,
         Hit::Replay,
         Hit::ReplaySave,
-        Hit::ReplayPopSave,
         Hit::Record,
         Hit::Settings,
         Hit::Fullscreen,
         Hit::Volume,
         Hit::SyncMinus,
         Hit::SyncPlus,
-        Hit::ReplayToggle,
-        Hit::ReplayShorter,
-        Hit::ReplayLonger,
-        Hit::MicToggle,
-        Hit::ReplayFolder,
-        Hit::ReplayChangeFolder,
-        Hit::Quality(0),
-        Hit::Quality(1),
-        Hit::VideoMode(0),
-        Hit::VideoMode(1),
-        Hit::Stats,
-        Hit::Preset(0),
-        Hit::Preset(1),
-        Hit::Preset(2),
     ];
     for lang in [Lang::En, Lang::Es] {
         let mut m = model();
@@ -342,11 +213,9 @@ fn every_control_has_a_tooltip_in_both_languages_with_nothing_left_to_fill_in() 
             );
         }
     }
-    // Backgrounds and plain list rows say nothing.
+    // The background says nothing.
     let m = model();
     assert_eq!(tooltip_for(Hit::Pill, &m), None);
-    assert_eq!(tooltip_for(Hit::Popover, &m), None);
-    assert_eq!(tooltip_for(Hit::Video(0), &m), None);
 }
 
 #[test]
@@ -435,93 +304,6 @@ fn a_tooltip_stays_inside_the_window_even_on_the_last_button() {
 }
 
 #[test]
-fn the_source_popover_emits_a_choice_for_each_kind_of_source() {
-    let mut rig = Rig::new(true);
-    rig.model.sources = many_sources();
-    rig.click_on(Hit::Sources);
-    assert!(rig.controls.sources_open());
-    rig.click_on(Hit::Video(0));
-    rig.click_on(Hit::SourceMonitor(1));
-    rig.click_on(Hit::SourceWindow(3));
-    assert_eq!(
-        rig.actions(),
-        vec![
-            Action::SelectVideo(0),
-            Action::SelectMonitor(1),
-            Action::SelectWindow(3),
-        ]
-    );
-    assert!(
-        rig.controls.sources_open(),
-        "choosing keeps the popover open"
-    );
-}
-
-#[test]
-fn only_one_popover_is_open_at_a_time_including_sources() {
-    let mut rig = Rig::new(true);
-    rig.click_on(Hit::Settings);
-    rig.click_on(Hit::Sources);
-    assert!(rig.controls.sources_open() && !rig.controls.settings_open());
-    rig.click_on(Hit::Replay);
-    assert!(rig.controls.replay_open() && !rig.controls.sources_open());
-    rig.click_on(Hit::Sources);
-    assert!(rig.controls.sources_open() && !rig.controls.replay_open());
-    rig.click(40.0, 40.0);
-    assert!(!rig.controls.sources_open(), "a click outside closes it");
-}
-
-#[test]
-fn the_source_popover_with_many_windows_fits_a_720p_window() {
-    for lang in [Lang::En, Lang::Es] {
-        let mut rig = Rig::new(true);
-        rig.model.lang = lang;
-        rig.model.sources = many_sources();
-        rig.model.sources.current = CurrentSource::Window(Some(2));
-        rig.frame(0.016); // lay out for the new language before aiming at a button
-        rig.click_on(Hit::Sources);
-        rig.frame(0.016);
-        let popover = rig.controls.rect_of(Hit::Popover);
-        assert!(popover.y >= 0.0, "{lang:?}: top at {}", popover.y);
-        assert!(popover.y + popover.h <= 720.0, "{lang:?}");
-    }
-}
-
-#[test]
-fn the_quality_and_folder_controls_emit_their_actions() {
-    let mut rig = Rig::new(true);
-    recording_model(&mut rig);
-    rig.click_on(Hit::Replay);
-    rig.click_on(Hit::Quality(0));
-    rig.click_on(Hit::Quality(1));
-    rig.click_on(Hit::ReplayChangeFolder);
-    rig.click_on(Hit::ReplayFolder);
-    assert_eq!(
-        rig.actions(),
-        vec![
-            Action::SetQuality(RecordingQuality::Normal),
-            Action::SetQuality(RecordingQuality::High),
-            Action::ChooseFolder,
-            Action::OpenReplayFolder,
-        ]
-    );
-}
-
-#[test]
-fn the_replay_popover_with_quality_and_folder_fits_a_720p_window() {
-    for lang in [Lang::En, Lang::Es] {
-        let mut rig = Rig::new(true);
-        rig.model.lang = lang;
-        recording_model(&mut rig);
-        rig.click_on(Hit::Replay);
-        rig.frame(0.016);
-        let popover = rig.controls.rect_of(Hit::Popover);
-        assert!(popover.y >= 0.0, "{lang:?}: top at {}", popover.y);
-        assert!(popover.y + popover.h <= 720.0, "{lang:?}");
-    }
-}
-
-#[test]
 fn the_record_button_emits_its_action_in_every_state() {
     for state in [RecState::Idle, RecState::Starting, RecState::Recording] {
         let mut rig = Rig::new(true);
@@ -537,90 +319,11 @@ fn the_record_button_emits_its_action_in_every_state() {
 }
 
 #[test]
-fn the_microphone_switch_and_device_list_emit_their_actions() {
-    let mut rig = Rig::new(true);
-    recording_model(&mut rig);
-    rig.click_on(Hit::Replay);
-    rig.click_on(Hit::MicToggle);
-    assert_eq!(rig.actions(), vec![Action::ToggleMic]);
-    rig.click_on(Hit::Settings);
-    rig.click_on(Hit::MicDevice(1));
-    assert_eq!(rig.actions(), vec![Action::SelectMic(1)]);
-}
-
-#[test]
-fn the_microphone_states_draw_without_breaking_the_popover() {
-    for state in [
-        MicState::Off,
-        MicState::Starting,
-        MicState::Live,
-        MicState::Unavailable,
-    ] {
-        let mut rig = Rig::new(true);
-        recording_model(&mut rig);
-        rig.model.mic = MicView { state, level: 0.6 };
-        rig.click_on(Hit::Replay);
-        rig.frame(0.016);
-        assert!(rig.controls.replay_open(), "{state:?}");
-        assert_eq!(rig.model.mic.is_on(), state != MicState::Off);
-    }
-}
-
-#[test]
-fn the_replay_popover_controls_emit_their_actions() {
-    let mut rig = Rig::new(true);
-    recording_model(&mut rig);
-    rig.click_on(Hit::Replay);
-    rig.click_on(Hit::ReplayToggle);
-    rig.click_on(Hit::ReplayShorter);
-    rig.click_on(Hit::ReplayLonger);
-    rig.click_on(Hit::ReplayPopSave);
-    rig.click_on(Hit::ReplayFolder);
-    assert_eq!(
-        rig.actions(),
-        vec![
-            Action::ToggleReplay,
-            Action::ReplayLength(-1),
-            Action::ReplayLength(1),
-            Action::SaveReplay,
-            Action::OpenReplayFolder,
-        ]
-    );
-    assert!(
-        rig.controls.replay_open(),
-        "using the options keeps it open"
-    );
-}
-
-#[test]
 fn the_pill_save_button_emits_a_save_even_when_the_buffer_is_off() {
     // The app answers with "turn on instant replay first".
     let mut rig = Rig::new(true);
     rig.click_on(Hit::ReplaySave);
     assert_eq!(rig.actions(), vec![Action::SaveReplay]);
-}
-
-#[test]
-fn the_replay_popover_stays_inside_the_window_in_both_languages_and_themes() {
-    for lang in [Lang::En, Lang::Es] {
-        for theme in [Theme::dark(), Theme::light()] {
-            let mut rig = Rig::new(true);
-            recording_model(&mut rig);
-            rig.model.lang = lang;
-            rig.model.theme = theme;
-            rig.frame(0.016);
-            rig.click_on(Hit::Replay);
-            let popover = rig.controls.rect_of(Hit::Popover);
-            assert!(
-                popover.x >= 0.0 && popover.x + popover.w <= 1280.0,
-                "{lang:?}"
-            );
-            assert!(
-                popover.y >= 0.0 && popover.y + popover.h <= 720.0,
-                "{lang:?}"
-            );
-        }
-    }
 }
 
 #[test]
@@ -638,42 +341,12 @@ fn the_pill_still_fits_with_the_replay_buttons_in_both_languages() {
 }
 
 #[test]
-fn the_switch_knob_glides_between_off_and_on() {
-    let mut rig = Rig::new(true);
-    rig.click_on(Hit::Replay);
-    for _ in 0..20 {
-        rig.frame(0.016);
-    }
-    let off = rig.controls.amounts[&Hit::ReplayKnob].0;
-    assert_eq!(off, 0.0);
-    recording_model(&mut rig);
-    let mid = rig.controls.amounts[&Hit::ReplayKnob].0;
-    assert!(mid > 0.0 && mid < 1.0, "gliding, got {mid}");
-    for _ in 0..60 {
-        rig.frame(0.016);
-    }
-    assert_eq!(rig.controls.amounts[&Hit::ReplayKnob].0, 1.0);
-}
-
-#[test]
 fn colours_blend_linearly_and_clamp() {
     let (a, b) = (Color::hex(0x000000, 0.0), Color::hex(0xFFFFFF, 1.0));
     let mid = lerp_color(a, b, 0.5);
     assert!((mid.r - 0.5).abs() < 1e-6 && (mid.a - 0.5).abs() < 1e-6);
     assert_eq!(lerp_color(a, b, -3.0), a);
     assert_eq!(lerp_color(a, b, 9.0), b);
-}
-
-#[test]
-fn the_statistics_row_toggles_the_panel() {
-    let mut rig = Rig::new(true);
-    rig.click_on(Hit::Settings);
-    rig.click_on(Hit::Stats);
-    assert_eq!(rig.actions(), vec![Action::ToggleStats]);
-    assert!(
-        rig.controls.settings_open(),
-        "toggling stats keeps the popover"
-    );
 }
 
 #[test]
@@ -694,76 +367,6 @@ fn releasing_elsewhere_cancels_a_click() {
     rig.pointer.release();
     rig.frame(0.016);
     assert!(rig.actions().is_empty());
-}
-
-#[test]
-fn popover_selections_emit_the_matching_actions() {
-    let mut rig = Rig::new(true);
-    rig.click_on(Hit::Settings);
-
-    rig.click_on(Hit::Video(1));
-    rig.click_on(Hit::Audio(0));
-    rig.click_on(Hit::Preset(2));
-    rig.click_on(Hit::Theme(2));
-    rig.click_on(Hit::Lang(2));
-    assert_eq!(
-        rig.actions(),
-        vec![
-            Action::SelectVideo(1),
-            Action::SelectAudio(0),
-            Action::SetPreset(RenderPreset::Quality),
-            Action::SetTheme(ThemeMode::Light),
-            Action::SetLang(LangMode::Es),
-        ]
-    );
-    assert!(rig.controls.settings_open(), "selecting must not close it");
-}
-
-#[test]
-fn popover_stays_inside_the_window_in_both_languages() {
-    for lang in [Lang::En, Lang::Es] {
-        let mut rig = Rig::new(true);
-        rig.model.lang = lang;
-        rig.frame(0.016); // lay out with the new language before clicking
-        rig.click_on(Hit::Settings);
-        let popover = rig.controls.rect_of(Hit::Popover);
-        assert!(
-            popover.x >= 0.0 && popover.x + popover.w <= 1280.0,
-            "{lang:?}"
-        );
-        assert!(
-            popover.y >= 0.0 && popover.y + popover.h <= 720.0,
-            "{lang:?}"
-        );
-    }
-}
-
-#[test]
-fn long_device_names_are_truncated_with_an_ellipsis() {
-    let mut ui = Ui::new();
-    ui.begin((1280, 720), 1.0);
-    let long = "A very long capture device name that cannot possibly fit";
-    let fitted = fit_text(&mut ui, long, BODY, 120.0);
-    assert!(fitted.ends_with('…') && fitted.chars().count() < long.chars().count());
-    assert!(ui.measure(&fitted, BODY).0 <= 120.0);
-    assert_eq!(fit_text(&mut ui, "Short", BODY, 120.0), "Short");
-}
-
-#[test]
-fn an_empty_device_list_still_has_room_for_a_placeholder() {
-    let mut m = model();
-    let with_one = popover_height(&m);
-    m.audio_devices.clear();
-    assert_eq!(
-        popover_height(&m),
-        with_one,
-        "empty shows one placeholder row"
-    );
-    m.audio_devices = (0..9).map(|i| format!("Device {i}")).collect();
-    assert_eq!(
-        popover_height(&m),
-        with_one + ROW_HEIGHT * (MAX_LISTED_DEVICES as f32 - 1.0)
-    );
 }
 
 #[test]
@@ -855,73 +458,12 @@ fn pressing_a_button_dips_it() {
 }
 
 #[test]
-fn popover_opens_over_the_configured_time_and_fades_out_non_interactively() {
-    let mut rig = Rig::new(true);
-    rig.click_on(Hit::Settings);
-    assert!(rig.controls.popover_t > 0.0 && rig.controls.popover_t < 1.0);
-    for _ in 0..20 {
-        rig.frame(0.016);
-    }
-    assert_eq!(rig.controls.popover_t, 1.0);
-
-    rig.click_on(Hit::Settings); // close
-    assert!(!rig.controls.settings_open());
-    assert!(rig.controls.popover_t > 0.0, "still fading out");
-    let drawn = rig.ui.vertices().len();
-    assert!(drawn > 0);
-    assert!(
-        rig.controls.hits.iter().all(|(h, _)| !h.in_popover()),
-        "a closing popover must not take clicks"
-    );
-    for _ in 0..30 {
-        rig.frame(0.016);
-    }
-    assert_eq!(rig.controls.popover_t, 0.0);
-    assert!(
-        rig.controls.segments.is_none() && rig.controls.amounts.keys().all(|h| !h.in_popover())
-    );
-}
-
-#[test]
-fn selection_indicator_slides_between_segments() {
-    let mut rig = Rig::new(true);
-    rig.click_on(Hit::Settings);
-    for _ in 0..30 {
-        rig.frame(0.016);
-    }
-    assert_eq!(rig.controls.segments.unwrap()[1], 0.0, "starts on Auto");
-
-    rig.model.theme_mode = ThemeMode::Light; // as if the click was applied
-    rig.frame(0.016);
-    let middle = rig.controls.segments.unwrap()[1];
-    assert!(middle > 0.0 && middle < 2.0, "sliding, got {middle}");
-    for _ in 0..60 {
-        rig.frame(0.016);
-    }
-    assert_eq!(rig.controls.segments.unwrap()[1], 2.0);
-}
-
-#[test]
-fn indicator_starts_on_the_current_choice_without_sliding_in() {
-    let mut rig = Rig::new(true);
-    rig.model.lang_mode = LangMode::Es;
-    rig.frame(0.016);
-    rig.click_on(Hit::Settings);
-    assert_eq!(rig.controls.segments.unwrap()[2], 2.0);
-}
-
-#[test]
 fn disabling_animations_makes_everything_instant() {
     let mut rig = Rig::new(true);
     rig.controls.set_animations(false);
-    rig.click_on(Hit::Settings);
-    assert_eq!(rig.controls.popover_t, 1.0);
     let (x, y) = rig.controls.rect_of(Hit::Fullscreen).center();
     rig.move_to(x, y);
     assert_eq!(rig.controls.amounts[&Hit::Fullscreen].0, 1.0);
-    rig.model.theme_mode = ThemeMode::Dark;
-    rig.frame(0.016);
-    assert_eq!(rig.controls.segments.unwrap()[1], 1.0);
 }
 
 #[test]
@@ -1045,30 +587,19 @@ fn the_pill_is_centred_in_the_video_area_not_in_the_window() {
 // -- Buttons that open the Studio panel ----------------------------------
 
 #[test]
-fn pill_buttons_ask_for_the_panel_on_their_section_when_it_is_on() {
+fn pill_buttons_ask_for_the_panel_on_their_section() {
     use crate::studio::StudioSection as S;
     let cases = [
         (Hit::Settings, S::Settings),
         (Hit::Replay, S::Recording),
         (Hit::Sources, S::Sources),
-        (Hit::Scenes(SceneHit::Button), S::Scenes),
+        (Hit::Scenes, S::Scenes),
     ];
     for (hit, section) in cases {
         let mut rig = Rig::new(true);
-        rig.controls.set_opens_panel(true);
         rig.click_on(hit);
         assert_eq!(rig.actions(), [Action::OpenStudio], "{hit:?}");
         assert_eq!(rig.controls.take_studio_request(), Some(section), "{hit:?}");
         assert_eq!(rig.controls.take_studio_request(), None, "asked once");
-        assert!(!rig.controls.popover_target(), "no popover for {hit:?}");
     }
-}
-
-#[test]
-fn pill_buttons_still_open_the_popover_when_the_panel_is_off() {
-    let mut rig = Rig::new(true);
-    rig.click_on(Hit::Settings);
-    assert!(rig.controls.settings_open());
-    assert_eq!(rig.controls.take_studio_request(), None);
-    assert!(rig.actions().is_empty());
 }

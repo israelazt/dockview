@@ -243,7 +243,6 @@ impl Controls {
     /// Instant replay: its options, and "save the last N", and record.
     fn pill_replay(&mut self, ui: &mut Ui, m: &Model, row: Row, mut x: f32) -> f32 {
         let t = &m.theme;
-        let replay_open = self.replay_open;
         self.icon_button(
             ui,
             m,
@@ -252,7 +251,7 @@ impl Controls {
             x + BUTTON / 2.0,
             row.cy,
             ICON_SIZE,
-            replay_open,
+            false,
         );
         if m.replay.is_on() {
             // A small red dot while the buffer is running.
@@ -287,7 +286,6 @@ impl Controls {
     /// The row of actions at the right: sources, scenes, settings, Studio, full
     /// screen.
     fn pill_actions(&mut self, ui: &mut Ui, m: &Model, row: Row, mut x: f32) {
-        let sources_open = self.sources_open;
         self.icon_button(
             ui,
             m,
@@ -296,12 +294,20 @@ impl Controls {
             x + BUTTON / 2.0,
             row.cy,
             ICON_SIZE,
-            sources_open,
+            false,
         );
         x += BUTTON + 4.0;
-        self.scenes_button(ui, m, x + BUTTON / 2.0, row.cy);
+        self.icon_button(
+            ui,
+            m,
+            Hit::Scenes,
+            ICON_SCENES,
+            x + BUTTON / 2.0,
+            row.cy,
+            ICON_SIZE,
+            false,
+        );
         x += BUTTON + 4.0;
-        let settings_open = self.settings_open;
         self.icon_button(
             ui,
             m,
@@ -310,7 +316,7 @@ impl Controls {
             x + BUTTON / 2.0,
             row.cy,
             ICON_SIZE,
-            settings_open,
+            false,
         );
         x += BUTTON + 4.0;
         let studio_open = m.studio_visible();
