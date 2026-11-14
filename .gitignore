@@ -34,6 +34,7 @@ Thumbs.db
 
 # Rust
 rust/target/
+rust/dist/
 
 # Skill symlinks (real files live in .agents/skills)
 .claude/skills/

@@ -45,6 +45,11 @@ pub fn run() {
         }
     };
 
+    if cli.version {
+        // The version line above is the answer (it is in the log, and on the
+        // console if there is one).
+        return;
+    }
     // A screenshot from the command line: take it and leave, with no window.
     if let Some(job) = &cli.snap {
         std::process::exit(crate::snap::run(job));

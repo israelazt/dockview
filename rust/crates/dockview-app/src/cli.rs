@@ -67,6 +67,8 @@ pub struct Cli {
     pub open_studio: bool,
     /// A screenshot to take instead of opening the window (`--snap`).
     pub snap: Option<SnapJob>,
+    /// Print the version and leave (`--version`).
+    pub version: bool,
     /// Start with the layer editor on, the second layer chosen (for the
     /// interface preview and tests).
     pub edit_layers: bool,
@@ -154,6 +156,7 @@ impl Cli {
                 }
                 "--open-studio" => cli.open_studio = true,
                 "--edit-layers" => cli.edit_layers = true,
+                "--version" | "-V" => cli.version = true,
                 "--snap" => snap_target = Some(SnapTarget::parse(&value("--snap")?)?),
                 "--snap-out" => snap_out = Some(PathBuf::from(value("--snap-out")?)),
                 "--snap-cursor" => snap_cursor = true,
@@ -317,6 +320,13 @@ mod tests {
         assert!(parse(&["--snap", "full", "--snap-copy", "--snap-delay", "61"]).is_err());
         assert!(parse(&["--snap", "full", "--snap-copy", "--snap-delay", "x"]).is_err());
         assert!(parse(&["--snap-delay", "3"]).is_err());
+    }
+
+    #[test]
+    fn version_is_a_flag() {
+        assert!(parse(&["--version"]).unwrap().version);
+        assert!(parse(&["-V"]).unwrap().version);
+        assert!(!parse(&[]).unwrap().version);
     }
 
     #[test]

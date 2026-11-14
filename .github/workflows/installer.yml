@@ -1,0 +1,39 @@
+name: Installer
+
+# Builds the installer and tries it whenever it (or its script) changes, so a
+# broken installer shows up here and not on release day. It does not publish.
+on:
+  push:
+    branches: [main, migration/rust]
+    paths:
+      - "rust/installer/**"
+      - "rust/tools/build_installer.ps1"
+      - "rust/tools/test_installer.ps1"
+      - ".github/workflows/installer.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: installer-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  installer:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: rust
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+      - name: Build the installer and the portable download
+        shell: pwsh
+        run: ./tools/build_installer.ps1
+      - name: Try the installer (install, check, uninstall)
+        shell: pwsh
+        run: ./tools/test_installer.ps1

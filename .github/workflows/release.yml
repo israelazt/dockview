@@ -1,8 +1,10 @@
 name: Release
 
-# Pushing a tag like v0.1.0 builds the program and publishes it as a GitHub
-# release. Running the workflow by hand (Actions > Release > Run workflow)
-# builds it and keeps the .exe as a downloadable artifact only, to try it out.
+# Pushing a tag like v0.1.0 builds the installer and the portable download,
+# tries the installer (installs it to a scratch folder and uninstalls it) and
+# publishes them as a GitHub release. Running the workflow by hand (Actions >
+# Release > Run workflow) does the same but keeps the files as a downloadable
+# artifact only, to try them out.
 on:
   push:
     tags: ["v*"]
@@ -26,16 +28,12 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: rust
-      - name: Build
-        run: cargo build --release -p dockview
-      - name: Package
+      - name: Build the installer and the portable download
         shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force dist | Out-Null
-          Copy-Item target/release/dockview.exe dist/Dockview.exe
-          $hash = (Get-FileHash dist/Dockview.exe -Algorithm SHA256).Hash.ToLower()
-          "$hash  Dockview.exe" | Set-Content -Encoding ascii dist/Dockview.exe.sha256
-          Get-ChildItem dist | Format-Table Name, Length
+        run: ./tools/build_installer.ps1
+      - name: Try the installer (install, check, uninstall)
+        shell: pwsh
+        run: ./tools/test_installer.ps1
       - uses: actions/upload-artifact@v4
         with:
           name: Dockview
@@ -46,5 +44,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: >
           gh release create "${{ github.ref_name }}"
-          dist/Dockview.exe dist/Dockview.exe.sha256
+          (Get-ChildItem dist/Dockview-*).FullName
           --title "Dockview ${{ github.ref_name }}" --generate-notes --verify-tag
