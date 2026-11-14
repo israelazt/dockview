@@ -39,16 +39,16 @@ cargo test --workspace
 
 ### Installing, and developing as before
 
-Developing does not change: `cargo run`, `targetelease\dockview.exe` and the
+Developing does not change: `cargo run`, `target/release/dockview.exe` and the
 tools work exactly as above, with or without the installer. A development run
 and an installed copy share the same settings (`%APPDATA%\Dockview`).
 
-To make what a user gets, `toolsuild_installer.ps1` builds the release and
-packages it into `dist\`: an installer (`Dockview-Setup-<version>.exe`,
+To make what a user gets, `tools/build_installer.ps1` builds the release and
+packages it into `dist/`: an installer (`Dockview-Setup-<version>.exe`,
 per user by default, no administrator, Start menu entry, uninstaller that asks
 whether to delete the settings) and a portable zip with just `Dockview.exe`,
 each with a `.sha256`. It needs [Inno Setup 6](https://jrsoftware.org/isdl.php)
-(`winget install JRSoftware.InnoSetup`). `tools	est_installer.ps1` installs it
+(`winget install JRSoftware.InnoSetup`). `tools/test_installer.ps1` installs it
 into a scratch folder, checks it and uninstalls; the CI does both whenever the
 installer changes (`installer.yml`) and on each release tag (`release.yml`).
 The version is the one in `Cargo.toml`; `dockview.exe --version` prints it.
