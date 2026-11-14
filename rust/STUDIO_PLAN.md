@@ -107,10 +107,10 @@ Por tarea: la sección usa las mismas `Action` que el popover (no se duplica ló
 
 | Tarea | Qué | Listo cuando |
 |---|---|---|
-| E-1 | Medir latencia con el panel abierto y cerrado (`--show-stats`, sin y con grabación) | Cifras anotadas; sin empeorar |
-| E-2 | Ventana de 720p, 1080p y pantalla completa; escala 100 %, 125 %, 150 % | Capturas de las combinaciones |
-| E-3 | Grabar con el panel abierto: el archivo no contiene el panel | MP4 revisado (video + 3 pistas) |
-| E-4 | Actualizar `ARCHITECTURE.md`, `UI_PLAN.md` y este plan; guardar el estado en memoria | Docs al día |
+| E-1 ✅ | Medir latencia con el panel abierto y cerrado (`--show-stats`, sin y con grabación) | Release, patrón de prueba, 4 tandas de 25 s alternando (`--log-stats` + `stats_summary.py`): latencia mediana 1,04–1,12 ms con el panel cerrado y 1,10 ms abierto; 0 frames saltados; GPU 0,12 ms/frame en ambos; CPU de un núcleo 9–12 % en todos (ruido entre tandas). Sin empeorar. **Pendiente con hardware:** repetir con la capturadora y grabando |
+| E-2 ✅ | Ventana de 720p, 1080p y pantalla completa; escala 100 %, 125 %, 150 % | 18 capturas (6 secciones × 3 escalas, español, tema oscuro, con micrófono). Los textos caben en todas; solo se recorta «Modo del dis…» en Estadísticas a 150 % (queda como mejora menor). Pantalla completa no se captura con `--screenshot`: ahí el panel se oculta por regla y está cubierto por tests |
+| E-3 ✅ (parcial) | Grabar con el panel abierto: el archivo no contiene el panel | `--test-pattern --record --open-studio` 12 s: el MP4 se crea (160 KB) y un fotograma extraído solo tiene el patrón, sin panel ni píldora. **No revisado:** las 3 pistas de audio (no hay ffmpeg en este equipo) ni la prueba con capturadora |
+| E-4 ✅ | Actualizar `ARCHITECTURE.md`, `UI_PLAN.md` y este plan; guardar el estado en memoria | `UI_PLAN.md` y este plan al día; `ARCHITECTURE.md` no nombra popovers ni el panel, no hizo falta tocarlo; memoria actualizada |
 
 **Pausa E:** revisión final del modo Estudio.
 

@@ -1,6 +1,6 @@
 # Dockview UI — diseño y plan
 
-> Reorganización con panel lateral: ver `STUDIO_PLAN.md`.
+> Reorganización con panel lateral: ver `STUDIO_PLAN.md`. **Desde el bloque D del modo Estudio ya no hay popovers**: sus contenidos viven en las secciones del panel (`ui/studio/`) y los botones de la píldora abren el panel en su sección. Lo que sigue describe el diseño original y la estructura previa a ese cambio.
 
 ## Objetivo
 
@@ -107,7 +107,7 @@ Medidas de referencia (modo de prueba, build release, PC del autor: GTX 1660 Ti,
 | `tooltip.rs` | Cuándo salen los tooltips, dónde y qué dicen |
 | `widgets.rs` | Piezas reutilizables: botón de icono, interruptor, deslizador, filas de lista, selector segmentado |
 | `pill.rs` | La píldora flotante |
-| `popover_settings.rs`, `popover_replay.rs`, `popover_sources.rs`, `scenes.rs` | Un popover por archivo |
+| ~~`popover_*.rs`, `scenes.rs`~~ | Eliminados en el bloque D del modo Estudio; ahora son las secciones de `ui/studio/` (`sources.rs`, `scenes.rs`, `audio.rs`, `recording.rs`, `settings.rs`, `stats.rs`), con `edit.rs`/`typing.rs` para escribir un nombre |
 | `math.rs` | Fundidos, curvas de aceleración y mezcla de color |
 | `tests.rs` | Los tests de los controles |
 
