@@ -65,7 +65,7 @@ impl SelectionOverlay for CaptureOverlay {
                 }
             }
             window.set_arrow_cursor(
-                controller.mode() == Mode::Window || controller.hovered_button().is_some(),
+                controller.mode() == Mode::Window || controller.hovered().is_some(),
             );
             let view = controller.view();
             let snip = SnipView {
@@ -73,9 +73,10 @@ impl SelectionOverlay for CaptureOverlay {
                 mode: controller.mode(),
                 origin,
                 toolbar: controller.toolbar(),
-                toolbar_back: controller.toolbar_back(),
                 hovered: controller.hovered_button(),
                 pressed: controller.button_pressed(),
+                close_hovered: controller.close_hovered(),
+                close_pressed: controller.close_pressed(),
                 lang: options.lang,
             };
             let drawn = gpu.draw(&mut |_device, context, size| {

@@ -4,14 +4,11 @@
 //! the same on every platform: the window only turns its events into [`Input`]s.
 
 use crate::desktop::{DesktopMonitor, PxRect};
-use crate::select::{
-    toolbar_bounds, toolbar_hit, toolbar_layout, Input, Mode, Selector, Step, View,
-};
+use crate::select::{toolbar_layout, Input, Mode, Selector, Step, Toolbar, ToolbarHit, View};
 
 pub struct OverlayController {
     selector: Selector,
-    toolbar: Vec<(Mode, PxRect)>,
-    toolbar_back: Option<PxRect>,
+    toolbar: Toolbar,
     scale_percent: u32,
     pointer: Option<(i32, i32)>,
     /// A press that began on a button.
@@ -23,7 +20,6 @@ impl OverlayController {
     pub fn new(mode: Mode, bounds: PxRect, windows: Vec<PxRect>, monitor: &DesktopMonitor) -> Self {
         let toolbar = toolbar_layout(monitor.bounds, monitor.scale_percent);
         Self {
-            toolbar_back: toolbar_bounds(&toolbar, monitor.scale_percent),
             toolbar,
             selector: Selector::new(mode, bounds, windows),
             scale_percent: monitor.scale_percent.max(100),
@@ -45,12 +41,8 @@ impl OverlayController {
         self.selector.view()
     }
 
-    pub fn toolbar(&self) -> &[(Mode, PxRect)] {
+    pub fn toolbar(&self) -> &Toolbar {
         &self.toolbar
-    }
-
-    pub fn toolbar_back(&self) -> Option<PxRect> {
-        self.toolbar_back
     }
 
     /// The display scale the buttons are drawn at, in percent.
@@ -64,14 +56,40 @@ impl OverlayController {
     }
 
     /// The button under the pointer.
-    pub fn hovered_button(&self) -> Option<Mode> {
+    pub fn hovered(&self) -> Option<ToolbarHit> {
         let (x, y) = self.pointer?;
-        toolbar_hit(&self.toolbar, x, y)
+        self.toolbar.hit(x, y)
     }
 
-    /// Whether a button is being pressed (a click that is not a selection).
+    /// The mode button under the pointer.
+    pub fn hovered_button(&self) -> Option<Mode> {
+        match self.hovered() {
+            Some(ToolbarHit::Mode(mode)) => Some(mode),
+            _ => None,
+        }
+    }
+
+    /// Whether the pointer is on the close button.
+    pub fn close_hovered(&self) -> bool {
+        self.hovered() == Some(ToolbarHit::Close)
+    }
+
+    /// The button being pressed (a click that is not a selection).
+    pub fn pressed(&self) -> Option<ToolbarHit> {
+        self.on_button.then(|| self.hovered()).flatten()
+    }
+
+    /// The mode button being pressed.
     pub fn button_pressed(&self) -> Option<Mode> {
-        self.on_button.then(|| self.hovered_button()).flatten()
+        match self.pressed() {
+            Some(ToolbarHit::Mode(mode)) => Some(mode),
+            _ => None,
+        }
+    }
+
+    /// Whether the close button is being pressed.
+    pub fn close_pressed(&self) -> bool {
+        self.pressed() == Some(ToolbarHit::Close)
     }
 
     pub fn apply(&mut self, input: Input) -> Step {
@@ -84,9 +102,13 @@ impl OverlayController {
             }
             Input::Down(x, y) => {
                 self.pointer = Some((x, y));
-                if let Some(mode) = toolbar_hit(&self.toolbar, x, y) {
-                    self.on_button = true;
-                    return self.selector.apply(Input::SetMode(mode));
+                match self.toolbar.hit(x, y) {
+                    Some(ToolbarHit::Mode(mode)) => {
+                        self.on_button = true;
+                        return self.selector.apply(Input::SetMode(mode));
+                    }
+                    Some(ToolbarHit::Close) => return Step::Cancel,
+                    None => {}
                 }
             }
             Input::Up(x, y) => {
@@ -125,7 +147,13 @@ mod tests {
     }
 
     fn centre_of(c: &OverlayController, mode: Mode) -> (i32, i32) {
-        let r = c.toolbar().iter().find(|(m, _)| *m == mode).unwrap().1;
+        let r = c
+            .toolbar()
+            .buttons
+            .iter()
+            .find(|(m, _)| *m == mode)
+            .unwrap()
+            .1;
         (r.x + r.w as i32 / 2, r.y + r.h as i32 / 2)
     }
 
@@ -167,6 +195,16 @@ mod tests {
     }
 
     #[test]
+    fn the_close_button_cancels_and_is_hovered_before() {
+        let mut c = controller();
+        let r = c.toolbar().close;
+        c.apply(Input::Move(r.x + 5, r.y + 5));
+        assert!(c.close_hovered());
+        assert_eq!(c.hovered_button(), None);
+        assert_eq!(c.apply(Input::Down(r.x + 5, r.y + 5)), Step::Cancel);
+    }
+
+    #[test]
     fn the_hovered_button_follows_the_pointer() {
         let mut c = controller();
         assert_eq!(c.hovered_button(), None);
@@ -187,15 +225,9 @@ mod tests {
             name: "R".into(),
         };
         let c = OverlayController::new(Mode::Window, PxRect::new(0, 0, 4480, 1440), vec![], &right);
-        let all = c
-            .toolbar()
-            .iter()
-            .map(|(_, r)| *r)
-            .reduce(|a, b| a.union(&b))
-            .unwrap();
+        let all = c.toolbar().back;
         assert!(all.x > 1920 && all.right() < 4480);
         assert_eq!(c.scale_percent(), 150);
-        assert!(c.toolbar_back().is_some());
         assert_eq!(c.mode(), Mode::Window);
     }
 }

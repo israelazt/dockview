@@ -41,9 +41,10 @@ impl Rig {
             mode: self.controller.mode(),
             origin: (0, 0),
             toolbar: self.controller.toolbar(),
-            toolbar_back: self.controller.toolbar_back(),
             hovered: self.controller.hovered_button(),
             pressed: self.controller.button_pressed(),
+            close_hovered: self.controller.close_hovered(),
+            close_pressed: self.controller.close_pressed(),
             lang: Lang::Es,
         };
         self.chrome.frame(&mut self.ui, &v, dt, animations);
@@ -59,6 +60,7 @@ impl Rig {
         let r = self
             .controller
             .toolbar()
+            .buttons
             .iter()
             .find(|(m, _)| *m == mode)
             .unwrap()
@@ -186,11 +188,32 @@ fn drawing_scales_with_the_monitor_scale() {
         mode: Mode::Rectangle,
         origin: (0, 0),
         toolbar: rig.controller.toolbar(),
-        toolbar_back: rig.controller.toolbar_back(),
         hovered: None,
         pressed: None,
+        close_hovered: false,
+        close_pressed: false,
         lang: Lang::En,
     };
     rig.chrome.frame(&mut rig.ui, &v, 0.016, false);
     assert!(!rig.ui.vertices().is_empty());
+}
+
+#[test]
+fn the_capsule_is_as_round_as_the_pill_of_the_app_and_has_a_close_button_that_lights() {
+    let mut rig = Rig::new();
+    rig.settle();
+    // Half its height: a full capsule, like the pill (radius 28 on 56).
+    let back = rig.controller.toolbar().back;
+    assert_eq!(back.h, 56);
+    let close = rig.controller.toolbar().close;
+    rig.controller.apply(Input::Move(close.x + 5, close.y + 5));
+    rig.settle();
+    assert!(
+        rig.chrome.hover[4] > 0.99,
+        "the close button lights under the pointer"
+    );
+    assert!(rig.chrome.hover[0] < 0.01);
+    rig.controller.apply(Input::Move(5, 900));
+    rig.settle();
+    assert!(rig.chrome.hover[4] < 0.01);
 }

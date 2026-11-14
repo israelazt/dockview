@@ -81,6 +81,8 @@ Pedido: que el menú de captura sea igual al de la app (bordes curvos, iconos, a
 - **Verificado con la app real y el ratón:** la barra en el monitor del cursor con el aspecto de la app, el indicador pasando a «Ventana», el resaltado de ventana con borde y tamaño, y la captura resultante (1280×800).
 - **Pendiente:** las animaciones solo se ven en movimiento (las capturas son fijas); monitores con distinta escala sin probar; los bordes de la selección son de esquinas rectas.
 
+**Ajuste de coherencia (2026-11-14):** la barra de captura se parecía a la de la app pero no era igual (rectángulo redondeado de radio 18 con botones rectangulares de 40 px). Ahora se construye con las medidas de la píldora: cápsula de 56 px con radio 28, la misma sombra y borde, botones de 32 px con extremos redondos concéntricos (12 px de margen), iconos de 17 px que se hunden al pulsar, el separador fino de 1×20 y un botón de cerrar (cancela la captura). La disposición es pura y está en `domain::select::Toolbar` (con tests de medidas a 100 % y 150 %).
+
 **Pausa S-B.**
 
 ### Resultados del bloque S-B (2026-11-14)

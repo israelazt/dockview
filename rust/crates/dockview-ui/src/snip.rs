@@ -11,7 +11,7 @@
 
 use dockview_domain::desktop::PxRect;
 use dockview_domain::i18n::{tr, Lang};
-use dockview_domain::select::{Mode, View};
+use dockview_domain::select::{Mode, Toolbar, View};
 use dockview_domain::theme::{Color, Theme};
 
 use crate::motion::{ease_out_cubic, lerp_color, move_toward, smooth};
@@ -35,6 +35,9 @@ const ICON_RECT: char = '\u{e0ab}';
 const ICON_WINDOW: char = '\u{e426}';
 const ICON_FULL: char = '\u{e534}';
 const ICON_FREE: char = '\u{e1ce}';
+const ICON_CLOSE: char = '\u{e1b2}';
+/// The size of the icons of the pill of the app.
+const ICON_SIZE: f32 = 17.0;
 
 fn icon_of(mode: Mode) -> char {
     match mode {
@@ -55,10 +58,11 @@ pub struct SnipView<'a> {
     pub mode: Mode,
     /// The corner of the overlay window on the virtual screen.
     pub origin: (i32, i32),
-    pub toolbar: &'a [(Mode, PxRect)],
-    pub toolbar_back: Option<PxRect>,
+    pub toolbar: &'a Toolbar,
     pub hovered: Option<Mode>,
     pub pressed: Option<Mode>,
+    pub close_hovered: bool,
+    pub close_pressed: bool,
     pub lang: Lang,
 }
 
@@ -68,8 +72,9 @@ pub struct SnipChrome {
     appear: f32,
     /// Where the sliding indicator is, as a button position (fractions glide).
     indicator: Option<f32>,
-    hover: [f32; 4],
-    press: [f32; 4],
+    /// The four mode buttons, then the close button.
+    hover: [f32; 5],
+    press: [f32; 5],
     /// The window highlight (logical x, y, w, h) and how visible it is.
     window: Option<[f32; 4]>,
     window_alpha: f32,
@@ -87,8 +92,8 @@ impl SnipChrome {
         Self {
             appear: 0.0,
             indicator: None,
-            hover: [0.0; 4],
-            press: [0.0; 4],
+            hover: [0.0; 5],
+            press: [0.0; 5],
             window: None,
             window_alpha: 0.0,
             theme: Theme::dark(),
@@ -215,7 +220,9 @@ impl SnipChrome {
         }
     }
 
-    /// The bar of mode buttons.
+    /// The bar of mode buttons, made like the pill of the app: a capsule with
+    /// the same shadow and border, 32 px buttons with a rounded wash on hover,
+    /// icons 17 px that dip under the finger, a thin divider and a close button.
     fn draw_toolbar(
         &mut self,
         ui: &mut Ui,
@@ -225,9 +232,6 @@ impl SnipChrome {
         animations: bool,
         scale: f32,
     ) {
-        let Some(back) = v.toolbar_back else {
-            return;
-        };
         let t = self.theme;
         let logical = |r: PxRect| {
             Rect::new(
@@ -240,9 +244,9 @@ impl SnipChrome {
         // The bar slides down a little as it fades in, like the Studio panel.
         ui.set_opacity(eased);
         ui.set_offset(0.0, (1.0 - eased) * -14.0);
-        let bar = logical(back);
-        ui.shadow(bar, 18.0, 24.0, t.shadow);
-        ui.panel(bar, 18.0, t.surface, t.border, 1.0);
+        let bar = logical(v.toolbar.back);
+        ui.shadow(bar, bar.h / 2.0, 22.0, t.shadow);
+        ui.panel(bar, bar.h / 2.0, t.surface, t.border, 1.0);
 
         // The indicator glides to the current mode's button.
         let current = index_of(v.mode) as f32;
@@ -255,37 +259,63 @@ impl SnipChrome {
         );
         self.indicator = Some(at);
         if let (Some(first), Some(last)) = (
-            v.toolbar.get(at.floor() as usize),
-            v.toolbar.get(at.ceil() as usize),
+            v.toolbar.buttons.get(at.floor() as usize),
+            v.toolbar.buttons.get(at.ceil() as usize),
         ) {
             let (a, b) = (logical(first.1), logical(last.1));
             let k = at - at.floor();
             let lit = Rect::new(a.x + (b.x - a.x) * k, a.y, a.w, a.h);
-            ui.rect(lit, 13.0, t.segment_active);
+            ui.rect(lit, lit.h / 2.0, t.segment_active);
         }
 
-        for (i, (mode, rect)) in v.toolbar.iter().enumerate() {
+        for (i, (mode, rect)) in v.toolbar.buttons.iter().enumerate() {
             let r = logical(*rect);
             let (hover, press) = (v.hovered == Some(*mode), v.pressed == Some(*mode));
-            self.hover[i] = Self::step(self.hover[i], f32::from(hover), dt, HOVER_RATE, animations);
-            self.press[i] = Self::step(self.press[i], f32::from(press), dt, PRESS_RATE, animations);
-            let wash = t.hover.a * (self.hover[i] * 0.6 + 0.9 * self.press[i]);
+            let (h, p) = self.animate(i, hover, press, dt, animations);
+            let wash = t.hover.a * (h * 0.6 + 0.9 * p);
             if wash > 0.002 && *mode != v.mode {
-                ui.rect(r, 13.0, t.hover.with_alpha(wash.min(1.0)));
+                ui.rect(r, r.h / 2.0, t.hover.with_alpha(wash.min(1.0)));
             }
             let chosen = (1.0 - (index_of(*mode) as f32 - at).abs()).clamp(0.0, 1.0);
-            let color = lerp_color(t.text_dim, t.text, chosen.max(self.hover[i]));
+            let color = lerp_color(t.text_dim, t.text, chosen.max(h));
             let words = tr(v.lang, mode.label());
             let (text_w, text_h) = ui.measure(words, LABEL);
-            let icon = 16.0 * (1.0 - 0.12 * self.press[i]);
+            let icon = ICON_SIZE * (1.0 - 0.1 * p);
             let total = icon + 8.0 + text_w;
             let x = r.x + (r.w - total) / 2.0;
             let cy = r.y + r.h / 2.0;
             ui.icon(icon_of(*mode), x + icon / 2.0, cy, icon, color);
             ui.text(words, x + icon + 8.0, cy - text_h / 2.0, LABEL, color);
         }
+
+        // The thin divider, then the close button (an icon in a round wash).
+        let close = logical(v.toolbar.close);
+        let cy = close.y + close.h / 2.0;
+        let divider_x = (v.toolbar.divider_x - v.origin.0) as f32 / scale;
+        ui.rect(Rect::new(divider_x, cy - 10.0, 1.0, 20.0), 0.5, t.track);
+        let (h, p) = self.animate(4, v.close_hovered, v.close_pressed, dt, animations);
+        let wash = t.hover.a * (h + 0.9 * p);
+        if wash > 0.002 {
+            ui.rect(close, close.h / 2.0, t.hover.with_alpha(wash.min(1.0)));
+        }
+        let (ccx, _) = close.center();
+        ui.icon(ICON_CLOSE, ccx, cy, ICON_SIZE * (1.0 - 0.1 * p), t.text);
         ui.set_offset(0.0, 0.0);
         ui.set_opacity(1.0);
+    }
+
+    /// Moves the hover and press amounts of button `i`; returns them.
+    fn animate(
+        &mut self,
+        i: usize,
+        hover: bool,
+        press: bool,
+        dt: f32,
+        animations: bool,
+    ) -> (f32, f32) {
+        self.hover[i] = Self::step(self.hover[i], f32::from(hover), dt, HOVER_RATE, animations);
+        self.press[i] = Self::step(self.press[i], f32::from(press), dt, PRESS_RATE, animations);
+        (self.hover[i], self.press[i])
     }
 }
 

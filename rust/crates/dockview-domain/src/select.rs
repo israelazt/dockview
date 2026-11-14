@@ -44,46 +44,83 @@ impl Mode {
     }
 }
 
-/// Where the mode buttons go: a bar at the top centre of `monitor`, drawn at
-/// the monitor's display scale. Each button with its rectangle, in
-/// virtual-screen pixels, left to right in the order of [`Mode::ALL`].
-pub fn toolbar_layout(monitor: PxRect, scale_percent: u32) -> Vec<(Mode, PxRect)> {
-    let scale = |v: i32| v * scale_percent.max(100) as i32 / 100;
-    let (button_w, button_h, gap, margin_top) = (scale(156), scale(40), scale(6), scale(24));
+/// The bar over the dimmed screen, laid out like the pill of the app: a capsule
+/// 56 px high with buttons 32 px high inside it, a thin divider, and a close
+/// button. All in virtual-screen pixels.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Toolbar {
+    /// The mode buttons, left to right in the order of [`Mode::ALL`].
+    pub buttons: Vec<(Mode, PxRect)>,
+    /// The button that cancels the capture.
+    pub close: PxRect,
+    /// Where the divider before the close button is (its left pixel).
+    pub divider_x: i32,
+    /// The capsule behind everything.
+    pub back: PxRect,
+}
+
+/// What a point of the bar is on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ToolbarHit {
+    Mode(Mode),
+    Close,
+}
+
+/// The size of the pieces at 100 % (what the app's pill uses): the capsule is
+/// `BAR_H` high with `BAR_PAD` around the buttons, which are `BUTTON_H` high,
+/// so the buttons' rounded ends sit concentric with the capsule's.
+const BAR_H: i32 = 56;
+const BAR_PAD: i32 = 12;
+const BUTTON_H: i32 = 32;
+const MODE_BUTTON_W: i32 = 146;
+const BUTTON_GAP: i32 = 4;
+/// Room either side of the divider (the pill of the app uses 18).
+const DIVIDER_GAP: i32 = 18;
+const BAR_MARGIN_TOP: i32 = 24;
+
+/// Where the bar goes: at the top centre of `monitor`, drawn at the monitor's
+/// display scale.
+pub fn toolbar_layout(monitor: PxRect, scale_percent: u32) -> Toolbar {
+    let s = |v: i32| v * scale_percent.max(100) as i32 / 100;
     let count = Mode::ALL.len() as i32;
-    let total = count * button_w + (count - 1) * gap;
+    let modes_w = count * s(MODE_BUTTON_W) + (count - 1) * s(BUTTON_GAP);
+    let total =
+        s(BAR_PAD) + modes_w + s(DIVIDER_GAP) + s(1) + s(DIVIDER_GAP) + s(BUTTON_H) + s(BAR_PAD);
     let left = monitor.x + (monitor.w as i32 - total) / 2;
-    Mode::ALL
+    let top = monitor.y + s(BAR_MARGIN_TOP);
+    let button_y = top + s(BAR_PAD);
+    let buttons = Mode::ALL
         .iter()
         .enumerate()
         .map(|(i, mode)| {
-            let x = left + i as i32 * (button_w + gap);
+            let x = left + s(BAR_PAD) + i as i32 * (s(MODE_BUTTON_W) + s(BUTTON_GAP));
             (
                 *mode,
-                PxRect::new(x, monitor.y + margin_top, button_w as u32, button_h as u32),
+                PxRect::new(x, button_y, s(MODE_BUTTON_W) as u32, s(BUTTON_H) as u32),
             )
         })
-        .collect()
+        .collect();
+    let divider_x = left + s(BAR_PAD) + modes_w + s(DIVIDER_GAP);
+    let close_x = divider_x + s(1) + s(DIVIDER_GAP);
+    Toolbar {
+        buttons,
+        close: PxRect::new(close_x, button_y, s(BUTTON_H) as u32, s(BUTTON_H) as u32),
+        divider_x,
+        back: PxRect::new(left, top, total as u32, s(BAR_H) as u32),
+    }
 }
 
-/// The bar behind the buttons: their union with some room around.
-pub fn toolbar_bounds(layout: &[(Mode, PxRect)], scale_percent: u32) -> Option<PxRect> {
-    let pad = 8 * scale_percent.max(100) as i32 / 100;
-    let all = layout.iter().map(|(_, r)| *r).reduce(|a, b| a.union(&b))?;
-    Some(PxRect::new(
-        all.x - pad,
-        all.y - pad,
-        all.w + 2 * pad as u32,
-        all.h + 2 * pad as u32,
-    ))
-}
-
-/// The mode whose button is at the point, if any.
-pub fn toolbar_hit(layout: &[(Mode, PxRect)], x: i32, y: i32) -> Option<Mode> {
-    layout
-        .iter()
-        .find(|(_, r)| r.contains(x, y))
-        .map(|(m, _)| *m)
+impl Toolbar {
+    /// What is at the point, if a button.
+    pub fn hit(&self, x: i32, y: i32) -> Option<ToolbarHit> {
+        if self.close.contains(x, y) {
+            return Some(ToolbarHit::Close);
+        }
+        self.buttons
+            .iter()
+            .find(|(_, r)| r.contains(x, y))
+            .map(|(m, _)| ToolbarHit::Mode(*m))
+    }
 }
 
 /// What was picked.
@@ -393,45 +430,61 @@ mod tests {
     }
 
     #[test]
-    fn the_toolbar_sits_at_the_top_centre_with_a_button_per_mode_and_scales() {
+    fn the_toolbar_is_a_capsule_like_the_apps_pill_at_the_top_centre_and_scales() {
         let monitor = PxRect::new(-2560, -200, 2560, 1440);
         let bar = toolbar_layout(monitor, 100);
-        assert_eq!(bar.len(), 4);
+        assert_eq!(bar.buttons.len(), 4);
         assert_eq!(
-            bar.iter().map(|(m, _)| *m).collect::<Vec<_>>(),
+            bar.buttons.iter().map(|(m, _)| *m).collect::<Vec<_>>(),
             Mode::ALL.to_vec()
         );
-        // Centred on the monitor, near its top, buttons in a row without overlap.
-        let all = bar
-            .iter()
-            .map(|(_, r)| *r)
-            .reduce(|a, b| a.union(&b))
-            .unwrap();
-        let centre = all.x + all.w as i32 / 2;
+        // The capsule is as high as the app's pill and centred near the top.
+        assert_eq!(bar.back.h, 56);
+        let centre = bar.back.x + bar.back.w as i32 / 2;
         assert!((centre - (monitor.x + 1280)).abs() <= 1, "{centre}");
-        assert!(all.y > monitor.y && all.y < monitor.y + 100);
-        for pair in bar.windows(2) {
-            assert!(pair[0].1.right() <= pair[1].1.x);
-            assert_eq!(pair[0].1.y, pair[1].1.y);
+        assert_eq!(bar.back.y, monitor.y + 24);
+        // The buttons are 32 high, 12 from the capsule's edge all round, and
+        // in a row without overlap; the close button is a 32 circle after the divider.
+        for (_, r) in &bar.buttons {
+            assert_eq!((r.h, r.y), (32, bar.back.y + 12));
         }
-        // At 150 % the buttons are bigger.
+        assert_eq!(bar.buttons[0].1.x, bar.back.x + 12);
+        for pair in bar.buttons.windows(2) {
+            assert!(pair[0].1.right() <= pair[1].1.x);
+        }
+        assert_eq!((bar.close.w, bar.close.h), (32, 32));
+        assert!(bar.divider_x > bar.buttons[3].1.right());
+        assert!(bar.close.x > bar.divider_x);
+        assert_eq!(
+            bar.close.right() + 12,
+            bar.back.right(),
+            "12 of room at the end too"
+        );
+        // At 150 % everything is half as big again.
         let big = toolbar_layout(monitor, 150);
-        assert_eq!(big[0].1.w, bar[0].1.w * 3 / 2);
-        assert_eq!(big[0].1.h, bar[0].1.h * 3 / 2);
-        // The bar has room around the buttons.
-        let back = toolbar_bounds(&bar, 100).unwrap();
-        assert!(back.x < all.x && back.right() > all.right() && back.y < all.y);
-        assert!(toolbar_bounds(&[], 100).is_none());
+        assert_eq!(big.back.h, 84);
+        assert_eq!(big.buttons[0].1.h, 48);
+        assert_eq!(big.close.w, 48);
     }
 
     #[test]
-    fn a_point_on_a_button_gives_its_mode_and_elsewhere_gives_nothing() {
+    fn a_point_on_a_button_gives_what_it_is_and_elsewhere_gives_nothing() {
         let bar = toolbar_layout(PxRect::new(0, 0, 1920, 1080), 100);
-        for (mode, rect) in &bar {
-            assert_eq!(toolbar_hit(&bar, rect.x + 3, rect.y + 3), Some(*mode));
+        for (mode, rect) in &bar.buttons {
+            assert_eq!(
+                bar.hit(rect.x + 3, rect.y + 3),
+                Some(ToolbarHit::Mode(*mode))
+            );
         }
-        assert_eq!(toolbar_hit(&bar, 5, 5), None);
-        assert_eq!(toolbar_hit(&bar, 960, 600), None);
+        assert_eq!(
+            bar.hit(bar.close.x + 3, bar.close.y + 3),
+            Some(ToolbarHit::Close)
+        );
+        assert_eq!(bar.hit(5, 5), None);
+        assert_eq!(bar.hit(960, 600), None);
+        // The gaps between buttons are the capsule, not a button.
+        let first = bar.buttons[0].1;
+        assert_eq!(bar.hit(first.right() + 1, first.y + 3), None);
     }
 
     #[test]
