@@ -205,26 +205,21 @@ impl SceneEditor {
         let t = &m.theme;
         let layers = &m.scenes.layers;
         let selected = m.scenes.selected.filter(|i| *i < layers.len());
-        let clear = t.accent.with_alpha(0.0);
         for (i, layer) in layers.iter().enumerate() {
             if !layer.visible || Some(i) == selected {
                 continue;
             }
             let (x, y, w, h) = picture.to_screen(self.rect_of(m, i));
-            ui.panel(
-                Rect::new(x, y, w, h),
-                2.0,
-                clear,
-                t.accent.with_alpha(0.55),
-                1.0,
-            );
+            ui.outline(Rect::new(x, y, w, h), 1.0, t.accent.with_alpha(0.55));
         }
         let Some(i) = selected else {
             return;
         };
         let (x, y, w, h) = picture.to_screen(self.rect_of(m, i));
         let rect = Rect::new(x, y, w, h);
-        ui.panel(rect, 2.0, t.accent.with_alpha(0.10), t.accent, 2.0);
+        // A light tint and a frame: the layer underneath stays visible.
+        ui.rect(rect, 0.0, t.accent.with_alpha(0.10));
+        ui.outline(rect, 2.0, t.accent);
         // The name, on a chip over the top left corner.
         let name = &layers[i].name;
         let (text_w, text_h) = ui.measure(name, LABEL);

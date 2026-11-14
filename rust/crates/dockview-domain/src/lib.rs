@@ -20,6 +20,7 @@ pub mod image;
 pub mod layer_edit;
 pub mod layout;
 pub mod log;
+pub mod overlay_input;
 pub mod pcm;
 pub mod ports;
 pub mod recording;

@@ -27,9 +27,9 @@ pub mod mf;
 #[cfg(windows)]
 pub mod mmcss;
 #[cfg(windows)]
-pub mod overlay;
+pub mod overlay_gpu;
 #[cfg(windows)]
-mod overlay_paint;
+pub mod overlay_window;
 #[cfg(windows)]
 pub mod perf;
 #[cfg(windows)]

@@ -16,6 +16,7 @@
 #[cfg(not(windows))]
 compile_error!("Dockview only supports Windows.");
 
+mod capture_overlay;
 mod run;
 mod shell;
 mod snap;

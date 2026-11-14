@@ -249,7 +249,7 @@ impl StudioPanel {
         if let Some(shown) = intersect(field, self.clip) {
             self.register(PanelHit::EditField, shown);
         }
-        ui.panel(field, 9.0, t.segment_track, t.accent, 1.0);
+        ui.panel(field, 9.0, t.surface_solid, t.accent, 1.0);
         let text_x = x + 10.0;
         self.edit_room = w - 20.0 - 2.0;
         ui.text(&typed, text_x, y + (ROW_H - line_h) / 2.0, ROW_TEXT, t.text);

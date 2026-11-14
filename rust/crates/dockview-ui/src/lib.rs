@@ -9,6 +9,7 @@ pub mod motion;
 mod options;
 pub mod rec;
 pub mod scene_editor;
+pub mod snip;
 pub mod stats;
 pub mod studio;
 #[cfg(test)]
@@ -193,6 +194,26 @@ impl Ui {
             (r.h - 2.0 * inset).max(0.0),
         );
         self.rect(inner, (radius - inset).max(0.0), fill);
+    }
+
+    /// Only a frame, `width` thick and drawn inside `r`, with the inside left as
+    /// it is. (A [`Ui::panel`] paints its border as a whole rectangle under the
+    /// fill, so with a clear or translucent fill the border colour shows
+    /// through everywhere: use this for a frame over something that must stay
+    /// visible.) The corners are square.
+    pub fn outline(&mut self, r: Rect, width: f32, color: Color) {
+        let w = width.min(r.w / 2.0).min(r.h / 2.0).max(0.0);
+        if w <= 0.0 {
+            return;
+        }
+        self.rect(Rect::new(r.x, r.y, r.w, w), 0.0, color);
+        self.rect(Rect::new(r.x, r.y + r.h - w, r.w, w), 0.0, color);
+        self.rect(Rect::new(r.x, r.y + w, w, r.h - 2.0 * w), 0.0, color);
+        self.rect(
+            Rect::new(r.x + r.w - w, r.y + w, w, r.h - 2.0 * w),
+            0.0,
+            color,
+        );
     }
 
     /// A soft shadow around the outside of a rounded rectangle.
@@ -446,6 +467,40 @@ mod tests {
         let style = TextStyle::new(13.0, Weight::Regular);
         ui.text("a b", 0.0, 0.0, style, Theme::dark().text);
         assert_eq!(ui.vertices().len(), 2 * 6);
+    }
+
+    fn ui_with_nothing() -> Ui {
+        ui()
+    }
+
+    #[test]
+    fn an_outline_covers_only_the_frame_and_leaves_the_inside_alone() {
+        let mut ui = ui();
+        let t = Theme::dark();
+        ui.outline(Rect::new(10.0, 20.0, 100.0, 60.0), 2.0, t.accent);
+        // Four strips, none of them over the middle of the rectangle.
+        assert_eq!(ui.vertices().len(), 4 * 6);
+        let (cx, cy) = (60.0_f32, 50.0_f32);
+        for quad in ui.vertices().chunks(6) {
+            let xs: Vec<f32> = quad.iter().map(|v| v.pos[0]).collect();
+            let ys: Vec<f32> = quad.iter().map(|v| v.pos[1]).collect();
+            let (x0, x1) = (
+                xs.iter().cloned().fold(f32::MAX, f32::min),
+                xs.iter().cloned().fold(f32::MIN, f32::max),
+            );
+            let (y0, y1) = (
+                ys.iter().cloned().fold(f32::MAX, f32::min),
+                ys.iter().cloned().fold(f32::MIN, f32::max),
+            );
+            assert!(
+                !(x0 < cx && cx < x1 && y0 < cy && cy < y1),
+                "a strip covers the middle"
+            );
+        }
+        // Too thin or too small draws nothing odd.
+        let mut ui2 = ui_with_nothing();
+        ui2.outline(Rect::new(0.0, 0.0, 10.0, 10.0), 0.0, t.accent);
+        assert!(ui2.vertices().is_empty());
     }
 
     #[test]

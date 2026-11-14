@@ -70,6 +70,17 @@ Igual que el resto: tarea atómica = un commit + push, con `fmt`, `clippy` sin a
 | S-B4 ✅ | Pantalla completa y forma libre | Forma libre recorta con transparencia |
 | S-B5 ✅ | Barra flotante de modos y retardo (3/5/10 s) con cuenta atrás | Captura con retardo de un menú desplegable |
 
+### La superposición con el aspecto de la app (2026-11-14)
+
+Pedido: que el menú de captura sea igual al de la app (bordes curvos, iconos, animaciones). Con GDI no se podía (sin suavizado, sin iconos Lucide, sin animaciones con el mismo motor), así que la superposición se rehízo:
+- **`platform/overlay_window.rs`:** ventana Win32 sin borde que solo recoge ratón y teclas (devuelve `Input`s del dominio); **`overlay_gpu.rs`:** una GPU mínima (swap chain propio y la captura congelada como una textura BGRA, pixel a pixel) con un gancho para dibujar encima.
+- **`ui/snip.rs`:** la barra y la selección se dibujan con el mismo motor y estilo que la app: píldora redondeada con sombra y borde, iconos Lucide (recortar, ventana, pantalla completa, lazo), texto Inter, el indicador del modo que se desliza entre botones, la barra que entra deslizándose y apareciendo, el brillo al pasar el ratón, el resaltado de ventana que viaja de una ventana a la siguiente, el atenuado que aparece suave y la pastilla con el tamaño (en píxeles reales). Respeta «Mostrar animaciones» de Windows. 8 tests.
+- **`domain/overlay_input.rs`:** qué hace cada pulsación (botón o selección), portátil y con tests.
+- **`dockview/capture_overlay.rs`:** el pegamento (ventana + GPU + motor de interfaz + controlador); el overlay GDI se eliminó.
+- **Arreglo general descubierto por el camino:** `Ui::panel` pinta el borde como un rectángulo entero y el relleno encima, así que con relleno transparente o translúcido el color del borde tapaba todo. Se añadió `Ui::outline` (solo el marco) y se usa en la selección, en el editor de capas (**la capa elegida se veía rellena de azul sólido y tapaba su contenido: error de E-3c, ya corregido**) y el campo de renombrar usa un relleno opaco.
+- **Verificado con la app real y el ratón:** la barra en el monitor del cursor con el aspecto de la app, el indicador pasando a «Ventana», el resaltado de ventana con borde y tamaño, y la captura resultante (1280×800).
+- **Pendiente:** las animaciones solo se ven en movimiento (las capturas son fijas); monitores con distinta escala sin probar; los bordes de la selección son de esquinas rectas.
+
 **Pausa S-B.**
 
 ### Resultados del bloque S-B (2026-11-14)

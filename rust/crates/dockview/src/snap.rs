@@ -2,8 +2,8 @@
 //! opening the window. The work is `dockview_app::snap_service`; this only
 //! hands it the real screen and says how it went.
 
+use crate::capture_overlay::CaptureOverlay;
 use dockview_domain::snap::SnapJob;
-use dockview_platform::overlay::PlatformOverlay;
 use dockview_platform::screen_io::PlatformScreen;
 
 /// Runs the job and says how it went; the exit code of the program.
@@ -16,7 +16,7 @@ pub fn run(job: &SnapJob) -> i32 {
     match dockview_app::snap_service::take(
         job,
         &screen,
-        &PlatformOverlay,
+        &CaptureOverlay,
         &screen,
         dockview_platform::system_lang::detect_system_lang(),
         std::process::id(),
