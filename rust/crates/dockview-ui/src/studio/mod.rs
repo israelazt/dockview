@@ -69,6 +69,10 @@ enum PanelHit {
     Item(usize),
     /// A slider inside a section: its position among this frame's sliders.
     Slider(usize),
+    /// The button that asks whether to delete the scene in use.
+    AskDelete,
+    /// The answer "no" to that question.
+    CancelDelete,
 }
 
 pub struct StudioPanel {
@@ -102,6 +106,10 @@ pub struct StudioPanel {
     actions: Vec<Action>,
     /// The part of the panel on screen in the last frame.
     area: Option<Rect>,
+    /// The scene whose deletion is being confirmed.
+    confirm_delete: Option<usize>,
+    /// The scene the delete button of the last frame would ask about.
+    ask_delete_of: Option<usize>,
     dt: f32,
 }
 
@@ -127,6 +135,8 @@ impl StudioPanel {
             hover: HashMap::new(),
             actions: Vec::new(),
             area: None,
+            confirm_delete: None,
+            ask_delete_of: None,
             dt: 0.0,
         }
     }
@@ -345,8 +355,12 @@ impl StudioPanel {
         match hit {
             PanelHit::Close => self.actions.push(Action::ToggleStudio),
             PanelHit::Slider(_) => {}
+            PanelHit::AskDelete => self.confirm_delete = self.ask_delete_of,
+            PanelHit::CancelDelete => self.confirm_delete = None,
             PanelHit::Item(i) => {
                 if let Some(action) = self.items.get(i) {
+                    // Whatever is answered, the question is over.
+                    self.confirm_delete = None;
                     self.actions.push(action.clone());
                 }
             }

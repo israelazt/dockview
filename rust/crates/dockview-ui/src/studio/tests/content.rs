@@ -547,7 +547,6 @@ fn the_scenes_offer_what_the_popover_offers_with_the_same_actions() {
             scene(SceneAction::Activate(Some(0))),
             scene(SceneAction::Activate(Some(1))),
             scene(SceneAction::New),
-            scene(SceneAction::Delete(1)),
             scene(SceneAction::ToggleLayer(0)),
             scene(SceneAction::ToggleLayer(1)),
             scene(SceneAction::RemoveLayer(1)),
@@ -555,6 +554,51 @@ fn the_scenes_offer_what_the_popover_offers_with_the_same_actions() {
             scene(SceneAction::AddCapture(1)),
             scene(SceneAction::AddWindow(0)),
         ]
+    );
+}
+
+#[test]
+fn deleting_a_scene_asks_first_and_only_the_yes_deletes_it() {
+    let mut rig = scenes_open(two_scenes_second_in_use());
+    rig.click_on(PanelHit::AskDelete);
+    assert!(
+        rig.panel.take_actions().is_empty(),
+        "asking deletes nothing"
+    );
+    rig.frame(0.016);
+    // The question is on screen with a button for each answer.
+    rig.click_on(PanelHit::CancelDelete);
+    assert!(rig.panel.take_actions().is_empty(), "no deletes nothing");
+    rig.frame(0.016);
+    rig.click_on(PanelHit::AskDelete);
+    rig.frame(0.016);
+    let yes = rig
+        .panel
+        .items
+        .iter()
+        .position(|a| *a == scene(SceneAction::Delete(1)))
+        .expect("the yes button");
+    rig.click_on(PanelHit::Item(yes));
+    assert_eq!(rig.panel.take_actions(), [scene(SceneAction::Delete(1))]);
+}
+
+#[test]
+fn the_question_goes_away_after_the_answer_and_with_another_scene() {
+    let mut rig = scenes_open(two_scenes_second_in_use());
+    rig.click_on(PanelHit::AskDelete);
+    rig.frame(0.016);
+    assert!(rig.panel.confirm_delete.is_some());
+    // Another scene is chosen: the question was about the old one.
+    rig.model.scenes.active = Some(0);
+    rig.frame(0.016);
+    assert_eq!(rig.panel.confirm_delete, None);
+    rig.frame(0.016);
+    assert!(
+        rig.panel
+            .hits
+            .iter()
+            .any(|(h, _)| *h == PanelHit::AskDelete),
+        "the plain button is back"
     );
 }
 
@@ -605,7 +649,7 @@ fn the_buttons_ask_for_what_they_say() {
     let mut rig = scenes_open(two_scenes_second_in_use());
     rig.click_on(PanelHit::Item(3));
     assert_eq!(rig.panel.take_actions(), [scene(SceneAction::New)]);
-    rig.click_on(PanelHit::Item(7));
+    rig.click_on(PanelHit::Item(6));
     assert_eq!(
         rig.panel.take_actions(),
         [scene(SceneAction::RemoveLayer(1))]

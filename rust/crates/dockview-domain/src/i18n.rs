@@ -185,6 +185,9 @@ strings! {
     SceneDefaultName => "Scene {n}", "Escena {n}";
     TipScenes => "Scenes: arrange several sources in one picture", "Escenas: combina varias fuentes en una sola imagen";
     TipSceneDelete => "Delete this scene", "Borrar esta escena";
+    SceneDeleteAsk => "Delete it?", "¿Borrarla?";
+    SceneDeleteYes => "Delete", "Borrar";
+    SceneDeleteNo => "Cancel", "Cancelar";
     TipSources => "Choose what to capture: a capture card, a screen or an application", "Elegir qué capturar: una capturadora, una pantalla o una aplicación";
     TipReplay => "Instant replay options", "Opciones de la repetición instantánea";
     TipSave => "Save the last {seconds} as a clip ({hotkey})", "Guardar los últimos {seconds} como clip ({hotkey})";

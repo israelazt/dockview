@@ -3,12 +3,12 @@
 //! and actions as the scenes popover; with the room the panel has, adding a
 //! source needs no view of its own: the sources are listed right there.
 
-use dockview_domain::i18n::{tr, Key};
-use dockview_domain::theme::Theme;
+use dockview_domain::i18n::{tr, Key, Lang};
+use dockview_domain::theme::{Color, Theme};
 use dockview_domain::view::{Action, Model, SceneAction};
 
 use super::widgets::{list_height, GAP, LABEL_H, ROW_H};
-use super::{StudioPanel, PAD};
+use super::{intersect, PanelHit, StudioPanel, PAD};
 use crate::fit::fit_text;
 use crate::text::Weight;
 use crate::{Rect, TextStyle, Ui};
@@ -95,16 +95,13 @@ impl StudioPanel {
             (x, y, w),
         );
         let Some(active) = s.active else {
+            self.confirm_delete = None;
             return;
         };
-        y += self.action_row(
-            ui,
-            t,
-            ICON_TRASH,
-            tr(lang, Key::TipSceneDelete),
-            Action::Scene(SceneAction::Delete(active)),
-            (x, y, w),
-        );
+        if self.confirm_delete != Some(active) {
+            self.confirm_delete = None;
+        }
+        y += self.delete_row(ui, t, lang, active, (x, y, w));
 
         y += GAP;
         y += self.caption(ui, t, tr(lang, Key::SceneLayers), x, y);
@@ -159,6 +156,70 @@ impl StudioPanel {
             x,
             y,
             w,
+        );
+    }
+
+    /// The row that deletes the scene in use. A click only asks; the row then
+    /// holds the question with a button for each answer, and only "delete"
+    /// asks the application to do it. Returns its height.
+    fn delete_row(
+        &mut self,
+        ui: &mut Ui,
+        t: &Theme,
+        lang: Lang,
+        active: usize,
+        (x, y, w): (f32, f32, f32),
+    ) -> f32 {
+        if self.confirm_delete != Some(active) {
+            self.ask_delete_of = Some(active);
+            let row = Rect::new(x, y, w, ROW_H);
+            if let Some(shown) = intersect(row, self.clip) {
+                self.register(PanelHit::AskDelete, shown);
+            }
+            let hover = self.hover_amount(PanelHit::AskDelete);
+            ui.rect(row, 9.0, t.hover.with_alpha(t.hover.a * hover));
+            ui.icon(ICON_TRASH, x + 18.0, y + ROW_H / 2.0, 15.0, t.text_dim);
+            let line_h = ui.measure("Ag", ROW_TEXT).1;
+            let text = fit_text(ui, tr(lang, Key::TipSceneDelete), ROW_TEXT, w - 48.0);
+            ui.text(
+                &text,
+                x + 38.0,
+                y + (ROW_H - line_h) / 2.0,
+                ROW_TEXT,
+                t.text,
+            );
+            return ROW_H;
+        }
+        let line_h = ui.measure("Ag", ROW_TEXT).1;
+        let ask = fit_text(ui, tr(lang, Key::SceneDeleteAsk), ROW_TEXT, w * 0.34);
+        ui.text(&ask, x + 10.0, y + (ROW_H - line_h) / 2.0, ROW_TEXT, t.text);
+        // The buttons, side by side at the right.
+        let button_w = (w - 10.0) * 0.33;
+        let yes = Rect::new(x + w - button_w, y, button_w, ROW_H);
+        let no = Rect::new(yes.x - 6.0 - button_w, y, button_w, ROW_H);
+        let hit = self.item(yes, Action::Scene(SceneAction::Delete(active)));
+        let hover = self.hover_amount(hit);
+        ui.rect(yes, 9.0, t.error.with_alpha(0.16 + 0.14 * hover));
+        self.button_label(ui, tr(lang, Key::SceneDeleteYes), yes, t.error);
+        if let Some(shown) = intersect(no, self.clip) {
+            self.register(PanelHit::CancelDelete, shown);
+        }
+        let hover = self.hover_amount(PanelHit::CancelDelete);
+        ui.rect(no, 9.0, t.hover.with_alpha(t.hover.a * hover));
+        self.button_label(ui, tr(lang, Key::SceneDeleteNo), no, t.text);
+        ROW_H
+    }
+
+    /// `label` centred in `rect`.
+    fn button_label(&self, ui: &mut Ui, label: &str, rect: Rect, color: Color) {
+        let text = fit_text(ui, label, ROW_TEXT, rect.w - 8.0);
+        let (text_w, line_h) = ui.measure(&text, ROW_TEXT);
+        ui.text(
+            &text,
+            rect.x + (rect.w - text_w) / 2.0,
+            rect.y + (rect.h - line_h) / 2.0,
+            ROW_TEXT,
+            color,
         );
     }
 
