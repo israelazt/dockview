@@ -8,6 +8,7 @@ pub mod input;
 pub mod motion;
 mod options;
 pub mod rec;
+pub mod scene_editor;
 pub mod stats;
 pub mod studio;
 #[cfg(test)]
