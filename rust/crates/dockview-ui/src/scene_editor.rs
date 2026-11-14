@@ -191,6 +191,8 @@ impl SceneEditor {
     }
 
     fn hold(&mut self, layer: usize, drag: Drag, press_at: (f32, f32)) {
+        self.actions
+            .push(Action::Scene(SceneAction::BeginEdit(layer)));
         self.drag = Some(Held {
             layer,
             drag,

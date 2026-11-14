@@ -65,6 +65,8 @@ pub struct Shell {
     /// The layer editor over the picture, and the keys that modify its drags.
     scene_editor: SceneEditor,
     edit_mods: dockview_domain::layer_edit::Modifiers,
+    /// Ctrl is held (it turns letters into chords).
+    ctrl: bool,
     cursor_hidden: bool,
     animations: bool,
     stats_panel: StatsPanel,
@@ -105,6 +107,7 @@ impl Shell {
             cursor_icon: CursorIcon::Default,
             scene_editor: SceneEditor::new(),
             edit_mods: Default::default(),
+            ctrl: false,
             cursor_hidden: false,
             animations,
             stats_panel: StatsPanel::new(),

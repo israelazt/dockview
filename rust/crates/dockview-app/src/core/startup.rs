@@ -51,6 +51,8 @@ impl Core {
                 stats_open: show_stats,
                 layer_selected: cli.edit_layers.then_some(1),
                 scene_editing: cli.edit_layers,
+                layer_undo: Vec::new(),
+                edit_pending: None,
             },
             measures: Measurements {
                 stats: Stats::default(),

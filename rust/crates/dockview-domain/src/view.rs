@@ -261,6 +261,11 @@ pub enum SceneAction {
     SelectLayer(Option<usize>),
     /// Turn the layer editor over the picture on or off.
     ToggleEdit,
+    /// The editor takes hold of this layer: its rectangle is what Undo goes
+    /// back to if the layer ends up somewhere else.
+    BeginEdit(usize),
+    /// Put the last edited layer back where it was.
+    Undo,
 }
 
 /// One layer as the popover shows it.

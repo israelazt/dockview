@@ -77,8 +77,11 @@ impl Rig {
         self.frame();
     }
 
+    /// What the editor asked for, without the notes it leaves for the undo list.
     fn actions(&mut self) -> Vec<Action> {
-        self.editor.take_actions()
+        let mut all = self.editor.take_actions();
+        all.retain(|a| !matches!(a, Action::Scene(SceneAction::BeginEdit(_))));
+        all
     }
 }
 
@@ -269,4 +272,21 @@ fn the_drawn_rectangle_goes_back_to_the_model_if_it_never_answers() {
         rig.frame();
     }
     assert_eq!(rig.editor.live, None);
+}
+
+#[test]
+fn taking_hold_of_a_layer_tells_the_application_which_one_for_the_undo_list() {
+    let mut rig = Rig::new();
+    rig.press(Rig::at(0.75, 0.75)); // the chosen layer's body
+    assert_eq!(
+        rig.editor.take_actions(),
+        [scene(SceneAction::BeginEdit(1))]
+    );
+    rig.release();
+    // A press on empty picture holds nothing.
+    rig.press(Rig::at(0.55, 0.2));
+    assert_eq!(
+        rig.editor.take_actions(),
+        [scene(SceneAction::SelectLayer(None))]
+    );
 }

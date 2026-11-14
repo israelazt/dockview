@@ -307,7 +307,22 @@ impl Core {
 
     /// Carries out what a key asked for.
     pub fn on_key(&mut self, command: KeyCommand) {
+        // In the layer editor the arrows push the chosen layer instead.
+        if self.view.scene_editing && self.view.layer_selected.is_some() {
+            let step = match command {
+                KeyCommand::SyncEarlier => Some((-1, 0)),
+                KeyCommand::SyncLater => Some((1, 0)),
+                KeyCommand::VolumeUp => Some((0, -1)),
+                KeyCommand::VolumeDown => Some((0, 1)),
+                _ => None,
+            };
+            if let Some((dx, dy)) = step {
+                self.nudge_layer(dx, dy);
+                return;
+            }
+        }
         match command {
+            KeyCommand::Undo => self.undo_layer_edit(),
             KeyCommand::ToggleFullscreen => self.set_fullscreen(!self.view.fullscreen),
             KeyCommand::Escape => {
                 // The layer editor goes first, then full screen, then the panel.

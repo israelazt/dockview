@@ -12,7 +12,7 @@ use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use winit::window::{Window, WindowId};
 
 use super::helpers::appearance_of;
-use super::keys::{command_for, text_key_for};
+use super::keys::{command_with, text_key_for};
 use super::present::StartupFailure;
 use super::*;
 
@@ -113,6 +113,7 @@ impl ApplicationHandler for Shell {
             }
             WindowEvent::ModifiersChanged(modifiers) => {
                 let state = modifiers.state();
+                self.ctrl = state.control_key();
                 self.edit_mods = dockview_domain::layer_edit::Modifiers {
                     keep_aspect: state.shift_key(),
                     no_snap: state.alt_key(),
@@ -154,7 +155,7 @@ impl ApplicationHandler for Shell {
                     if let Some(key) = text_key_for(&event.logical_key, text) {
                         self.studio.key(key);
                     }
-                } else if let Some(command) = command_for(&event.logical_key) {
+                } else if let Some(command) = command_with(&event.logical_key, self.ctrl) {
                     self.core.on_key(command);
                 }
                 self.apply_host_requests();

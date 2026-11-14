@@ -70,6 +70,20 @@ pub fn from_units(u: [i32; 4]) -> NormRect {
     NormRect::new(x, y, w, h).clamped()
 }
 
+/// How far an arrow key pushes a layer, as a fraction of the picture.
+pub const NUDGE_STEP: f32 = 0.005;
+
+/// `rect` pushed `steps` steps right and down (negative: left and up), kept
+/// inside the picture.
+pub fn nudged(rect: NormRect, dx: i32, dy: i32) -> NormRect {
+    NormRect::new(
+        (rect.x + dx as f32 * NUDGE_STEP).clamp(0.0, 1.0 - rect.w),
+        (rect.y + dy as f32 * NUDGE_STEP).clamp(0.0, 1.0 - rect.h),
+        rect.w,
+        rect.h,
+    )
+}
+
 /// What the pointer holds on a layer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Handle {
@@ -404,6 +418,21 @@ mod tests {
         );
         assert_eq!(p.to_norm(600.0, 300.0), (0.5, 0.5));
         assert!(p.contains(100.0, 50.0) && !p.contains(99.0, 50.0));
+    }
+
+    #[test]
+    fn an_arrow_pushes_a_layer_a_step_and_stops_at_the_edges() {
+        let r = rect(0.5, 0.5, 0.2, 0.2);
+        close(nudged(r, 1, 0), rect(0.505, 0.5, 0.2, 0.2));
+        close(nudged(r, 0, -2), rect(0.5, 0.49, 0.2, 0.2));
+        close(
+            nudged(rect(0.0, 0.0, 0.2, 0.2), -1, -1),
+            rect(0.0, 0.0, 0.2, 0.2),
+        );
+        close(
+            nudged(rect(0.8, 0.8, 0.2, 0.2), 3, 3),
+            rect(0.8, 0.8, 0.2, 0.2),
+        );
     }
 
     #[test]

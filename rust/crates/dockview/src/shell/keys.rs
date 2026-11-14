@@ -5,7 +5,20 @@ use dockview_ui::studio::TextKey;
 use winit::keyboard::{Key, NamedKey};
 
 /// The command for `key`, if it has one. Letters ignore case.
+#[cfg(test)]
 pub fn command_for(key: &Key) -> Option<KeyCommand> {
+    command_with(key, false)
+}
+
+/// Like [`command_for`], knowing whether Ctrl is held: Ctrl+Z undoes, and Ctrl
+/// with other letters is not for us.
+pub fn command_with(key: &Key, ctrl: bool) -> Option<KeyCommand> {
+    if ctrl {
+        return match key {
+            Key::Character(c) if c.eq_ignore_ascii_case("z") => Some(KeyCommand::Undo),
+            _ => None,
+        };
+    }
     match key {
         Key::Named(NamedKey::F11) => Some(KeyCommand::ToggleFullscreen),
         Key::Named(NamedKey::Escape) => Some(KeyCommand::Escape),
@@ -88,6 +101,22 @@ mod tests {
         assert_eq!(named(NamedKey::ArrowLeft), Some(KeyCommand::SyncEarlier));
         assert_eq!(named(NamedKey::ArrowRight), Some(KeyCommand::SyncLater));
         assert_eq!(named(NamedKey::Enter), None);
+    }
+
+    #[test]
+    fn ctrl_z_undoes_and_other_ctrl_chords_are_left_alone() {
+        assert_eq!(command_with(&ch("z"), true), Some(KeyCommand::Undo));
+        assert_eq!(command_with(&ch("Z"), true), Some(KeyCommand::Undo));
+        assert_eq!(
+            command_with(&ch("f"), true),
+            None,
+            "Ctrl+F is not fullscreen"
+        );
+        assert_eq!(command_with(&ch("z"), false), None);
+        assert_eq!(
+            command_with(&Key::Named(NamedKey::F11), false),
+            Some(KeyCommand::ToggleFullscreen)
+        );
     }
 
     #[test]

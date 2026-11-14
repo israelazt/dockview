@@ -14,6 +14,8 @@ pub enum KeyCommand {
     VolumeDown,
     SyncEarlier,
     SyncLater,
+    /// Undoes the last move or resize of a layer in the editor.
+    Undo,
     CyclePreset,
     ToggleStats,
     NextVideo,

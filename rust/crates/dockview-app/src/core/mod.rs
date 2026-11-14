@@ -22,6 +22,8 @@ mod overlays;
 mod replay;
 mod scene_actions;
 mod scene_runtime;
+#[cfg(test)]
+mod scene_tests;
 mod scene_transition;
 mod sources;
 mod startup;
@@ -132,6 +134,12 @@ struct ViewState {
     layer_selected: Option<usize>,
     /// The layer editor is on, over the picture.
     scene_editing: bool,
+    /// Where layers were before the editor moved them, most recent last: (the
+    /// scene, the layer, its rectangle).
+    layer_undo: Vec<(usize, usize, dockview_domain::scene::NormRect)>,
+    /// The layer the editor holds, until its first change commits it to
+    /// `layer_undo`.
+    edit_pending: Option<(usize, usize, dockview_domain::scene::NormRect)>,
 }
 
 /// What is measured once a second and acted on (see `stats`).

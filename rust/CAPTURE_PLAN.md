@@ -257,7 +257,7 @@ Con una escena activa, un botón **Editar** en la sección Escenas del panel (y 
 
 - **Prueba con la app real, ratón y atajo globales** (`APPDATA` apuntando a una carpeta temporal para no tocar los ajustes del usuario, con una escena de dos pantallas): `--edit-layers`, un arrastre con el ratón de la capa de la pantalla 2 de (0,60; 0,55) a (0,15; 0,15), grabación con Ctrl+Alt+R durante 8 s. Los ajustes guardaron el rectángulo nuevo y un fotograma del MP4 (34 MB) muestra la pantalla 2 en esa esquina, sobre la pantalla 1 de base: **lo editado se graba tal cual**.
 - **Trampa para quien repita la prueba:** un `settings.json` escrito a mano con un JSON inválido se sustituye por los valores por defecto sin avisar (el log no dice nada). Conviene generarlo con `ConvertTo-Json`; las barras invertidas del nombre del monitor se escapan mal a mano.
-- **Pendiente de E-3d:** repetir con la capturadora y un juego abierto (coste de GPU/CPU con el compositor y el editor); flechas del teclado para empujar una capa; deshacer; duración y curva del morph configurables; la verificación con clics del morph entre escenas (arriba).
+- **Pendiente de E-3d:** repetir con la capturadora y un juego abierto (coste de GPU/CPU con el compositor y el editor); duración y curva del morph configurables; la verificación con clics del morph entre escenas (arriba). Las flechas y el deshacer están hechos (abajo).
 
 ### Resultados de E-4a — atajos globales de escena (2026-11-14)
 
@@ -265,6 +265,12 @@ Con una escena activa, un botón **Editar** en la sección Escenas del panel (y 
 - **Dónde está:** `ReplayHotkeys::take_scene_pressed` (puerto), `hotkey.rs` (registro en el mismo hilo que Ctrl+Alt+S/R), `scene::scene_for_slot` (la elección, pura) y `Core::poll_replay` (aplica `SceneAction::Activate`, así que se guarda y hace el morph como un clic). La sección Escenas muestra la tecla de cada fila (F12, F1, F2…).
 - **Verificado:** 3 tests del núcleo con el mundo falso y una prueba real con la app (APPDATA temporal, ventana en el otro monitor): Ctrl+Alt+F2 cambió `activeScene` de 0 a 1 en los ajustes guardados.
 - **E-4b — opción «Suave / Corte»:** `AppSettings.scene_transition` (`sceneTransition` en el archivo; los antiguos cargan como suave), `Action::SetSceneTransition`, un selector en Ajustes («Cambio de escena») y, con «Corte», `activate_scene` termina la transición al instante. Vale para clics y atajos. Tests del núcleo (guardado, compatibilidad) y del panel.
+
+### Flechas y deshacer en el editor (2026-11-14)
+
+- **Flechas:** con el editor activo y una capa elegida, las flechas empujan la capa medio por ciento de la imagen (en vez de cambiar volumen y sincronía); sin editor o sin capa elegida hacen lo de siempre. `layer_edit::nudged` (pura).
+- **Ctrl+Z:** deshace el último gesto sobre una capa: un arrastre entero es un solo paso aunque mande muchos cambios (el editor avisa con `SceneAction::BeginEdit` al agarrar la capa y el núcleo guarda su sitio anterior cuando llega el primer cambio, así que un clic quieto no añade pasos). Hasta 50 pasos. Se olvidan al cambiar de escena, mover el orden, quitar una capa o borrar una escena (los números ya no significan lo mismo). **No hay rehacer.**
+- **Verificado con la app real y el teclado** (otro monitor, `APPDATA` temporal): 10 flechas derechas y 3 Ctrl+Z dejaron la capa en x = 0,635 (de 0,60), sin tocar el desfase de audio. Detalle de la prueba: Windows no da el foco a una ventana recién lanzada; hizo falta pulsar y soltar Alt y hacer un clic en ella antes de mandar teclas.
 
 ### Resultados de E-3a
 

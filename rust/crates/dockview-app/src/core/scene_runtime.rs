@@ -120,6 +120,7 @@ impl Core {
     /// Switches to scene `index` (or, with `None`, to the plain main source).
     pub fn activate_scene(&mut self, index: Option<usize>) {
         self.finish_transition();
+        self.forget_layer_edits();
         // What is on screen now, before the main source is switched.
         let old = self.running_scene();
         let scene = index.and_then(|i| self.settings.scenes.get(i).cloned());

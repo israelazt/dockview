@@ -8,7 +8,7 @@ use dockview_domain::device_names;
 use dockview_domain::events::AppEvent;
 use dockview_domain::frame::FrameSlot;
 use dockview_domain::layer_edit;
-use dockview_domain::scene::{clean_scene_name, Scene, SourceRef, MAX_SCENE_LAYERS};
+use dockview_domain::scene::{clean_scene_name, NormRect, Scene, SourceRef, MAX_SCENE_LAYERS};
 
 use dockview_domain::i18n;
 use dockview_domain::i18n::LangModeExt;
@@ -19,6 +19,8 @@ use crate::scenes_service::Overlay;
 
 /// Scenes a user may keep.
 const MAX_SCENES: usize = 12;
+/// Edits of layers that can be undone.
+const UNDO_LIMIT: usize = 50;
 
 impl Core {
     /// How a source is named in the layer list.
@@ -92,6 +94,14 @@ impl Core {
             SceneAction::RemoveLayer(index) => self.remove_layer(index),
             SceneAction::SetLayerRect(index, units) => self.set_layer_rect(index, units),
             SceneAction::MoveLayer(index, delta) => self.move_layer(index, delta),
+            SceneAction::BeginEdit(index) => {
+                self.begin_edit(index);
+                return;
+            }
+            SceneAction::Undo => {
+                self.undo_layer_edit();
+                return;
+            }
             SceneAction::SelectLayer(index) => {
                 self.view.layer_selected = index;
                 return;
@@ -148,6 +158,7 @@ impl Core {
             return;
         }
         self.settings.scenes.remove(index);
+        self.forget_layer_edits();
         match self.settings.active_scene {
             Some(active) if active == index => self.activate_scene(None),
             Some(active) if active > index => self.settings.active_scene = Some(active - 1),
@@ -187,6 +198,84 @@ impl Core {
         self.sync_compositor();
     }
 
+    /// The positions the undo list remembers no longer mean what they did (a
+    /// layer or scene was removed or moved in the order).
+    pub(super) fn forget_layer_edits(&mut self) {
+        self.view.layer_undo.clear();
+        self.view.edit_pending = None;
+    }
+
+    /// Remembers where `index` is, to go back to it if the editor moves it.
+    fn begin_edit(&mut self, index: usize) {
+        let (Some(scene), Some(layer)) = (
+            self.settings.active_scene,
+            self.active_scene_mut()
+                .and_then(|s| s.layers.get(index).map(|l| l.rect)),
+        ) else {
+            return;
+        };
+        self.view.edit_pending = Some((scene, index, layer));
+    }
+
+    /// Puts the last layer the editor moved back where it was.
+    pub(super) fn undo_layer_edit(&mut self) {
+        while let Some((scene, index, rect)) = self.view.layer_undo.pop() {
+            if self.settings.active_scene != Some(scene) {
+                continue; // the scene is not the one in use any more
+            }
+            if self.place_layer(index, rect) {
+                self.settings_changed();
+                return;
+            }
+        }
+    }
+
+    /// Pushes the chosen layer a step (arrow keys in the editor).
+    pub(super) fn nudge_layer(&mut self, dx: i32, dy: i32) {
+        let Some(index) = self.view.layer_selected else {
+            return;
+        };
+        let Some(current) = self
+            .active_scene_mut()
+            .and_then(|scene| scene.layers.get(index).map(|l| l.rect))
+        else {
+            return;
+        };
+        let rect = layer_edit::nudged(current, dx, dy);
+        if rect == current {
+            return;
+        }
+        self.begin_edit(index);
+        self.commit_pending_edit(index);
+        self.place_layer(index, rect);
+        self.settings_changed();
+    }
+
+    /// The held layer's first change: its old place joins the undo list.
+    fn commit_pending_edit(&mut self, index: usize) {
+        if let Some(held) = self.view.edit_pending.take() {
+            if held.1 == index && Some(held.0) == self.settings.active_scene {
+                self.view.layer_undo.push(held);
+                let excess = self.view.layer_undo.len().saturating_sub(UNDO_LIMIT);
+                self.view.layer_undo.drain(..excess);
+            }
+        }
+    }
+
+    /// Puts layer `index` of the active scene in `rect`; whether it exists.
+    fn place_layer(&mut self, index: usize, rect: NormRect) -> bool {
+        let Some(layer) = self
+            .active_scene_mut()
+            .and_then(|scene| scene.layers.get_mut(index))
+        else {
+            return false;
+        };
+        layer.rect = rect;
+        self.scenes.set_layer_rect(index, rect);
+        self.sync_compositor();
+        true
+    }
+
     /// Puts a layer where the editor dragged it.
     fn set_layer_rect(&mut self, index: usize, units: [i32; 4]) {
         let rect = layer_edit::from_units(units);
@@ -199,9 +288,8 @@ impl Core {
         if layer.rect == rect {
             return;
         }
-        layer.rect = rect;
-        self.scenes.set_layer_rect(index, rect);
-        self.sync_compositor();
+        self.commit_pending_edit(index);
+        self.place_layer(index, rect);
     }
 
     /// Moves an overlay one step in the drawing order; the selection follows it.
@@ -215,6 +303,7 @@ impl Core {
         }
         let target = target as usize;
         scene.layers.swap(index, target);
+        self.forget_layer_edits();
         self.scenes.swap_overlays(index, target);
         if self.view.layer_selected == Some(index) {
             self.view.layer_selected = Some(target);
@@ -233,6 +322,7 @@ impl Core {
             return;
         }
         scene.layers.remove(index);
+        self.forget_layer_edits();
         self.scenes.remove_overlay(index);
         self.sync_compositor();
         self.set_capture_exclusion(self.wants_exclusion());
