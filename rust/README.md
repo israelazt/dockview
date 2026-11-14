@@ -19,7 +19,9 @@ guards it):
 | `dockview` | The program: the window, the event loop and the wiring of the real adapters |
 
 Read `ARCHITECTURE.md` before adding anything: it has the rules and the recipe
-for a new feature. The other documents are plans, each with its own status:
+for a new feature. What the product is and what it aims for (under its future name,
+Luminifex) is in `LUMINIFEX.md`. The other documents are plans, each with its own
+status:
 `ROADMAP.md` (what is left, in order, with the decisions that block it),
 `STREAMER_PLAN.md` (what a gaming streamer needs, what we have and what is missing),
 `HARDENING_PLAN.md` (robustness and quality),
