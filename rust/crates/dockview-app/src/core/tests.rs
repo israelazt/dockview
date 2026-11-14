@@ -213,6 +213,24 @@ fn press_scene_hotkey(rig: &mut Rig, slot: usize) {
 }
 
 #[test]
+fn the_scene_change_can_be_a_cut_and_the_choice_is_saved() {
+    use dockview_domain::settings::SceneTransition;
+    let mut rig = rig_with_scenes(&["One", "Two"]);
+    assert_eq!(rig.core.model().scenes.transition, SceneTransition::Smooth);
+    rig.core
+        .apply(Action::SetSceneTransition(SceneTransition::Cut));
+    assert_eq!(rig.core.model().scenes.transition, SceneTransition::Cut);
+    assert_eq!(
+        rig.saved_soon().expect("saved").scene_transition,
+        SceneTransition::Cut
+    );
+    // With a cut nothing is left travelling after a change.
+    rig.core
+        .apply(Action::Scene(SceneAction::Activate(Some(1))));
+    assert!(rig.core.scenes.transition.is_none());
+}
+
+#[test]
 fn the_scene_hotkeys_pick_a_scene_the_plain_source_or_nothing() {
     let mut rig = rig_with_scenes(&["One", "Two"]);
     assert_eq!(rig.core.model().scenes.active, None);

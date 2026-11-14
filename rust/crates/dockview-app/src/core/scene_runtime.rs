@@ -7,6 +7,7 @@ use std::sync::Arc;
 use dockview_domain::events::AppEvent;
 use dockview_domain::frame::FrameSlot;
 use dockview_domain::scene::{Scene, SourceRef};
+use dockview_domain::settings::SceneTransition;
 use dockview_domain::sources::CaptureTarget;
 
 use super::{Core, SourceKind};
@@ -134,5 +135,8 @@ impl Core {
             }
         }
         self.morph_to(&scene, old);
+        if self.settings.scene_transition == SceneTransition::Cut {
+            self.finish_transition();
+        }
     }
 }

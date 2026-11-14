@@ -38,6 +38,7 @@ impl Rig {
             can_add: true,
             selected: Some(1),
             editing: true,
+            ..ScenesView::default()
         };
         Self {
             ui: Ui::new(),

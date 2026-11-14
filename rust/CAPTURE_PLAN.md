@@ -204,7 +204,7 @@ Lo que se quiere: componer **varias fuentes a la vez** (por ejemplo el juego a p
 | E-3b ✅ | Botón y popover de escenas: activar, crear, borrar y añadir una fuente en una esquina (módulo `ui/scenes.rs`) | Clics reales y capturas |
 | E-3c | Editor libre sobre la vista previa: mover, redimensionar y panel de capas (módulo `ui/scene_editor.rs`). **Diseño y tareas más abajo (E-3c-1..5)** | Clics reales y capturas |
 | E-3d ✅ (parcial) | Pulido y pruebas con clics reales | Grabar una escena editada. Hecho con dos pantallas; falta repetirlo con la capturadora y lo de la lista de pendientes |
-| E-4 | Cambio de escena con tecla global y transición suave opcional | **Tecla global hecha (E-4a)**; falta la opción de corte sin transición (E-4b). Pruebas |
+| E-4 ✅ | Cambio de escena con tecla global y transición suave opcional | Atajos (E-4a) y opción Suave/Corte (E-4b) hechos |
 
 ### Riesgos
 - Más GPU y RAM con dos fuentes más el compositor, en una GTX 1660 Ti con el juego abierto: se mide en E-1 antes de seguir.
@@ -264,7 +264,7 @@ Con una escena activa, un botón **Editar** en la sección Escenas del panel (y 
 - **Ctrl+Alt+F1 … F9** activan las escenas 1 a 9 y **Ctrl+Alt+F12** vuelve a la fuente simple. Teclas de función a propósito: con Ctrl+Alt (que es AltGr en muchos teclados) los dígitos robarían caracteres como `@`, `|` o `#` al escribir. Si otro programa tiene alguna, solo esa se queda sin atajo y el resto funciona.
 - **Dónde está:** `ReplayHotkeys::take_scene_pressed` (puerto), `hotkey.rs` (registro en el mismo hilo que Ctrl+Alt+S/R), `scene::scene_for_slot` (la elección, pura) y `Core::poll_replay` (aplica `SceneAction::Activate`, así que se guarda y hace el morph como un clic). La sección Escenas muestra la tecla de cada fila (F12, F1, F2…).
 - **Verificado:** 3 tests del núcleo con el mundo falso y una prueba real con la app (APPDATA temporal, ventana en el otro monitor): Ctrl+Alt+F2 cambió `activeScene` de 0 a 1 en los ajustes guardados.
-- **Pendiente (E-4b):** la opción «Corte» frente a la transición suave.
+- **E-4b — opción «Suave / Corte»:** `AppSettings.scene_transition` (`sceneTransition` en el archivo; los antiguos cargan como suave), `Action::SetSceneTransition`, un selector en Ajustes («Cambio de escena») y, con «Corte», `activate_scene` termina la transición al instante. Vale para clics y atajos. Tests del núcleo (guardado, compatibilidad) y del panel.
 
 ### Resultados de E-3a
 

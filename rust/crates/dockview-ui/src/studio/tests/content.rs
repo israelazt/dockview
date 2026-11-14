@@ -4,7 +4,7 @@ use super::*;
 
 // -- The Settings section -------------------------------------------------
 
-use dockview_domain::settings::{LangMode, RenderPreset, VideoModePref};
+use dockview_domain::settings::{LangMode, RenderPreset, SceneTransition, VideoModePref};
 use dockview_domain::theme::ThemeMode;
 
 fn settings_open() -> Rig {
@@ -32,6 +32,8 @@ fn the_settings_offer_the_same_choices_and_actions_as_the_popover() {
             Action::SetPreset(RenderPreset::Quality),
             Action::SetVideoMode(VideoModePref::Auto),
             Action::SetVideoMode(VideoModePref::Compressed),
+            Action::SetSceneTransition(SceneTransition::Smooth),
+            Action::SetSceneTransition(SceneTransition::Cut),
             Action::SetTheme(ThemeMode::Auto),
             Action::SetTheme(ThemeMode::Dark),
             Action::SetTheme(ThemeMode::Light),
@@ -45,14 +47,19 @@ fn the_settings_offer_the_same_choices_and_actions_as_the_popover() {
 #[test]
 fn clicking_a_choice_asks_for_it() {
     let mut rig = settings_open();
-    // Dark is the seventh control (see the order above).
-    rig.click_on(PanelHit::Item(6));
+    // Dark is the ninth control (see the order above).
+    rig.click_on(PanelHit::Item(8));
     assert_eq!(
         rig.panel.take_actions(),
         [Action::SetTheme(ThemeMode::Dark)]
     );
-    rig.click_on(PanelHit::Item(10));
+    rig.click_on(PanelHit::Item(12));
     assert_eq!(rig.panel.take_actions(), [Action::SetLang(LangMode::Es)]);
+    rig.click_on(PanelHit::Item(6));
+    assert_eq!(
+        rig.panel.take_actions(),
+        [Action::SetSceneTransition(SceneTransition::Cut)]
+    );
     rig.click_on(PanelHit::Item(2));
     assert_eq!(
         rig.panel.take_actions(),
@@ -67,7 +74,9 @@ fn the_indicator_follows_what_the_model_says_is_selected() {
     rig.model.preset = RenderPreset::Quality;
     rig.model.lang_mode = LangMode::Es;
     rig.model.video_mode = VideoModePref::Compressed;
+    rig.model.scenes.transition = SceneTransition::Cut;
     rig.frame(0.016);
+    assert_eq!(rig.panel.slide["scene-transition"], 1.0);
     assert_eq!(rig.panel.slide["theme"], 2.0);
     assert_eq!(rig.panel.slide["quality"], 2.0);
     assert_eq!(rig.panel.slide["language"], 2.0);
@@ -93,9 +102,9 @@ fn the_indicator_glides_to_a_new_choice_when_animations_are_on() {
 fn the_settings_body_is_as_tall_as_its_content() {
     use super::settings::body_height;
     use super::widgets::{GAP, LABEL_H, ROW_H};
-    let four_groups = 4.0 * (LABEL_H + ROW_H) + 3.0 * GAP;
-    assert!(body_height() > four_groups, "room above and below");
-    assert!(body_height() < four_groups + 40.0, "but not much");
+    let groups = 5.0 * (LABEL_H + ROW_H) + 4.0 * GAP;
+    assert!(body_height() > groups, "room above and below");
+    assert!(body_height() < groups + 40.0, "but not much");
     assert_eq!(
         section_height(StudioSection::Settings, &model()),
         body_height()

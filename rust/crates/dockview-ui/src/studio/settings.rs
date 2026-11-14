@@ -6,14 +6,14 @@ use dockview_domain::view::{Action, Model};
 
 use super::widgets::{GAP, LABEL_H, ROW_H};
 use super::{StudioPanel, PAD};
-use crate::options::{LANGS, PRESETS, THEMES, VIDEO_MODES};
+use crate::options::{LANGS, PRESETS, THEMES, TRANSITIONS, VIDEO_MODES};
 use crate::Rect;
 
 /// Space above the first control and below the last.
 const PAD_TOP: f32 = 4.0;
 const PAD_BOTTOM: f32 = 14.0;
 /// How many groups of choices there are.
-const GROUPS: f32 = 4.0;
+const GROUPS: f32 = 5.0;
 
 /// How tall the body is: four titled rows with a gap between them.
 pub fn body_height() -> f32 {
@@ -68,6 +68,25 @@ impl StudioPanel {
             VIDEO_MODES
                 .iter()
                 .map(|v| Action::SetVideoMode(*v))
+                .collect(),
+            x,
+            y,
+            w,
+        ) + GAP;
+
+        y += self.caption(ui, t, tr(lang, Key::SceneTransitionTitle), x, y);
+        y += self.segmented(
+            ui,
+            t,
+            "scene-transition",
+            &[
+                tr(lang, Key::TransitionSmooth),
+                tr(lang, Key::TransitionCut),
+            ],
+            position_of(&TRANSITIONS, m.scenes.transition),
+            TRANSITIONS
+                .iter()
+                .map(|v| Action::SetSceneTransition(*v))
                 .collect(),
             x,
             y,

@@ -279,6 +279,9 @@ impl Core {
                 self.open_studio();
                 return;
             }
+            Action::SetSceneTransition(transition) => {
+                self.settings.scene_transition = transition;
+            }
             Action::SetVideoMode(mode) => {
                 self.settings.video_mode = mode;
                 // A deliberate choice ends any automatic switch and allows a

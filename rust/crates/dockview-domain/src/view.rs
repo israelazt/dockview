@@ -2,7 +2,7 @@
 //! (`Action`). The application builds the model; the interface draws it and
 //! returns actions. Neither knows the other.
 
-use crate::settings::{LangMode, RecordingQuality, RenderPreset, VideoModePref};
+use crate::settings::{LangMode, RecordingQuality, RenderPreset, SceneTransition, VideoModePref};
 
 use crate::i18n::Lang;
 use crate::scene::NormRect;
@@ -215,6 +215,7 @@ pub enum Action {
     SetTheme(ThemeMode),
     SetLang(LangMode),
     SetVideoMode(VideoModePref),
+    SetSceneTransition(SceneTransition),
     ToggleStats,
     /// Open or close the Studio side panel.
     ToggleStudio,
@@ -283,6 +284,8 @@ pub struct ScenesView {
     pub selected: Option<usize>,
     /// The editor is on, over the picture.
     pub editing: bool,
+    /// How the picture changes between scenes.
+    pub transition: SceneTransition,
 }
 
 #[cfg(test)]

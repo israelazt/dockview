@@ -99,6 +99,18 @@ pub enum VideoModePref {
     Compressed,
 }
 
+/// How the picture changes when another scene is chosen.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SceneTransition {
+    /// The layers the two scenes share travel to their new place and the rest
+    /// fade (about 0.4 s).
+    #[default]
+    Smooth,
+    /// The new scene appears at once.
+    Cut,
+}
+
 /// Quality of the video the replay buffer and recordings are encoded at. One
 /// encoder serves both, so it is one choice.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -237,6 +249,8 @@ pub struct AppSettings {
     pub language: LangMode,
     /// How the capture mode is chosen.
     pub video_mode: VideoModePref,
+    /// How the picture changes from one scene to another.
+    pub scene_transition: SceneTransition,
     /// Whether the instant-replay buffer runs. On by default; the user turns it
     /// off by hand.
     pub replay_enabled: bool,
@@ -275,6 +289,7 @@ impl Default for AppSettings {
             theme: ThemeMode::default(),
             language: LangMode::default(),
             video_mode: VideoModePref::default(),
+            scene_transition: SceneTransition::default(),
             replay_enabled: true,
             replay_seconds: DEFAULT_REPLAY_SECONDS,
             replay_bitrate_mbps: DEFAULT_REPLAY_MBPS,
@@ -446,6 +461,7 @@ mod tests {
             theme: ThemeMode::Light,
             language: LangMode::Es,
             video_mode: VideoModePref::Compressed,
+            scene_transition: SceneTransition::Cut,
             replay_enabled: false,
             replay_seconds: 120,
             replay_bitrate_mbps: 25,
@@ -515,6 +531,14 @@ mod tests {
             .contains(r#""videoMode":"compressed""#));
         let old: AppSettings = serde_json::from_str("{}").unwrap();
         assert_eq!(old.video_mode, VideoModePref::Auto);
+        assert_eq!(old.scene_transition, SceneTransition::Smooth);
+        let cut = AppSettings {
+            scene_transition: SceneTransition::Cut,
+            ..AppSettings::default()
+        };
+        assert!(serde_json::to_string(&cut)
+            .unwrap()
+            .contains(r#""sceneTransition":"cut""#));
     }
 
     #[test]

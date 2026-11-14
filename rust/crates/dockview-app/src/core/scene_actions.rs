@@ -76,6 +76,7 @@ impl Core {
             can_add: active.is_some() && layers.len() < MAX_SCENE_LAYERS,
             selected: self.view.layer_selected.filter(|i| *i < layers.len()),
             editing: self.view.scene_editing && active.is_some(),
+            transition: self.settings.scene_transition,
             layers,
         }
     }
