@@ -118,6 +118,8 @@ Por tarea: la sección usa las mismas `Action` que el popover (no se duplica ló
 
 Con el panel hecho se retoma `CAPTURE_PLAN.md`: la prueba del morph con clics reales, **E-3c** (editor libre: mover y redimensionar capas sobre el video, lista de capas en la sección Escenas) y E-3d.
 
+**Nuevo (2026-11-14):** la app también debe ser un capturador de pantallazos al nivel de la Herramienta Recortes de Microsoft. Plan aparte en `SNIP_PLAN.md`; su sección «Capturas» vivirá en este panel.
+
 ## Riesgos
 
 1. **Rectángulo del video.** Hoy el renderer calcula el letterbox con la ventana entera; A-3 lo generaliza. Hay que cuidar que las capturas de pantalla (`--screenshot`) y el compositor no asuman la ventana completa.
