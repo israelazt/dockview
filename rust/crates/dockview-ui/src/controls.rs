@@ -31,6 +31,7 @@ use widgets::*;
 
 use super::input::Pointer;
 use super::stats::wrap_text;
+use super::studio::StudioSection;
 use super::text::Weight;
 use super::{Rect, TextStyle, Ui};
 use dockview_domain::i18n::{tr, Key};
@@ -159,6 +160,11 @@ pub struct Controls {
     tip_time: f32,
     /// Animated position of the quality selector in the replay popover.
     quality_slide: Option<f32>,
+    /// The pill's popover buttons open the Studio panel instead (until the
+    /// popovers are removed).
+    opens_panel: bool,
+    /// The section of the panel the last click asked to show.
+    studio_request: Option<StudioSection>,
 }
 
 impl Controls {
@@ -191,6 +197,8 @@ impl Controls {
             tip_hit: None,
             tip_time: 0.0,
             quality_slide: None,
+            opens_panel: false,
+            studio_request: None,
         }
     }
 
@@ -198,6 +206,27 @@ impl Controls {
     /// Windows "show animations" setting).
     pub fn set_animations(&mut self, on: bool) {
         self.animations = on;
+    }
+
+    /// With `on`, the pill's settings, replay, sources and scenes buttons ask
+    /// for the Studio panel on their section rather than opening a popover.
+    pub fn set_opens_panel(&mut self, on: bool) {
+        self.opens_panel = on;
+    }
+
+    /// The section of the Studio panel a click asked to show, once.
+    pub fn take_studio_request(&mut self) -> Option<StudioSection> {
+        self.studio_request.take()
+    }
+
+    /// Asks for the panel on `section`; true when `opens_panel` is on.
+    pub(super) fn open_in_panel(&mut self, section: StudioSection) -> bool {
+        if !self.opens_panel {
+            return false;
+        }
+        self.studio_request = Some(section);
+        self.actions.push(Action::OpenStudio);
+        true
     }
 
     pub fn take_actions(&mut self) -> Vec<Action> {

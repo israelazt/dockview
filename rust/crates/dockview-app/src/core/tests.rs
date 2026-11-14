@@ -40,6 +40,20 @@ fn toggling_the_studio_mode_flips_it_and_saves_it() {
 }
 
 #[test]
+fn opening_the_studio_opens_it_once_and_leaves_full_screen() {
+    let mut rig = Rig::new();
+    rig.core.apply(Action::OpenStudio);
+    assert!(rig.core.model().studio);
+    rig.core.apply(Action::OpenStudio);
+    assert!(rig.core.model().studio, "opening twice does not close it");
+
+    rig.core.set_fullscreen(true);
+    rig.core.apply(Action::OpenStudio);
+    assert!(!rig.core.model().fullscreen, "the panel needs the window");
+    assert!(rig.core.model().studio_visible());
+}
+
+#[test]
 fn the_studio_mode_comes_back_when_the_settings_say_so() {
     let rig = Rig::builder()
         .settings(AppSettings {

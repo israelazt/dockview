@@ -10,6 +10,7 @@ use super::{
 };
 mod add;
 
+use crate::studio::StudioSection;
 use dockview_domain::i18n::{tr, Key};
 use dockview_domain::view::SceneAction;
 
@@ -122,7 +123,9 @@ impl Controls {
         use SceneAction as A;
         let action = match hit {
             SceneHit::Button => {
-                self.toggle_scenes();
+                if !self.open_in_panel(StudioSection::Scenes) {
+                    self.toggle_scenes();
+                }
                 return;
             }
             SceneHit::Plain => A::Activate(None),

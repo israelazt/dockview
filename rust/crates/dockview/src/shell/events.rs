@@ -168,7 +168,10 @@ impl ApplicationHandler for Shell {
             self.recreate_graphics();
         }
         self.refresh_host_info();
-        self.core.tick(self.controls.sources_open());
+        let lists_shown = self.controls.sources_open()
+            || self.studio.shows(StudioSection::Sources)
+            || self.studio.shows(StudioSection::Scenes);
+        self.core.tick(lists_shown);
         self.show_events();
         self.apply_host_requests();
         // Redraw for new video, for input, and while the controls are on

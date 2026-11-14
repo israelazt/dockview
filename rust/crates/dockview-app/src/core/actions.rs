@@ -33,6 +33,17 @@ impl Core {
         self.settings_changed();
     }
 
+    /// Opens the Studio panel if it is closed, leaving full screen (where it
+    /// is hidden) so that it shows.
+    pub(super) fn open_studio(&mut self) {
+        if self.view.fullscreen {
+            self.set_fullscreen(false);
+        }
+        if !self.settings.studio_open {
+            self.toggle_studio();
+        }
+    }
+
     /// Enters or leaves full screen.
     pub fn set_fullscreen(&mut self, on: bool) {
         self.view.fullscreen = on;
@@ -258,6 +269,10 @@ impl Core {
             }
             Action::ToggleStudio => {
                 self.toggle_studio();
+                return;
+            }
+            Action::OpenStudio => {
+                self.open_studio();
                 return;
             }
             Action::SetVideoMode(mode) => {

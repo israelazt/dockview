@@ -139,6 +139,23 @@ impl StudioPanel {
         }
     }
 
+    /// Unfolds `section` with the usual animation (a click on the pill).
+    pub fn open_section(&mut self, section: StudioSection) {
+        if let Some(i) = StudioSection::ALL.iter().position(|s| *s == section) {
+            self.open[i] = true;
+        }
+    }
+
+    /// Whether `section` is on show: the panel is on screen and the section is
+    /// unfolded (the application refreshes the lists it shows then).
+    pub fn shows(&self, section: StudioSection) -> bool {
+        self.area.is_some()
+            && StudioSection::ALL
+                .iter()
+                .position(|s| *s == section)
+                .is_some_and(|i| self.open[i])
+    }
+
     /// Turns motion on or off (off snaps every change, honouring the Windows
     /// "show animations" setting).
     pub fn set_animations(&mut self, on: bool) {

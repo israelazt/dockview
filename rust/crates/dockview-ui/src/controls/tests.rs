@@ -1041,3 +1041,34 @@ fn the_pill_is_centred_in_the_video_area_not_in_the_window() {
     let middle = pill.x + pill.w / 2.0;
     assert!((middle - 480.0).abs() <= 1.0, "{middle}");
 }
+
+// -- Buttons that open the Studio panel ----------------------------------
+
+#[test]
+fn pill_buttons_ask_for_the_panel_on_their_section_when_it_is_on() {
+    use crate::studio::StudioSection as S;
+    let cases = [
+        (Hit::Settings, S::Settings),
+        (Hit::Replay, S::Recording),
+        (Hit::Sources, S::Sources),
+        (Hit::Scenes(SceneHit::Button), S::Scenes),
+    ];
+    for (hit, section) in cases {
+        let mut rig = Rig::new(true);
+        rig.controls.set_opens_panel(true);
+        rig.click_on(hit);
+        assert_eq!(rig.actions(), [Action::OpenStudio], "{hit:?}");
+        assert_eq!(rig.controls.take_studio_request(), Some(section), "{hit:?}");
+        assert_eq!(rig.controls.take_studio_request(), None, "asked once");
+        assert!(!rig.controls.popover_target(), "no popover for {hit:?}");
+    }
+}
+
+#[test]
+fn pill_buttons_still_open_the_popover_when_the_panel_is_off() {
+    let mut rig = Rig::new(true);
+    rig.click_on(Hit::Settings);
+    assert!(rig.controls.settings_open());
+    assert_eq!(rig.controls.take_studio_request(), None);
+    assert!(rig.actions().is_empty());
+}

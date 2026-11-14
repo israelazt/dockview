@@ -96,7 +96,7 @@ Por tarea: la sección usa las mismas `Action` que el popover (no se duplica ló
 
 | Tarea | Qué | Listo cuando |
 |---|---|---|
-| D-1 | Los botones de la píldora abren el panel en su sección (en vez del popover) | Test: clic en «escenas» abre Estudio en Escenas |
+| D-1 ✅ | Los botones de la píldora abren el panel en su sección (en vez del popover) | Test: clic en «escenas» abre Estudio en Escenas. Hecho con `Action::OpenStudio` (abre una vez y sale de pantalla completa) y `Controls::set_opens_panel`; los popovers siguen en el código, sin usarse, hasta D-2. El panel pide refrescar las listas de fuentes cuando Fuentes o Escenas están desplegadas |
 | D-2 | Quitar los popovers migrados y su código muerto | Archivos más pequeños; tests actualizados |
 | D-3 | Borrar confirmación al eliminar una escena (límite conocido de E-3b) | Test del diálogo |
 | D-4 | Renombrar una escena desde la interfaz (límite conocido de E-3b) | Test del renombrado |

@@ -437,3 +437,16 @@ fn the_texts_come_in_the_language_of_the_model() {
 }
 
 mod content;
+
+#[test]
+fn a_section_opened_from_the_pill_is_shown_once_the_panel_is_on_screen() {
+    let mut panel = StudioPanel::new();
+    assert!(!panel.shows(StudioSection::Sources));
+    panel.open_section(StudioSection::Sources);
+    assert!(
+        !panel.shows(StudioSection::Sources),
+        "no panel on screen yet"
+    );
+    // Unlike `unfold`, it still has to animate open.
+    assert!(panel.is_animating());
+}

@@ -46,15 +46,21 @@ impl Controls {
             |delta: i32| (model.sync_ms + delta).clamp(-MAX_AUDIO_OFFSET_MS, MAX_AUDIO_OFFSET_MS);
         let action = match hit {
             Hit::Settings => {
-                self.toggle_settings();
+                if !self.open_in_panel(StudioSection::Settings) {
+                    self.toggle_settings();
+                }
                 return;
             }
             Hit::Replay => {
-                self.toggle_replay();
+                if !self.open_in_panel(StudioSection::Recording) {
+                    self.toggle_replay();
+                }
                 return;
             }
             Hit::Sources => {
-                self.toggle_sources();
+                if !self.open_in_panel(StudioSection::Sources) {
+                    self.toggle_sources();
+                }
                 return;
             }
             Hit::Scenes(hit) => {

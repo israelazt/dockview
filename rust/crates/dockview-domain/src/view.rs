@@ -217,6 +217,9 @@ pub enum Action {
     ToggleStats,
     /// Open or close the Studio side panel.
     ToggleStudio,
+    /// Open the Studio panel (and leave full screen to show it); it stays
+    /// open if it already was.
+    OpenStudio,
     ToggleReplay,
     /// Move the clip length one step longer (+1) or shorter (-1).
     ReplayLength(i32),

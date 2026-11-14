@@ -75,6 +75,7 @@ impl Shell {
         let animations = core.cli().screenshot.is_none() && system_animations_enabled();
         let mut controls = Controls::new(preview);
         controls.set_animations(animations);
+        controls.set_opens_panel(true);
         let mut studio = StudioPanel::new();
         studio.set_animations(animations);
         let section = core.cli().studio_section.clone();

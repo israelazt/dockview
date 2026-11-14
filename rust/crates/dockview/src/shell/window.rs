@@ -185,6 +185,9 @@ impl Shell {
 
         self.pointer.end_frame();
         let actions = self.controls.take_actions();
+        if let Some(section) = self.controls.take_studio_request() {
+            self.studio.open_section(section);
+        }
         for action in actions.into_iter().chain(self.studio.take_actions()) {
             self.core.apply(action);
         }
