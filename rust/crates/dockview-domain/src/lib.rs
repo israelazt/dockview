@@ -15,6 +15,7 @@ pub mod events;
 pub mod frame;
 pub mod geometry;
 pub mod i18n;
+pub mod layer_edit;
 pub mod layout;
 pub mod log;
 pub mod pcm;
