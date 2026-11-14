@@ -23,6 +23,50 @@ fn settings_with(video: &str, audio: &str) -> AppSettings {
     }
 }
 
+// -- Renaming a scene ----------------------------------------------------
+
+fn rig_with_scenes(names: &[&str]) -> Rig {
+    use dockview_domain::scene::{Scene, SourceRef};
+    let scenes = names
+        .iter()
+        .map(|name| {
+            Scene::with_base(
+                *name,
+                SourceRef::Window {
+                    title: "Game".into(),
+                },
+            )
+        })
+        .collect();
+    Rig::builder()
+        .settings(AppSettings {
+            scenes,
+            ..AppSettings::default()
+        })
+        .build()
+}
+
+#[test]
+fn renaming_a_scene_keeps_the_clean_name_and_saves_it() {
+    let mut rig = rig_with_scenes(&["One", "Two"]);
+    rig.core.apply(Action::RenameScene(1, "  Stream  ".into()));
+    let saved = rig.saved_soon().expect("saved");
+    assert_eq!(saved.scenes[0].name, "One");
+    assert_eq!(saved.scenes[1].name, "Stream");
+}
+
+#[test]
+fn an_unusable_rename_changes_nothing() {
+    let mut rig = rig_with_scenes(&["One"]);
+    rig.core.apply(Action::RenameScene(0, "   ".into()));
+    rig.core.apply(Action::RenameScene(5, "Ghost".into()));
+    assert!(
+        rig.saved_soon().is_none(),
+        "nothing changed, nothing written"
+    );
+    assert_eq!(rig.core.model().scenes.names, ["One"]);
+}
+
 // -- Studio mode ---------------------------------------------------------
 
 #[test]

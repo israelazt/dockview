@@ -602,6 +602,107 @@ fn the_question_goes_away_after_the_answer_and_with_another_scene() {
     );
 }
 
+/// Starts renaming the scene in use and types `text` after what was there.
+fn start_renaming(rig: &mut Rig) {
+    rig.click_on(PanelHit::Rename);
+    rig.frame(0.016);
+    assert!(rig.panel.is_editing());
+}
+
+fn type_text(rig: &mut Rig, text: &str) {
+    rig.panel.key(TextKey::Text(text.into()));
+    rig.frame(0.016);
+}
+
+#[test]
+fn renaming_starts_from_the_current_name_and_enter_asks_for_the_new_one() {
+    let mut rig = scenes_open(two_scenes_second_in_use());
+    assert!(!rig.panel.is_editing());
+    start_renaming(&mut rig);
+    for _ in 0..3 {
+        rig.panel.key(TextKey::Backspace);
+    }
+    type_text(&mut rig, "ñ 9");
+    rig.panel.key(TextKey::Enter);
+    rig.frame(0.016);
+    assert_eq!(
+        rig.panel.take_actions(),
+        [Action::RenameScene(1, "Scenñ 9".into())]
+    );
+    assert!(!rig.panel.is_editing());
+}
+
+#[test]
+fn escape_gives_up_the_rename_and_asks_for_nothing() {
+    let mut rig = scenes_open(two_scenes_second_in_use());
+    start_renaming(&mut rig);
+    type_text(&mut rig, "x");
+    rig.panel.key(TextKey::Escape);
+    rig.frame(0.016);
+    assert!(!rig.panel.is_editing());
+    assert!(rig.panel.take_actions().is_empty());
+}
+
+#[test]
+fn a_press_outside_the_field_ends_the_rename_but_one_inside_does_not() {
+    let mut rig = scenes_open(two_scenes_second_in_use());
+    start_renaming(&mut rig);
+    rig.frame(0.016);
+    rig.click_on(PanelHit::EditField);
+    assert!(rig.panel.is_editing(), "a click in the field keeps editing");
+    rig.click_on(PanelHit::Header(StudioSection::Scenes));
+    assert!(!rig.panel.is_editing());
+    assert!(rig.panel.take_actions().is_empty());
+}
+
+#[test]
+fn the_name_cannot_grow_past_its_limit_or_its_field() {
+    let mut rig = scenes_open(two_scenes_second_in_use());
+    start_renaming(&mut rig);
+    type_text(&mut rig, &"W".repeat(60));
+    rig.panel.key(TextKey::Enter);
+    rig.frame(0.016);
+    let [Action::RenameScene(_, name)] = &rig.panel.take_actions()[..] else {
+        panic!("one rename was expected");
+    };
+    assert!(name.chars().count() <= dockview_domain::scene::MAX_SCENE_NAME_CHARS);
+    let width = rig.ui.measure(name, super::super::scenes::ROW_TEXT).0;
+    assert!(
+        width <= rig.panel.edit_room,
+        "{width} does not fit the field"
+    );
+}
+
+#[test]
+fn keys_are_only_kept_while_a_name_is_being_typed() {
+    let mut rig = scenes_open(two_scenes_second_in_use());
+    rig.panel.key(TextKey::Text("x".into()));
+    rig.frame(0.016);
+    start_renaming(&mut rig);
+    rig.panel.key(TextKey::Enter);
+    rig.frame(0.016);
+    // What was typed before the field existed did not end up in it.
+    assert_eq!(
+        rig.panel.take_actions(),
+        [Action::RenameScene(1, "Scene 2".into())]
+    );
+}
+
+#[test]
+fn choosing_another_scene_or_closing_the_panel_ends_the_rename() {
+    let mut rig = scenes_open(two_scenes_second_in_use());
+    start_renaming(&mut rig);
+    rig.model.scenes.active = Some(0);
+    rig.frame(0.016);
+    assert!(!rig.panel.is_editing());
+
+    let mut rig = scenes_open(two_scenes_second_in_use());
+    start_renaming(&mut rig);
+    rig.visible = false;
+    rig.frame(0.016);
+    assert!(!rig.panel.is_editing());
+}
+
 #[test]
 fn the_base_layer_can_be_hidden_but_not_removed() {
     let rig = scenes_open(two_scenes_second_in_use());

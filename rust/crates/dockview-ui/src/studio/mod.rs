@@ -13,7 +13,9 @@
 mod audio;
 mod body;
 mod draw;
+mod edit;
 mod inputs;
+mod interact;
 mod recording;
 mod route;
 mod scenes;
@@ -22,6 +24,7 @@ mod sections;
 mod settings;
 mod sources;
 mod stats;
+mod typing;
 mod widgets;
 
 use std::collections::HashMap;
@@ -29,6 +32,7 @@ use std::collections::HashMap;
 use dockview_domain::stats::Stats;
 use dockview_domain::view::{Action, Model};
 
+pub use edit::TextKey;
 pub use route::route_pointer;
 pub use sections::StudioSection;
 
@@ -73,6 +77,10 @@ enum PanelHit {
     AskDelete,
     /// The answer "no" to that question.
     CancelDelete,
+    /// The button that starts renaming the scene in use.
+    Rename,
+    /// The text field of the rename; a press inside it does not end the edit.
+    EditField,
 }
 
 pub struct StudioPanel {
@@ -110,6 +118,15 @@ pub struct StudioPanel {
     confirm_delete: Option<usize>,
     /// The scene the delete button of the last frame would ask about.
     ask_delete_of: Option<usize>,
+    /// The scene whose name is being typed, with the text so far.
+    editing: Option<(usize, edit::TextEdit)>,
+    /// The scene the rename button of the last frame would edit, and its name.
+    rename_of: Option<(usize, String)>,
+    /// Keys typed since the last frame; they are applied in the next one, where
+    /// the width of the text can be measured.
+    typed: Vec<TextKey>,
+    /// How wide a name being typed may be, in logical pixels.
+    edit_room: f32,
     dt: f32,
 }
 
@@ -137,6 +154,10 @@ impl StudioPanel {
             area: None,
             confirm_delete: None,
             ask_delete_of: None,
+            editing: None,
+            rename_of: None,
+            typed: Vec::new(),
+            edit_room: 180.0,
             dt: 0.0,
         }
     }
@@ -240,6 +261,8 @@ impl StudioPanel {
         self.dt = dt;
         self.area = area;
         let Some(visible) = area else {
+            self.editing = None;
+            self.typed.clear();
             self.hits.clear();
             self.hovered = None;
             self.pressed = None;
@@ -254,6 +277,7 @@ impl StudioPanel {
         );
 
         self.step_sections();
+        self.apply_typed_keys(ui);
         // Only a section that is open, or still folding, has a body to measure
         // (some of them wrap text, which is not free).
         let mut heights = [0.0; 6];
@@ -308,68 +332,6 @@ impl StudioPanel {
             .rev()
             .find(|(_, rect)| rect.contains(x, y))
             .map(|(hit, _)| *hit)
-    }
-
-    fn interact(&mut self, pointer: &Pointer, visible: Rect, content_h: f32, list_h: f32) {
-        if pointer.just_pressed {
-            self.pressed = self.hovered;
-        }
-        // A slider follows the pointer for as long as it is held.
-        if let (Some(PanelHit::Slider(i)), Some((x, _))) = (self.pressed, pointer.pos) {
-            if pointer.down || pointer.just_pressed {
-                self.drag_slider(i, x);
-            }
-        }
-        if pointer.just_released {
-            if let (Some(pressed), Some(hovered)) = (self.pressed, self.hovered) {
-                if pressed == hovered {
-                    self.activate(pressed);
-                }
-            }
-            self.pressed = None;
-        }
-        let over_panel = pointer.pos.is_some_and(|(x, y)| visible.contains(x, y));
-        if pointer.wheel != 0.0 && over_panel {
-            self.scroll_target =
-                scroll::scroll_by(self.scroll_target, pointer.wheel, content_h, list_h);
-        }
-    }
-
-    /// Asks for the value of slider `i` that the pointer at `x` points at.
-    fn drag_slider(&mut self, i: usize, x: f32) {
-        let Some(slider) = self.sliders.get(i).copied() else {
-            return;
-        };
-        let value = slider.value_at(x);
-        if (value - slider.value).abs() > f32::EPSILON {
-            self.actions.push((slider.make)(value));
-            // Until the application answers, the slider shows where it was
-            // dragged to (so a fast drag is not asked for twice).
-            if let Some(shown) = self.sliders.get_mut(i) {
-                shown.value = value;
-            }
-        }
-    }
-
-    fn activate(&mut self, hit: PanelHit) {
-        match hit {
-            PanelHit::Close => self.actions.push(Action::ToggleStudio),
-            PanelHit::Slider(_) => {}
-            PanelHit::AskDelete => self.confirm_delete = self.ask_delete_of,
-            PanelHit::CancelDelete => self.confirm_delete = None,
-            PanelHit::Item(i) => {
-                if let Some(action) = self.items.get(i) {
-                    // Whatever is answered, the question is over.
-                    self.confirm_delete = None;
-                    self.actions.push(action.clone());
-                }
-            }
-            PanelHit::Header(section) => {
-                if let Some(i) = StudioSection::ALL.iter().position(|s| *s == section) {
-                    self.open[i] = !self.open[i];
-                }
-            }
-        }
     }
 
     /// Registers a rectangle that can be pointed at.

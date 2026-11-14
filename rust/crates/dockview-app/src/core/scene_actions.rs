@@ -7,7 +7,7 @@ use std::sync::Arc;
 use dockview_domain::device_names;
 use dockview_domain::events::AppEvent;
 use dockview_domain::frame::FrameSlot;
-use dockview_domain::scene::{Scene, SourceRef, MAX_SCENE_LAYERS};
+use dockview_domain::scene::{clean_scene_name, Scene, SourceRef, MAX_SCENE_LAYERS};
 
 use dockview_domain::i18n;
 use dockview_domain::i18n::LangModeExt;
@@ -137,6 +137,20 @@ impl Core {
             Some(active) if active == index => self.activate_scene(None),
             Some(active) if active > index => self.settings.active_scene = Some(active - 1),
             _ => {}
+        }
+    }
+
+    /// Gives a scene the name that was typed, if it is a usable one.
+    pub(super) fn rename_scene(&mut self, index: usize, typed: &str) {
+        let Some(name) = clean_scene_name(typed) else {
+            return;
+        };
+        let Some(scene) = self.settings.scenes.get_mut(index) else {
+            return;
+        };
+        if scene.name != name {
+            scene.name = name;
+            self.settings_changed();
         }
     }
 

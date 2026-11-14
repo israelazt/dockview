@@ -1,6 +1,7 @@
 //! Which key asks for what.
 
 use dockview_app::keys::KeyCommand;
+use dockview_ui::studio::TextKey;
 use winit::keyboard::{Key, NamedKey};
 
 /// The command for `key`, if it has one. Letters ignore case.
@@ -25,9 +26,52 @@ pub fn command_for(key: &Key) -> Option<KeyCommand> {
     }
 }
 
+/// What `key` does in a text field, given the text the key types (the
+/// keyboard layout and the modifiers have already been applied to it).
+pub fn text_key_for(key: &Key, text: Option<&str>) -> Option<TextKey> {
+    match key {
+        Key::Named(NamedKey::Backspace) => Some(TextKey::Backspace),
+        Key::Named(NamedKey::Delete) => Some(TextKey::Delete),
+        Key::Named(NamedKey::ArrowLeft) => Some(TextKey::Left),
+        Key::Named(NamedKey::ArrowRight) => Some(TextKey::Right),
+        Key::Named(NamedKey::Home) => Some(TextKey::Home),
+        Key::Named(NamedKey::End) => Some(TextKey::End),
+        Key::Named(NamedKey::Enter) => Some(TextKey::Enter),
+        Key::Named(NamedKey::Escape) => Some(TextKey::Escape),
+        _ => text
+            .filter(|t| t.chars().any(|c| !c.is_control()))
+            .map(|t| TextKey::Text(t.to_owned())),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_text_field_gets_editing_keys_and_typed_text_only() {
+        let named = |k| text_key_for(&Key::Named(k), None);
+        assert_eq!(named(NamedKey::Backspace), Some(TextKey::Backspace));
+        assert_eq!(named(NamedKey::Delete), Some(TextKey::Delete));
+        assert_eq!(named(NamedKey::ArrowLeft), Some(TextKey::Left));
+        assert_eq!(named(NamedKey::ArrowRight), Some(TextKey::Right));
+        assert_eq!(named(NamedKey::Home), Some(TextKey::Home));
+        assert_eq!(named(NamedKey::End), Some(TextKey::End));
+        assert_eq!(named(NamedKey::Enter), Some(TextKey::Enter));
+        assert_eq!(named(NamedKey::Escape), Some(TextKey::Escape));
+        // Letters, and the space bar, come with their text.
+        assert_eq!(
+            text_key_for(&Key::Character("ñ".into()), Some("ñ")),
+            Some(TextKey::Text("ñ".into()))
+        );
+        assert_eq!(
+            text_key_for(&Key::Named(NamedKey::Space), Some(" ")),
+            Some(TextKey::Text(" ".into()))
+        );
+        // Tab types a control character, and F11 nothing: neither is text.
+        assert_eq!(text_key_for(&Key::Named(NamedKey::Tab), Some("\t")), None);
+        assert_eq!(text_key_for(&Key::Named(NamedKey::F11), None), None);
+    }
 
     fn ch(text: &str) -> Key {
         Key::Character(text.into())

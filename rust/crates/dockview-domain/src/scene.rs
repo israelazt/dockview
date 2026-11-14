@@ -107,6 +107,17 @@ impl SceneLayer {
     }
 }
 
+/// Longest name a scene may have, in characters.
+pub const MAX_SCENE_NAME_CHARS: usize = 30;
+
+/// The name to keep for what was typed: without the spaces around it and
+/// within the limit; `None` when nothing is left (a scene always has a name).
+pub fn clean_scene_name(typed: &str) -> Option<String> {
+    let name: String = typed.trim().chars().take(MAX_SCENE_NAME_CHARS).collect();
+    let name = name.trim_end().to_owned();
+    (!name.is_empty()).then_some(name)
+}
+
 /// A named arrangement of layers.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -174,6 +185,24 @@ impl Scene {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_typed_name_is_trimmed_cut_and_never_empty() {
+        assert_eq!(clean_scene_name("  Juego  ").as_deref(), Some("Juego"));
+        assert_eq!(clean_scene_name("   "), None);
+        assert_eq!(clean_scene_name(""), None);
+        let long = "ñ".repeat(MAX_SCENE_NAME_CHARS + 10);
+        assert_eq!(
+            clean_scene_name(&long).unwrap().chars().count(),
+            MAX_SCENE_NAME_CHARS
+        );
+        // Cutting must not leave a space at the end.
+        let spaced = format!("{} tail", "a".repeat(MAX_SCENE_NAME_CHARS - 1));
+        assert_eq!(
+            clean_scene_name(&spaced).unwrap(),
+            "a".repeat(MAX_SCENE_NAME_CHARS - 1)
+        );
+    }
 
     fn card(link: &str) -> SourceRef {
         SourceRef::Capture {

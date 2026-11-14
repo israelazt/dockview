@@ -185,6 +185,7 @@ strings! {
     SceneDefaultName => "Scene {n}", "Escena {n}";
     TipScenes => "Scenes: arrange several sources in one picture", "Escenas: combina varias fuentes en una sola imagen";
     TipSceneDelete => "Delete this scene", "Borrar esta escena";
+    SceneRename => "Rename this scene", "Renombrar esta escena";
     SceneDeleteAsk => "Delete it?", "¿Borrarla?";
     SceneDeleteYes => "Delete", "Borrar";
     SceneDeleteNo => "Cancel", "Cancelar";

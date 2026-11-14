@@ -230,6 +230,8 @@ pub enum Action {
     SetQuality(RecordingQuality),
     /// A change in the scenes popover.
     Scene(SceneAction),
+    /// Give the scene at this position the name that was typed.
+    RenameScene(usize, String),
 }
 
 /// A change asked for in the scenes popover.

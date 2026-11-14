@@ -12,7 +12,7 @@ use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use winit::window::{Window, WindowId};
 
 use super::helpers::appearance_of;
-use super::keys::command_for;
+use super::keys::{command_for, text_key_for};
 use super::present::StartupFailure;
 use super::*;
 
@@ -140,7 +140,14 @@ impl ApplicationHandler for Shell {
                 self.ui_scale = self.core.cli().scale.unwrap_or(scale_factor as f32);
             }
             WindowEvent::KeyboardInput { event, .. } if event.state == ElementState::Pressed => {
-                if let Some(command) = command_for(&event.logical_key) {
+                if self.studio.is_editing() {
+                    // A name is being typed: the keys are for the field and not
+                    // for the shortcuts (F, Tab, the arrows...).
+                    let text = event.text.as_deref();
+                    if let Some(key) = text_key_for(&event.logical_key, text) {
+                        self.studio.key(key);
+                    }
+                } else if let Some(command) = command_for(&event.logical_key) {
                     self.core.on_key(command);
                 }
                 self.apply_host_requests();

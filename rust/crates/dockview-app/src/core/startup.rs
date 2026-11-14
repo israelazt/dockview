@@ -1,6 +1,7 @@
 //! Building the core and starting it: the devices and the first source.
 
 use super::*;
+use dockview_domain::scene::{Scene, SourceRef};
 
 impl Core {
     pub fn new(
@@ -28,6 +29,10 @@ impl Core {
         let input_slot = Arc::new(FrameSlot::new());
         input_slot.set_forward(Some(Arc::clone(&slot)));
         let mut settings = settings;
+        if preview {
+            settings.scenes = preview_scenes();
+            settings.active_scene = Some(0);
+        }
         if cli.open_studio {
             settings.studio_open = true;
         }
@@ -139,4 +144,17 @@ impl Core {
         self.sources.video_index = Some(0);
         self.sources.audio_index = Some(0);
     }
+}
+
+/// Two scenes for the interface preview, so the Scenes section has something to
+/// show (nothing runs: a preview only draws).
+fn preview_scenes() -> Vec<Scene> {
+    let screen = SourceRef::Monitor {
+        device_name: r"\\.\DISPLAY1".into(),
+    };
+    let mut game = Scene::with_base("Juego + cámara", screen.clone());
+    game.add_layer(SourceRef::Window {
+        title: "Mi juego".into(),
+    });
+    vec![game, Scene::with_base("Solo pantalla", screen)]
 }

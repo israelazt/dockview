@@ -22,13 +22,14 @@ const PAD_BOTTOM: f32 = 14.0;
 /// Size of the small icon buttons inside a layer's row.
 const ICON_BUTTON: f32 = 26.0;
 
-const ROW_TEXT: TextStyle = TextStyle::new(13.0, Weight::Regular);
+pub(super) const ROW_TEXT: TextStyle = TextStyle::new(13.0, Weight::Regular);
 const TAG: TextStyle = TextStyle::new(11.5, Weight::Medium);
 
 const ICON_PLUS: char = '\u{e13d}';
 const ICON_EYE: char = '\u{e0ba}';
 const ICON_EYE_OFF: char = '\u{e0bb}';
 const ICON_TRASH: char = '\u{e18d}';
+const ICON_PENCIL: char = '\u{e1f9}';
 const ICON_CLOSE: char = '\u{e1b2}';
 
 /// The scenes as a list: the plain source first, then each scene.
@@ -49,7 +50,7 @@ pub fn body_height(m: &Model) -> f32 {
     let s = &m.scenes;
     let mut height = PAD_TOP + list_height(1 + s.names.len(), MAX_SCENES + 1) + GAP + ROW_H;
     if s.active.is_some() {
-        height += ROW_H; // delete this scene
+        height += ROW_H * 2.0; // rename and delete this scene
         height += GAP + LABEL_H + s.layers.len() as f32 * ROW_H;
         if s.can_add {
             let group = |n: usize| LABEL_H + list_height(n, MAX_ADD);
@@ -101,6 +102,11 @@ impl StudioPanel {
         if self.confirm_delete != Some(active) {
             self.confirm_delete = None;
         }
+        if self.editing.as_ref().is_some_and(|(i, _)| *i != active) {
+            self.editing = None;
+        }
+        let name = s.names.get(active).map_or("", String::as_str);
+        y += self.rename_row(ui, t, lang, (active, name), (x, y, w));
         y += self.delete_row(ui, t, lang, active, (x, y, w));
 
         y += GAP;
@@ -157,6 +163,59 @@ impl StudioPanel {
             y,
             w,
         );
+    }
+
+    /// The row that renames the scene in use: a button, which becomes a text
+    /// field while the name is typed. Returns its height.
+    fn rename_row(
+        &mut self,
+        ui: &mut Ui,
+        t: &Theme,
+        lang: Lang,
+        (active, name): (usize, &str),
+        (x, y, w): (f32, f32, f32),
+    ) -> f32 {
+        let row = Rect::new(x, y, w, ROW_H);
+        let line_h = ui.measure("Ag", ROW_TEXT).1;
+        let typing = self
+            .editing
+            .as_ref()
+            .filter(|(i, _)| *i == active)
+            .map(|(_, e)| (e.text().to_owned(), e.before_caret().to_owned()));
+        let Some((typed, before_caret)) = typing else {
+            self.rename_of = Some((active, name.to_owned()));
+            if let Some(shown) = intersect(row, self.clip) {
+                self.register(PanelHit::Rename, shown);
+            }
+            let hover = self.hover_amount(PanelHit::Rename);
+            ui.rect(row, 9.0, t.hover.with_alpha(t.hover.a * hover));
+            ui.icon(ICON_PENCIL, x + 18.0, y + ROW_H / 2.0, 15.0, t.text_dim);
+            let text = fit_text(ui, tr(lang, Key::SceneRename), ROW_TEXT, w - 48.0);
+            ui.text(
+                &text,
+                x + 38.0,
+                y + (ROW_H - line_h) / 2.0,
+                ROW_TEXT,
+                t.text,
+            );
+            return ROW_H;
+        };
+        // The field: what was typed so far and the caret after it.
+        let field = Rect::new(x, y + 1.0, w, ROW_H - 2.0);
+        if let Some(shown) = intersect(field, self.clip) {
+            self.register(PanelHit::EditField, shown);
+        }
+        ui.panel(field, 9.0, t.segment_track, t.accent, 1.0);
+        let text_x = x + 10.0;
+        self.edit_room = w - 20.0 - 2.0;
+        ui.text(&typed, text_x, y + (ROW_H - line_h) / 2.0, ROW_TEXT, t.text);
+        let caret_x = text_x + ui.measure(&before_caret, ROW_TEXT).0;
+        ui.rect(
+            Rect::new(caret_x, y + 8.0, 1.5, ROW_H - 16.0),
+            0.75,
+            t.accent,
+        );
+        ROW_H
     }
 
     /// The row that deletes the scene in use. A click only asks; the row then

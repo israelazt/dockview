@@ -159,6 +159,10 @@ impl Core {
                 self.apply_scene_action(action);
                 return;
             }
+            Action::RenameScene(index, name) => {
+                self.rename_scene(index, &name);
+                return;
+            }
             Action::ToggleFullscreen => {
                 self.set_fullscreen(!self.view.fullscreen);
                 return;
