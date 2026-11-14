@@ -6,8 +6,9 @@
 use std::path::Path;
 
 use dockview_domain::desktop::PxRect;
+use dockview_domain::i18n::Lang;
 use dockview_domain::image::{Image, ImageFormat};
-use dockview_domain::ports::{ImageOutput, ScreenGrabber, SelectionOverlay};
+use dockview_domain::ports::{ImageOutput, PickOptions, ScreenGrabber, SelectionOverlay};
 use dockview_domain::select::Mode;
 use dockview_domain::snap::{find_window, SnapJob, SnapTarget};
 
@@ -29,6 +30,7 @@ pub fn format_of(path: &Path) -> Result<ImageFormat, String> {
 fn choose(
     job: &SnapJob,
     mode: Mode,
+    lang: Lang,
     screen: &dyn ScreenGrabber,
     overlay: &dyn SelectionOverlay,
     own_pid: u32,
@@ -42,7 +44,8 @@ fn choose(
         .filter(|w| w.process_id != own_pid)
         .filter_map(|w| screen.window_rect(w.handle))
         .collect();
-    let Some(selection) = overlay.pick(&frozen, &desktop, windows, mode) else {
+    let Some(selection) = overlay.pick(&frozen, &desktop, windows, &PickOptions { mode, lang })
+    else {
         return Ok(None);
     };
     Ok(selection.cut(&frozen, (bounds.x, bounds.y)))
@@ -75,18 +78,19 @@ fn grab(job: &SnapJob, screen: &dyn ScreenGrabber, own_pid: u32) -> Result<Image
 }
 
 /// Takes the screenshot and puts it where the job says. Returns what was done,
-/// for the log. `own_pid` is this program's process, never captured by title.
+/// for the log. `lang` is the language of the overlay's buttons; `own_pid` is this program's process, never captured by title.
 pub fn take(
     job: &SnapJob,
     screen: &dyn ScreenGrabber,
     overlay: &dyn SelectionOverlay,
     out: &dyn ImageOutput,
+    lang: Lang,
     own_pid: u32,
 ) -> Result<String, String> {
     // Check the file name before spending time on the capture.
     let format = job.out.as_deref().map(format_of).transpose()?;
     let image = match job.target {
-        SnapTarget::Select(mode) => match choose(job, mode, screen, overlay, own_pid)? {
+        SnapTarget::Select(mode) => match choose(job, mode, lang, screen, overlay, own_pid)? {
             Some(image) => image,
             None => return Ok("cancelled".into()),
         },
@@ -186,11 +190,13 @@ mod tests {
             frozen: &Image,
             desktop: &Desktop,
             windows: Vec<PxRect>,
-            mode: Mode,
+            options: &PickOptions,
         ) -> Option<Selection> {
             let bounds = desktop.bounds().unwrap();
             assert_eq!((frozen.width, frozen.height), (bounds.w, bounds.h));
-            self.shown.borrow_mut().push((bounds, windows.len(), mode));
+            self.shown
+                .borrow_mut()
+                .push((bounds, windows.len(), options.mode));
             self.answer.clone()
         }
     }
@@ -225,7 +231,14 @@ mod tests {
         out: &FakeOutput,
         pid: u32,
     ) -> Result<String, String> {
-        take(job, screen, &FakeOverlay::answering(None), out, pid)
+        take(
+            job,
+            screen,
+            &FakeOverlay::answering(None),
+            out,
+            Lang::En,
+            pid,
+        )
     }
 
     fn job(target: SnapTarget, out: Option<&str>, copy: bool) -> SnapJob {
@@ -234,6 +247,7 @@ mod tests {
             out: out.map(PathBuf::from),
             cursor: false,
             copy,
+            delay_secs: 0,
         }
     }
 
@@ -352,6 +366,7 @@ mod tests {
             &screen,
             &overlay,
             &out,
+            Lang::En,
             50,
         )
         .unwrap();
@@ -374,6 +389,7 @@ mod tests {
             &screen,
             &overlay,
             &out,
+            Lang::En,
             1,
         )
         .unwrap();
@@ -392,6 +408,7 @@ mod tests {
             &screen,
             &overlay,
             &out,
+            Lang::En,
             1,
         )
         .unwrap();

@@ -68,7 +68,17 @@ Igual que el resto: tarea atómica = un commit + push, con `fmt`, `clippy` sin a
 | S-B2 ✅ | Rectángulo: arrastrar, mover, redimensionar, tamaño visible, Esc cancela | Tests de la lógica; prueba real |
 | S-B3 ✅ | Ventana: resalta la ventana bajo el cursor y la captura entera | Prueba con ventanas solapadas |
 | S-B4 ✅ | Pantalla completa y forma libre | Forma libre recorta con transparencia |
-| S-B5 | Barra flotante de modos y retardo (3/5/10 s) con cuenta atrás | Captura con retardo de un menú desplegable |
+| S-B5 ✅ | Barra flotante de modos y retardo (3/5/10 s) con cuenta atrás | Captura con retardo de un menú desplegable |
+
+**Pausa S-B.**
+
+### Resultados del bloque S-B (2026-11-14)
+
+- **Portátil (`domain`):** `select.rs` con el selector (rectángulo, ventana, pantalla completa, forma libre; eventos de puntero y teclas → `Step::{Continue, Done, Cancel}` y qué dibujar), `Selection::cut` (recorta la imagen congelada; la forma libre queda transparente fuera), la barra de botones (`toolbar_layout/hit`, a la escala de cada monitor) y `SnapJob` con retardo. Puertos nuevos: `SelectionOverlay` (con `PickOptions { modo, idioma }`), `ScreenGrabber`, `ImageOutput`. El servicio `app::snap_service` hace todo el flujo contra los puertos y se prueba con dobles (sin pantalla).
+- **Windows (`platform`):** `overlay.rs` y `overlay_paint.rs`: una ventana sin borde sobre todos los monitores con la pantalla congelada y atenuada, la selección a brillo normal con borde azul y su tamaño, y la barra de modos en el monitor donde esté el cursor (botones «Rectángulo / Ventana / Pantalla completa / Forma libre» en el idioma del sistema). Esc, clic derecho o Esc sin foco (un temporizador lo lee) cancelan.
+- **Línea de comandos:** `--snap select[:rect|window|full|free]` abre la superposición; `--snap-delay N` (0–60 s) espera antes de congelar.
+- **Verificado con la app real, ratón y teclado:** arrastre de rectángulo (400×298 de 400×300 pedidos: 2 px de diferencia entre dónde apunta el script y dónde cae el evento), ventana por clic (1920×1032 y 1280×800), forma libre (triángulo 301×301: esquina opuesta transparente), Esc sin archivo, la barra (cambiar a «Ventana» y capturar), el retardo de 2 s y la barra en el monitor del cursor.
+- **Pendiente:** el retardo se elige hoy solo por línea de comandos (el selector 3/5/10 s y la cuenta atrás visible llegan con la interfaz de S-C/S-E); la superposición no maneja bien monitores con distinta escala (no probado: los de esta máquina están a 100 %); el rectángulo no se puede ajustar tras soltar (se captura al soltar, como Win+Shift+S).
 
 **Pausa S-B.**
 

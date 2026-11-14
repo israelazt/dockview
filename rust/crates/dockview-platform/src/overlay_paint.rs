@@ -7,12 +7,13 @@ use windows::core::w;
 use windows::Win32::Foundation::{COLORREF, HWND, POINT, RECT};
 use windows::Win32::Graphics::Gdi::{
     BeginPaint, BitBlt, CreateFontW, CreatePen, CreateSolidBrush, DeleteObject, EndPaint, FillRect,
-    GetStockObject, Polyline, Rectangle, SelectObject, SetBkMode, SetTextColor, TextOutW,
-    CLEARTYPE_QUALITY, CLIP_DEFAULT_PRECIS, DEFAULT_CHARSET, FW_SEMIBOLD, NULL_BRUSH,
-    OUT_DEFAULT_PRECIS, PAINTSTRUCT, PS_SOLID, SRCCOPY, TRANSPARENT, VARIABLE_PITCH,
+    GetStockObject, GetTextExtentPoint32W, Polyline, Rectangle, SelectObject, SetBkMode,
+    SetTextColor, TextOutW, CLEARTYPE_QUALITY, CLIP_DEFAULT_PRECIS, DEFAULT_CHARSET, FW_SEMIBOLD,
+    NULL_BRUSH, OUT_DEFAULT_PRECIS, PAINTSTRUCT, PS_SOLID, SRCCOPY, TRANSPARENT, VARIABLE_PITCH,
 };
 
 use crate::overlay::State;
+use dockview_domain::i18n::tr;
 
 /// How much of its brightness the dimmed picture keeps, out of 256.
 const DIM: u32 = 140;
@@ -54,6 +55,7 @@ pub(crate) fn paint(hwnd: HWND, state: &mut State) {
                 SRCCOPY,
             );
             draw_view(dc, state, area);
+            draw_toolbar(dc, state, area);
         }
         let _ = EndPaint(hwnd, &ps);
     }
@@ -105,6 +107,71 @@ unsafe fn draw_view(dc: windows::Win32::Graphics::Gdi::HDC, state: &State, area:
             SelectObject(dc, old);
             let _ = DeleteObject(pen.into());
         }
+    }
+}
+
+/// The bar of mode buttons: a dark pill with a button per mode, the current one
+/// lit. Only what falls inside `area` is repainted.
+unsafe fn draw_toolbar(dc: windows::Win32::Graphics::Gdi::HDC, state: &State, area: RECT) {
+    let Some(back) = state.toolbar_back else {
+        return;
+    };
+    let to_client = |r: PxRect| RECT {
+        left: r.x - state.origin.0,
+        top: r.y - state.origin.1,
+        right: r.right() - state.origin.0,
+        bottom: r.bottom() - state.origin.1,
+    };
+    let bar = to_client(back);
+    if bar.right < area.left
+        || bar.left > area.right
+        || bar.bottom < area.top
+        || bar.top > area.bottom
+    {
+        return;
+    }
+    unsafe {
+        let brush = CreateSolidBrush(COLORREF(0x0024_2424));
+        FillRect(dc, &bar, brush);
+        let _ = DeleteObject(brush.into());
+        outline(dc, bar, COLORREF(0x0055_5555), 1);
+        let font = CreateFontW(
+            -16,
+            0,
+            0,
+            0,
+            FW_SEMIBOLD.0 as i32,
+            0,
+            0,
+            0,
+            DEFAULT_CHARSET,
+            OUT_DEFAULT_PRECIS,
+            CLIP_DEFAULT_PRECIS,
+            CLEARTYPE_QUALITY,
+            VARIABLE_PITCH.0 as u32,
+            w!("Segoe UI"),
+        );
+        let old_font = SelectObject(dc, font.into());
+        SetBkMode(dc, TRANSPARENT);
+        for (mode, rect) in &state.toolbar {
+            let r = to_client(*rect);
+            let lit = *mode == state.selector.mode();
+            let fill = CreateSolidBrush(if lit { ACCENT } else { COLORREF(0x0036_3636) });
+            FillRect(dc, &r, fill);
+            let _ = DeleteObject(fill.into());
+            let words: Vec<u16> = tr(state.lang, mode.label()).encode_utf16().collect();
+            let mut size = windows::Win32::Foundation::SIZE::default();
+            let _ = GetTextExtentPoint32W(dc, &words, &mut size);
+            SetTextColor(dc, WHITE);
+            let _ = TextOutW(
+                dc,
+                r.left + (r.right - r.left - size.cx) / 2,
+                r.top + (r.bottom - r.top - size.cy) / 2,
+                &words,
+            );
+        }
+        SelectObject(dc, old_font);
+        let _ = DeleteObject(font.into());
     }
 }
 

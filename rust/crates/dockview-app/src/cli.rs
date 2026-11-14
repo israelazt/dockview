@@ -14,7 +14,7 @@
 use std::path::PathBuf;
 
 use dockview_domain::i18n::LangMode;
-use dockview_domain::snap::{SnapJob, SnapTarget};
+use dockview_domain::snap::{SnapJob, SnapTarget, MAX_DELAY_SECS};
 use dockview_domain::theme::ThemeMode;
 
 /// A source to draw in the corner of the picture.
@@ -103,6 +103,7 @@ impl Cli {
         let mut cli = Self::default();
         let (mut snap_target, mut snap_out) = (None, None);
         let (mut snap_cursor, mut snap_copy) = (false, false);
+        let mut snap_delay = 0u32;
         let mut args = args.into_iter();
 
         while let Some(arg) = args.next() {
@@ -156,6 +157,16 @@ impl Cli {
                 "--snap" => snap_target = Some(SnapTarget::parse(&value("--snap")?)?),
                 "--snap-out" => snap_out = Some(PathBuf::from(value("--snap-out")?)),
                 "--snap-cursor" => snap_cursor = true,
+                "--snap-delay" => {
+                    let text = value("--snap-delay")?;
+                    snap_delay = text
+                        .parse::<u32>()
+                        .ok()
+                        .filter(|s| *s <= MAX_DELAY_SECS)
+                        .ok_or_else(|| {
+                            format!("--snap-delay needs seconds from 0 to {MAX_DELAY_SECS}, got '{text}'")
+                        })?;
+                }
                 "--snap-copy" => snap_copy = true,
                 "--studio-section" => {
                     cli.studio_section = Some(value("--studio-section")?);
@@ -201,9 +212,13 @@ impl Cli {
                 out: snap_out,
                 cursor: snap_cursor,
                 copy: snap_copy,
+                delay_secs: snap_delay,
             }),
-            None if snap_out.is_some() || snap_copy || snap_cursor => {
-                return Err("--snap-out, --snap-copy and --snap-cursor need --snap TARGET".into())
+            None if snap_out.is_some() || snap_copy || snap_cursor || snap_delay > 0 => {
+                return Err(
+                    "--snap-out, --snap-copy, --snap-cursor and --snap-delay need --snap TARGET"
+                        .into(),
+                )
             }
             None => None,
         };
@@ -297,6 +312,11 @@ mod tests {
         assert!(parse(&["--snap-out", "a.png"]).is_err(), "no target");
         assert!(parse(&["--snap", "cosa:1", "--snap-copy"]).is_err());
         assert!(parse(&[]).unwrap().snap.is_none());
+        let waits = parse(&["--snap", "select", "--snap-copy", "--snap-delay", "5"]).unwrap();
+        assert_eq!(waits.snap.unwrap().delay_secs, 5);
+        assert!(parse(&["--snap", "full", "--snap-copy", "--snap-delay", "61"]).is_err());
+        assert!(parse(&["--snap", "full", "--snap-copy", "--snap-delay", "x"]).is_err());
+        assert!(parse(&["--snap-delay", "3"]).is_err());
     }
 
     #[test]

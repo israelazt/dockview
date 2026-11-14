@@ -10,9 +10,12 @@
 use std::ffi::c_void;
 
 use dockview_domain::desktop::{Desktop, PxRect};
+use dockview_domain::i18n::Lang;
 use dockview_domain::image::Image;
-use dockview_domain::ports::SelectionOverlay;
-use dockview_domain::select::{Input, Mode, Selection, Selector, Step, View};
+use dockview_domain::ports::{PickOptions, SelectionOverlay};
+use dockview_domain::select::{
+    toolbar_bounds, toolbar_hit, toolbar_layout, Input, Mode, Selection, Selector, Step, View,
+};
 use windows::core::w;
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, RECT, WPARAM};
 use windows::Win32::Graphics::Gdi::InvalidateRect;
@@ -40,6 +43,14 @@ pub(crate) struct State {
     pub(crate) origin: (i32, i32),
     pub(crate) bright: Canvas,
     pub(crate) dim: Canvas,
+    /// The mode buttons, where they are on the virtual screen, and the language of their words.
+    pub(crate) toolbar: Vec<(Mode, PxRect)>,
+    pub(crate) toolbar_back: Option<PxRect>,
+    pub(crate) lang: Lang,
+    /// A press that began on a button: its release and moves are not for the selector.
+    toolbar_press: bool,
+    /// The pointer is over the buttons (the cursor is an arrow there).
+    hover_toolbar: bool,
     result: Option<Selection>,
     done: bool,
     /// The area that was drawn on last time, to repaint only what changed.
@@ -52,21 +63,32 @@ impl SelectionOverlay for PlatformOverlay {
         frozen: &Image,
         desktop: &Desktop,
         windows: Vec<PxRect>,
-        mode: Mode,
+        options: &PickOptions,
     ) -> Option<Selection> {
         let bounds = desktop.bounds()?;
-        let selector = Selector::new(mode, bounds, windows);
+        let selector = Selector::new(options.mode, bounds, windows);
         // A mode that needs no pointer (the whole screen) is done already.
         match selector.start() {
             Step::Done(selection) => return Some(selection),
             Step::Cancel => return None,
             Step::Continue => {}
         }
+        // The buttons go on the monitor the pointer is on (the primary if unknown).
+        let monitor = cursor_position()
+            .and_then(|(x, y)| desktop.monitor_at(x, y))
+            .or_else(|| desktop.monitors.first())?;
+        let toolbar = toolbar_layout(monitor.bounds, monitor.scale_percent);
+        let toolbar_back = toolbar_bounds(&toolbar, monitor.scale_percent);
         let state = Box::new(State {
             selector,
             origin: (bounds.x, bounds.y),
             bright: Canvas::from_image(frozen).ok()?,
             dim: Canvas::from_image(&dimmed(frozen)).ok()?,
+            toolbar,
+            toolbar_back,
+            lang: options.lang,
+            toolbar_press: false,
+            hover_toolbar: false,
             result: None,
             done: false,
             last_dirty: None,
@@ -134,6 +156,15 @@ fn state_of<'a>(hwnd: HWND) -> Option<&'a mut State> {
     unsafe { at.as_mut() }
 }
 
+/// Where the mouse cursor is on the virtual screen.
+fn cursor_position() -> Option<(i32, i32)> {
+    let mut at = windows::Win32::Foundation::POINT::default();
+    // SAFETY: a plain query with a valid out pointer.
+    unsafe { windows::Win32::UI::WindowsAndMessaging::GetCursorPos(&mut at) }
+        .ok()
+        .map(|()| (at.x, at.y))
+}
+
 fn point_of(lparam: LPARAM, origin: (i32, i32)) -> (i32, i32) {
     // The low and high words are signed 16-bit client coordinates.
     let x = i32::from((lparam.0 & 0xFFFF) as i16);
@@ -189,6 +220,12 @@ fn feed(hwnd: HWND, state: &mut State, input: Input) {
         (Some(a), Some(b)) => Some(union(a, b)),
         (a, b) => a.or(b),
     };
+    // A new mode changes the buttons and drops what was drawn: repaint it all.
+    let area = if matches!(input, Input::SetMode(_)) {
+        None
+    } else {
+        area
+    };
     state.last_dirty = after;
     // SAFETY: invalidating a rectangle of our own window.
     unsafe {
@@ -224,16 +261,29 @@ unsafe extern "system" fn window_proc(
             // SAFETY: keeps the mouse while the button is held.
             unsafe { SetCapture(hwnd) };
             let (x, y) = point_of(lparam, state.origin);
+            if let Some(mode) = toolbar_hit(&state.toolbar, x, y) {
+                state.toolbar_press = true;
+                feed(hwnd, state, Input::SetMode(mode));
+                return LRESULT(0);
+            }
             feed(hwnd, state, Input::Down(x, y));
             LRESULT(0)
         }
         WM_MOUSEMOVE => {
             let (x, y) = point_of(lparam, state.origin);
+            state.hover_toolbar = toolbar_hit(&state.toolbar, x, y).is_some();
+            if state.toolbar_press {
+                return LRESULT(0);
+            }
             feed(hwnd, state, Input::Move(x, y));
             LRESULT(0)
         }
         WM_LBUTTONUP => {
             let (x, y) = point_of(lparam, state.origin);
+            if std::mem::take(&mut state.toolbar_press) {
+                let _ = unsafe { windows::Win32::UI::Input::KeyboardAndMouse::ReleaseCapture() };
+                return LRESULT(0);
+            }
             feed(hwnd, state, Input::Up(x, y));
             // SAFETY: releases the capture taken on the press.
             let _ = unsafe { windows::Win32::UI::Input::KeyboardAndMouse::ReleaseCapture() };
@@ -255,7 +305,7 @@ unsafe extern "system" fn window_proc(
             LRESULT(0)
         }
         WM_SETCURSOR => {
-            let cursor = if state.selector.mode() == Mode::Window {
+            let cursor = if state.selector.mode() == Mode::Window || state.hover_toolbar {
                 IDC_ARROW
             } else {
                 IDC_CROSS
@@ -304,7 +354,15 @@ mod tests {
         let desktop = Desktop::default();
         let image = Image::solid(2, 2, [0, 0, 0, 255]);
         assert!(PlatformOverlay
-            .pick(&image, &desktop, vec![], Mode::Full)
+            .pick(
+                &image,
+                &desktop,
+                vec![],
+                &PickOptions {
+                    mode: Mode::Full,
+                    lang: Lang::En,
+                },
+            )
             .is_none());
     }
 }

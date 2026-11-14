@@ -287,6 +287,15 @@ pub trait ImageOutput {
     fn copy(&self, image: &crate::image::Image) -> Result<(), String>;
 }
 
+/// How the selection overlay starts.
+#[derive(Debug, Clone, Copy)]
+pub struct PickOptions {
+    /// The mode it starts in (the buttons change it).
+    pub mode: crate::select::Mode,
+    /// The language of the buttons.
+    pub lang: crate::i18n::Lang,
+}
+
 /// The overlay where the user picks what to capture: the frozen, dimmed
 /// screen over every monitor.
 pub trait SelectionOverlay {
@@ -299,6 +308,6 @@ pub trait SelectionOverlay {
         frozen: &crate::image::Image,
         desktop: &crate::desktop::Desktop,
         windows: Vec<crate::desktop::PxRect>,
-        mode: crate::select::Mode,
+        options: &PickOptions,
     ) -> Option<crate::select::Selection>;
 }

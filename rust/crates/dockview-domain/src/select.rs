@@ -4,6 +4,7 @@
 //! says what to draw meanwhile. The window that shows it is the platform's.
 
 use crate::desktop::PxRect;
+use crate::i18n::Key;
 use crate::image::Image;
 
 /// Smallest side, in pixels, of a rectangle that counts as a selection (a
@@ -28,6 +29,60 @@ pub enum Mode {
 
 impl Mode {
     pub const ALL: [Mode; 4] = [Mode::Rectangle, Mode::Window, Mode::Full, Mode::Freeform];
+}
+
+impl Mode {
+    /// The words on its button.
+    pub fn label(self) -> Key {
+        match self {
+            Mode::Rectangle => Key::SnapModeRect,
+            Mode::Window => Key::SnapModeWindow,
+            Mode::Full => Key::SnapModeFull,
+            Mode::Freeform => Key::SnapModeFree,
+        }
+    }
+}
+
+/// Where the mode buttons go: a bar at the top centre of `monitor`, drawn at
+/// the monitor's display scale. Each button with its rectangle, in
+/// virtual-screen pixels, left to right in the order of [`Mode::ALL`].
+pub fn toolbar_layout(monitor: PxRect, scale_percent: u32) -> Vec<(Mode, PxRect)> {
+    let scale = |v: i32| v * scale_percent.max(100) as i32 / 100;
+    let (button_w, button_h, gap, margin_top) = (scale(156), scale(40), scale(6), scale(24));
+    let count = Mode::ALL.len() as i32;
+    let total = count * button_w + (count - 1) * gap;
+    let left = monitor.x + (monitor.w as i32 - total) / 2;
+    Mode::ALL
+        .iter()
+        .enumerate()
+        .map(|(i, mode)| {
+            let x = left + i as i32 * (button_w + gap);
+            (
+                *mode,
+                PxRect::new(x, monitor.y + margin_top, button_w as u32, button_h as u32),
+            )
+        })
+        .collect()
+}
+
+/// The bar behind the buttons: their union with some room around.
+pub fn toolbar_bounds(layout: &[(Mode, PxRect)], scale_percent: u32) -> Option<PxRect> {
+    let pad = 8 * scale_percent.max(100) as i32 / 100;
+    let all = layout.iter().map(|(_, r)| *r).reduce(|a, b| a.union(&b))?;
+    Some(PxRect::new(
+        all.x - pad,
+        all.y - pad,
+        all.w + 2 * pad as u32,
+        all.h + 2 * pad as u32,
+    ))
+}
+
+/// The mode whose button is at the point, if any.
+pub fn toolbar_hit(layout: &[(Mode, PxRect)], x: i32, y: i32) -> Option<Mode> {
+    layout
+        .iter()
+        .find(|(_, r)| r.contains(x, y))
+        .map(|(m, _)| *m)
 }
 
 /// What was picked.
@@ -334,6 +389,58 @@ mod tests {
         assert_eq!(s.view().rect, None, "and nothing stays drawn");
         // Then a real one still works.
         assert!(matches!(drag(&mut s, (50, 50), (90, 90)), Step::Done(_)));
+    }
+
+    #[test]
+    fn the_toolbar_sits_at_the_top_centre_with_a_button_per_mode_and_scales() {
+        let monitor = PxRect::new(-2560, -200, 2560, 1440);
+        let bar = toolbar_layout(monitor, 100);
+        assert_eq!(bar.len(), 4);
+        assert_eq!(
+            bar.iter().map(|(m, _)| *m).collect::<Vec<_>>(),
+            Mode::ALL.to_vec()
+        );
+        // Centred on the monitor, near its top, buttons in a row without overlap.
+        let all = bar
+            .iter()
+            .map(|(_, r)| *r)
+            .reduce(|a, b| a.union(&b))
+            .unwrap();
+        let centre = all.x + all.w as i32 / 2;
+        assert!((centre - (monitor.x + 1280)).abs() <= 1, "{centre}");
+        assert!(all.y > monitor.y && all.y < monitor.y + 100);
+        for pair in bar.windows(2) {
+            assert!(pair[0].1.right() <= pair[1].1.x);
+            assert_eq!(pair[0].1.y, pair[1].1.y);
+        }
+        // At 150 % the buttons are bigger.
+        let big = toolbar_layout(monitor, 150);
+        assert_eq!(big[0].1.w, bar[0].1.w * 3 / 2);
+        assert_eq!(big[0].1.h, bar[0].1.h * 3 / 2);
+        // The bar has room around the buttons.
+        let back = toolbar_bounds(&bar, 100).unwrap();
+        assert!(back.x < all.x && back.right() > all.right() && back.y < all.y);
+        assert!(toolbar_bounds(&[], 100).is_none());
+    }
+
+    #[test]
+    fn a_point_on_a_button_gives_its_mode_and_elsewhere_gives_nothing() {
+        let bar = toolbar_layout(PxRect::new(0, 0, 1920, 1080), 100);
+        for (mode, rect) in &bar {
+            assert_eq!(toolbar_hit(&bar, rect.x + 3, rect.y + 3), Some(*mode));
+        }
+        assert_eq!(toolbar_hit(&bar, 5, 5), None);
+        assert_eq!(toolbar_hit(&bar, 960, 600), None);
+    }
+
+    #[test]
+    fn every_mode_has_a_label_in_both_languages() {
+        use crate::i18n::{tr, Lang};
+        for mode in Mode::ALL {
+            assert!(!tr(Lang::En, mode.label()).is_empty());
+            assert_ne!(tr(Lang::En, mode.label()), "", "{mode:?}");
+        }
+        assert_eq!(tr(Lang::Es, Mode::Window.label()), "Ventana");
     }
 
     #[test]

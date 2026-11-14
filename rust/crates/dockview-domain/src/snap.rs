@@ -88,7 +88,15 @@ pub struct SnapJob {
     pub out: Option<PathBuf>,
     pub cursor: bool,
     pub copy: bool,
+    /// Seconds to wait before taking it (so a menu can be opened first).
+    pub delay_secs: u32,
 }
+
+/// The delays the tool offers, in seconds (none, 3, 5, 10); anything up to a
+/// minute is accepted on the command line.
+pub const DELAYS: [u32; 4] = [0, 3, 5, 10];
+/// The longest delay accepted.
+pub const MAX_DELAY_SECS: u32 = 60;
 
 /// The window to capture: the first whose title has `text`, never one of our
 /// own (`own_pid`), so that asking for "Dockview" does not take the tool itself.
