@@ -58,12 +58,19 @@ S-E  sección «Capturas» en Estudio, selector de retardo con cuenta atrás,
 | 3-5 | Exploraciones de rendimiento 7-5 (MJPEG por hardware) y 7-6 (pantallas en la GPU) | M |
 | 3-6 | Reposo del modo residente: pausar la captura cuando la ventana está oculta y ni la repetición ni la grabación la necesitan (hoy 54 MB y 1,9 % con la repetición apagada; 112 MB y 6 % con ella) | S |
 
+## Producto: aplicación completa para gamers streamers (`STREAMER_PLAN.md`)
+
+El autor quiere que Dockview sea **la aplicación completa para gamers streamers**. La comparación completa con lo que usa un streamer está en `STREAMER_PLAN.md`; lo esencial para ordenar esta hoja:
+- **La brecha mayor es emitir en directo** (RTMP a Twitch/YouTube/Kick). Hoy codificamos para archivo, no para red. Va después de **5-0** (puertos del renderizador y el codificador) para no duplicarlo en Linux.
+- Después: audio de streamer (mezclador, supresión de ruido), fuentes de texto/imagen, **fuente de navegador** (alertas y chat de terceros), cámara virtual, cuentas conectadas.
+- La Fase 4 de abajo (streaming, plugins, Canon) se reabsorbe en ese plan; el streaming deja de ser opcional.
+
 ## Fase 4 · Funciones opcionales (según tus ganas; ninguna bloquea 1.0)
 
 | # | Qué | Tamaño |
 |---|---|---|
 | 4-1 | Cámara Canon M50 II por HDMI (spike 2b) | M |
-| 4-2 | Streaming (salida RTMP) | L |
+| 4-2 | ~~Streaming (salida RTMP)~~ → ahora P0 del producto, ver `STREAMER_PLAN.md` (A-1 a A-5) | L |
 | 4-3 | Plugins: cargador y primer plugin (hoy solo hay estructura, `PLUGINS_PLAN.md`) | L |
 | 4-4 | Audio de salida con ganancia (aparcado) | S |
 

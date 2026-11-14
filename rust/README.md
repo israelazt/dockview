@@ -21,6 +21,7 @@ guards it):
 Read `ARCHITECTURE.md` before adding anything: it has the rules and the recipe
 for a new feature. The other documents are plans, each with its own status:
 `ROADMAP.md` (what is left, in order, with the decisions that block it),
+`STREAMER_PLAN.md` (what a gaming streamer needs, what we have and what is missing),
 `HARDENING_PLAN.md` (robustness and quality),
 `STUDIO_PLAN.md` (the side panel), `CAPTURE_PLAN.md`, `REPLAY_PLAN.md`,
 `UI_PLAN.md`, `PLUGINS_PLAN.md`; `PLAN.md` is the historical migration plan.
