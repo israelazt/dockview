@@ -203,7 +203,7 @@ Lo que se quiere: componer **varias fuentes a la vez** (por ejemplo el juego a p
 | E-3a ✅ | Modelo de escenas, guardado en `settings.json`, redirección de frames y varias capas encima (sin interfaz nueva) | Escena guardada activada al arrancar, con clics: pendiente de E-3b |
 | E-3b ✅ | Botón y popover de escenas: activar, crear, borrar y añadir una fuente en una esquina (módulo `ui/scenes.rs`) | Clics reales y capturas |
 | E-3c | Editor libre sobre la vista previa: mover, redimensionar y panel de capas (módulo `ui/scene_editor.rs`). **Diseño y tareas más abajo (E-3c-1..5)** | Clics reales y capturas |
-| E-3d | Pulido y pruebas con clics reales | Grabar una escena editada |
+| E-3d ✅ (parcial) | Pulido y pruebas con clics reales | Grabar una escena editada. Hecho con dos pantallas; falta repetirlo con la capturadora y lo de la lista de pendientes |
 | E-4 | Cambio de escena con tecla global y transición suave opcional | Pruebas |
 
 ### Riesgos
@@ -252,6 +252,12 @@ Con una escena activa, un botón **Editar** en la sección Escenas del panel (y 
 - **Verificado con la app real y el ratón** (vista previa, `SendInput`): el contorno con 8 asas y el nombre de la capa elegida salen; arrastrar el cuerpo la mueve; arrastrar la esquina inferior derecha la agranda dejando fija la superior izquierda; pulsar en la imagen elige la capa de más arriba bajo el puntero (la base si no hay otra).
 - **Un fallo que cazaron los tests:** el arrastre se aplicaba a la capa elegida antes y no a la agarrada en el mismo fotograma; ahora el arrastre recuerda su capa y no mueve nada hasta pasar 3 px (una pulsación quieta no empuja la capa hacia un imán).
 - **Límites:** la base se puede mover y redimensionar pero no cambiar de orden; las flechas del teclado no empujan la capa; no hay deshacer; el editor y la grabación comparten el compositor, así que lo editado se graba tal cual, pero **no se ha probado todavía con fuentes reales vivas** (la vista previa no las ejecuta): es la prueba de E-3d.
+
+### Resultados de E-3d (2026-11-14)
+
+- **Prueba con la app real, ratón y atajo globales** (`APPDATA` apuntando a una carpeta temporal para no tocar los ajustes del usuario, con una escena de dos pantallas): `--edit-layers`, un arrastre con el ratón de la capa de la pantalla 2 de (0,60; 0,55) a (0,15; 0,15), grabación con Ctrl+Alt+R durante 8 s. Los ajustes guardaron el rectángulo nuevo y un fotograma del MP4 (34 MB) muestra la pantalla 2 en esa esquina, sobre la pantalla 1 de base: **lo editado se graba tal cual**.
+- **Trampa para quien repita la prueba:** un `settings.json` escrito a mano con un JSON inválido se sustituye por los valores por defecto sin avisar (el log no dice nada). Conviene generarlo con `ConvertTo-Json`; las barras de `\.\DISPLAY1` se escapan mal a mano.
+- **Pendiente de E-3d:** repetir con la capturadora y un juego abierto (coste de GPU/CPU con el compositor y el editor); flechas del teclado para empujar una capa; deshacer; duración y curva del morph configurables; la verificación con clics del morph entre escenas (arriba).
 
 ### Resultados de E-3a
 
