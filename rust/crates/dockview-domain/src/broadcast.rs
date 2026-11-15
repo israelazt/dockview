@@ -6,8 +6,12 @@
 //! They are not `Send`: Media Foundation objects live on the thread that made
 //! them, so the stream thread creates its encoders itself.
 
+use std::fmt;
+use std::sync::Arc;
+
 use crate::encoded::EncodedFrame;
-use crate::frame::Frame;
+use crate::frame::{Frame, FrameSlot};
+use crate::pcm::AudioTap;
 
 /// Longest gap between two keyframes that Twitch, YouTube and Kick accept.
 pub const KEYFRAME_INTERVAL_SECS: u32 = 2;
@@ -153,6 +157,50 @@ impl StreamStats {
     }
 }
 
+/// What to stream and where to. The key is a secret: it never shows in `Debug`.
+#[derive(Clone, PartialEq, Eq)]
+pub struct StreamRequest {
+    /// `rtmp://` or `rtmps://` address of the platform's ingest server.
+    pub url: String,
+    /// The stream key.
+    pub key: String,
+    pub fps: u32,
+    pub video_kbps: u32,
+}
+
+impl fmt::Debug for StreamRequest {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("StreamRequest")
+            .field("url", &self.url)
+            .field("key", &"<hidden>")
+            .field("fps", &self.fps)
+            .field("video_kbps", &self.video_kbps)
+            .finish()
+    }
+}
+
+/// A stream while it runs. Dropping it ends the stream.
+pub trait StreamHandle {
+    fn stats(&self) -> StreamStats;
+    /// Why the stream is failing or reconnecting, when it is.
+    fn last_error(&self) -> Option<String>;
+    /// Where the game's sound is delivered to be streamed.
+    fn audio_tap(&self) -> Arc<AudioTap>;
+    /// Where the microphone's sound is delivered to be streamed.
+    fn mic_tap(&self) -> Arc<AudioTap>;
+}
+
+/// Everything going live needs from the machine.
+pub trait StreamMachine {
+    /// Starts streaming the pictures published to `slot`. It returns at once;
+    /// connecting happens in the background and shows in the stats.
+    fn start_stream(
+        &self,
+        slot: Arc<FrameSlot>,
+        request: StreamRequest,
+    ) -> Result<Box<dyn StreamHandle>, String>;
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -190,6 +238,19 @@ mod tests {
         assert_eq!(audio_specific_config(44_100, 1), Some(vec![0x12, 0x08]));
         assert_eq!(audio_specific_config(12_345, 2), None);
         assert_eq!(audio_specific_config(48_000, 0), None);
+    }
+
+    #[test]
+    fn the_stream_key_never_shows_in_debug() {
+        let r = StreamRequest {
+            url: "rtmp://live.example/app".into(),
+            key: "live_123_secret".into(),
+            fps: 60,
+            video_kbps: 6000,
+        };
+        let text = format!("{r:?}");
+        assert!(!text.contains("secret"));
+        assert!(text.contains("live.example"));
     }
 
     #[test]

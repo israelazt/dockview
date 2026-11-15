@@ -191,6 +191,8 @@ pub struct FrameSlot {
     slots: Mutex<Slots>,
     arrived: Condvar,
     tap: Mutex<Option<Arc<FrameTap>>>,
+    /// A second consumer, for going live while the replay keeps recording.
+    stream_tap: Mutex<Option<Arc<FrameTap>>>,
     /// While set, frames published here go to this slot instead.
     forward: Mutex<Option<Arc<FrameSlot>>>,
     published: AtomicU64,
@@ -227,6 +229,14 @@ impl FrameSlot {
         if let Some(tap) = tap {
             tap.offer(&frame);
         }
+        let stream_tap = self
+            .stream_tap
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
+        if let Some(tap) = stream_tap {
+            tap.offer(&frame);
+        }
         let mut slots = self.lock();
         if let Some(old) = slots.latest.replace(frame) {
             slots.spare = Some(old);
@@ -240,6 +250,12 @@ impl FrameSlot {
     /// Starts (or with `None`, stops) feeding every published frame to `tap`.
     pub fn set_tap(&self, tap: Option<Arc<FrameTap>>) {
         *self.tap.lock().unwrap_or_else(|e| e.into_inner()) = tap;
+    }
+
+    /// Starts (or with `None`, stops) feeding every published frame to the
+    /// stream's `tap`, besides the replay's.
+    pub fn set_stream_tap(&self, tap: Option<Arc<FrameTap>>) {
+        *self.stream_tap.lock().unwrap_or_else(|e| e.into_inner()) = tap;
     }
 
     /// Blocks until a frame is available or `timeout` elapses. Returns whether
@@ -358,6 +374,20 @@ mod tests {
         tap.recycle(got);
         slot.publish(frame(2));
         assert!(tap.take(Duration::from_millis(5)).unwrap().data.capacity() >= capacity);
+    }
+
+    #[test]
+    fn the_replay_and_the_stream_each_get_every_frame() {
+        let slot = FrameSlot::new();
+        let (replay, stream) = (Arc::new(FrameTap::new(4)), Arc::new(FrameTap::new(4)));
+        slot.set_tap(Some(Arc::clone(&replay)));
+        slot.set_stream_tap(Some(Arc::clone(&stream)));
+        slot.publish(frame(1));
+        assert_eq!(replay.pending(), 1);
+        assert_eq!(stream.pending(), 1);
+        slot.set_stream_tap(None);
+        slot.publish(frame(2));
+        assert_eq!((replay.pending(), stream.pending()), (2, 1));
     }
 
     #[test]

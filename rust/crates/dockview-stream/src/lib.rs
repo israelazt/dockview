@@ -2,6 +2,7 @@
 //! stream running, all over the [`transport::Transport`] port.
 
 pub mod annexb;
+pub mod audio_pump;
 pub mod flv;
 pub mod output;
 pub mod rtmp;
