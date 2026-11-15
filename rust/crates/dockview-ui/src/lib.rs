@@ -14,6 +14,7 @@ pub mod rec;
 pub mod scene_editor;
 pub mod snip;
 pub mod stats;
+mod stats_data;
 pub mod strip;
 pub mod studio;
 #[cfg(test)]

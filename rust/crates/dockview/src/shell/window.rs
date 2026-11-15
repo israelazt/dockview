@@ -60,6 +60,7 @@ impl Shell {
             || self.studio.wants_pointer()
             || self.navbar.wants_pointer()
             || self.hud.wants_pointer()
+            || self.stats_panel.wants_pointer()
             || self.rail.wants_pointer();
         let frame = self
             .cursor_phys
@@ -252,6 +253,7 @@ impl Shell {
                     &model.theme,
                     model.lang,
                     stats,
+                    &video_pointer,
                     stats_open,
                     dt,
                     animations,
@@ -350,6 +352,7 @@ impl Shell {
         for action in actions
             .into_iter()
             .chain(self.hud.take_actions())
+            .chain(self.stats_panel.take_actions())
             .chain(self.navbar.take_actions())
             .chain(self.rail.take_actions())
             .chain(self.studio.take_actions())

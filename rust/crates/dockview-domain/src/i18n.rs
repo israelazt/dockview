@@ -240,6 +240,8 @@ strings! {
     TipMicOff => "Turn the microphone off", "Apagar el micrófono";
     TipHudHide => "Hide the readouts (H)", "Ocultar los datos (H)";
     TipHudShow => "Show the readouts (H)", "Mostrar los datos (H)";
+    HealthOk => "PIPELINE HEALTHY", "PIPELINE SANO";
+    HealthAttention => "NEEDS ATTENTION", "REQUIERE ATENCIÓN";
     RailLog => "Open the log", "Abrir el registro";
     WindowMinimize => "Minimize", "Minimizar";
     WindowMaximize => "Maximize", "Maximizar";

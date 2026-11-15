@@ -1,7 +1,11 @@
 //! The statistics panel: a card in the top-left corner that shows what the
 //! app and the capture device are doing, with a plain-language diagnosis.
 
+use dockview_domain::design::{RADIUS_CARD, RADIUS_CONTROL};
 use dockview_domain::diagnostics::Finding;
+use dockview_domain::view::Action;
+
+use super::input::Pointer;
 
 use super::text::Weight;
 use super::{Rect, TextStyle, Ui};
@@ -9,12 +13,23 @@ use dockview_domain::i18n::{tr, Key, Lang};
 use dockview_domain::stats::Stats;
 use dockview_domain::theme::Theme;
 
+use super::stats_data::fit;
+pub(crate) use super::stats_data::tone_color;
+pub use super::stats_data::{finding_text, sections, wrap_text, Section};
+
 const WIDTH: f32 = 372.0;
 const MARGIN: f32 = 16.0;
 const PAD: f32 = 18.0;
-const ROW_HEIGHT: f32 = 22.0;
+/// Size of the round badge and of the close button.
+const CLOSE: f32 = 28.0;
+const HEADER_H: f32 = 28.0;
+const BLOCK_PAD: f32 = 14.0;
+const HEADLINE_H: f32 = 22.0;
+const ICON_PULSE: char = '\u{e038}';
+const ICON_CLOSE: char = '\u{e1b2}';
+const ROW_HEIGHT: f32 = 20.0;
 const SECTION_GAP: f32 = 12.0;
-const SECTION_HEIGHT: f32 = 22.0;
+const SECTION_HEIGHT: f32 = 20.0;
 const FINDING_LINE: f32 = 18.0;
 const FINDING_GAP: f32 = 6.0;
 /// Time the panel takes to appear or disappear, in seconds.
@@ -26,157 +41,52 @@ const TITLE: TextStyle = TextStyle::new(14.0, Weight::SemiBold);
 const SECTION: TextStyle = TextStyle::new(12.0, Weight::Medium);
 const ROW: TextStyle = TextStyle::new(13.0, Weight::Regular);
 const NOTE: TextStyle = TextStyle::new(12.5, Weight::Regular);
+const HEADLINE: TextStyle = TextStyle::new(11.5, Weight::SemiBold);
 
-/// One titled group of label/value rows.
-#[derive(Debug, Clone, PartialEq)]
-pub struct Section {
-    pub title: &'static str,
-    pub rows: Vec<(&'static str, String)>,
-}
-
-/// Builds the rows to show, already formatted for `lang`.
-pub fn sections(stats: &Stats, lang: Lang) -> Vec<Section> {
-    let measuring = || tr(lang, Key::Measuring).to_string();
-    let rate = |fps: f32| {
-        if stats.measured {
-            format!("{fps:.0} fps")
-        } else {
-            measuring()
-        }
-    };
-
-    let mut video = vec![(
-        tr(lang, Key::DeviceMode),
-        stats.device_mode.clone().unwrap_or_else(measuring),
-    )];
-    if let Some(mbps) = stats.mode_mbps {
-        video.push((tr(lang, Key::Bandwidth), format!("{mbps:.0} Mbps")));
-    }
-    video.push((tr(lang, Key::Received), rate(stats.received_fps)));
-    video.push((tr(lang, Key::Shown), rate(stats.shown_fps)));
-    video.push((
-        tr(lang, Key::Dropped),
-        if stats.measured {
-            format!("{:.1} /s", stats.dropped_per_sec)
-        } else {
-            measuring()
-        },
-    ));
-
-    let mut performance = vec![(
-        tr(lang, Key::AppLatency),
-        stats
-            .latency_ms
-            .map_or_else(measuring, |ms| format!("{ms:.1} ms")),
-    )];
-    performance.push((
-        tr(lang, Key::Cpu),
-        if stats.measured {
-            // Small values keep a decimal so an idle app does not read "0%".
-            let core = if stats.cpu_core_percent < 10.0 {
-                format!("{:.1}%", stats.cpu_core_percent)
-            } else {
-                format!("{:.0}%", stats.cpu_core_percent)
-            };
-            format!("{core} ({:.1}% total)", stats.cpu_total_percent)
-        } else {
-            measuring()
-        },
-    ));
-    performance.push((
-        tr(lang, Key::GpuPerFrame),
-        stats
-            .gpu_ms
-            .map_or_else(measuring, |ms| format!("{ms:.2} ms")),
-    ));
-    performance.push((tr(lang, Key::Memory), format!("{:.0} MB", stats.memory_mb)));
-
-    let mut extra = Vec::new();
-    if let Some(ms) = stats.audio_buffer_ms {
-        extra.push((tr(lang, Key::AudioBuffer), format!("{ms} ms")));
-    }
-    if let Some(hz) = stats.monitor_hz {
-        extra.push((tr(lang, Key::Monitor), format!("{hz:.0} Hz")));
-    }
-    extra.push((
-        tr(lang, Key::WindowSize),
-        format!("{}×{}", stats.window.0, stats.window.1),
-    ));
-
-    vec![
-        Section {
-            title: tr(lang, Key::Video),
-            rows: video,
-        },
-        Section {
-            title: tr(lang, Key::Performance),
-            rows: performance,
-        },
-        Section {
-            title: tr(lang, Key::Display),
-            rows: extra,
-        },
-    ]
-}
-
-/// The translated sentence for a finding.
-pub fn finding_text(finding: Finding, lang: Lang) -> &'static str {
-    tr(
-        lang,
-        match finding {
-            Finding::Healthy => Key::FindHealthy,
-            Finding::NoVideo => Key::FindNoVideo,
-            Finding::VideoLost => Key::FindVideoLost,
-            Finding::NeedsUsb3 => Key::FindNeedsUsb3,
-            Finding::CaptureBelowMode => Key::FindCaptureLow,
-            Finding::DroppingFrames => Key::FindDropping,
-            Finding::HighCpu => Key::FindHighCpu,
-            Finding::SlowGpu => Key::FindSlowGpu,
-            Finding::AudioLost => Key::FindAudioLost,
-            Finding::SwitchedToCompressed => Key::FindSwitched,
-        },
-    )
-}
-
-/// Greedy word wrap to `max_w` logical pixels.
-pub fn wrap_text(ui: &mut Ui, text: &str, style: TextStyle, max_w: f32) -> Vec<String> {
-    let mut lines = Vec::new();
-    let mut current = String::new();
-    for word in text.split_whitespace() {
-        let candidate = if current.is_empty() {
-            word.to_owned()
-        } else {
-            format!("{current} {word}")
-        };
-        if current.is_empty() || ui.measure(&candidate, style).0 <= max_w {
-            current = candidate;
-        } else {
-            lines.push(std::mem::take(&mut current));
-            current = word.to_owned();
-        }
-    }
-    if !current.is_empty() {
-        lines.push(current);
-    }
-    lines
-}
-
-/// The panel and its fade animation.
+/// The card and its fade animation.
 pub struct StatsPanel {
     /// 0.0 hidden – 1.0 shown (linear in time; easing applied when drawing).
     progress: f32,
+    actions: Vec<Action>,
+    hover_close: bool,
+    pressed_close: bool,
+}
+
+/// Where the close button is, for a card at `panel`.
+fn close_button(panel: Rect) -> Rect {
+    Rect::new(
+        panel.x + panel.w - PAD - CLOSE,
+        panel.y + PAD - 2.0,
+        CLOSE,
+        CLOSE,
+    )
 }
 
 impl StatsPanel {
     pub fn new() -> Self {
-        Self { progress: 0.0 }
+        Self {
+            progress: 0.0,
+            actions: Vec::new(),
+            hover_close: false,
+            pressed_close: false,
+        }
     }
 
     pub fn is_visible(&self) -> bool {
         self.progress > 0.0
     }
 
-    /// Advances the animation and draws the panel when it is (becoming) visible.
+    pub fn take_actions(&mut self) -> Vec<Action> {
+        std::mem::take(&mut self.actions)
+    }
+
+    /// Whether the pointer is over the close button.
+    pub fn wants_pointer(&self) -> bool {
+        self.hover_close && self.progress >= 1.0
+    }
+
+    /// Advances the animation and draws the card when it is (becoming) visible.
+    /// `pointer` is in the same coordinates as the drawing.
     #[allow(clippy::too_many_arguments)]
     pub fn frame(
         &mut self,
@@ -184,6 +94,7 @@ impl StatsPanel {
         theme: &Theme,
         lang: Lang,
         stats: &Stats,
+        pointer: &Pointer,
         open: bool,
         dt: f32,
         animations: bool,
@@ -200,15 +111,33 @@ impl StatsPanel {
             target
         };
         if self.progress <= 0.0 {
+            self.hover_close = false;
+            self.pressed_close = false;
             return;
         }
 
         let eased = 1.0 - (1.0 - self.progress).powi(3);
         ui.set_opacity(eased);
-        ui.set_offset(-(1.0 - eased) * SLIDE, 0.0);
-        draw(ui, theme, lang, stats);
+        ui.set_offset((1.0 - eased) * SLIDE, 0.0);
+        let hovered = self.hover_close;
+        let panel = draw(ui, theme, lang, stats, hovered);
         ui.set_offset(0.0, 0.0);
         ui.set_opacity(1.0);
+
+        // Only a card that has settled takes clicks.
+        let close = close_button(panel);
+        self.hover_close = eased >= 1.0 && pointer.pos.is_some_and(|(x, y)| close.contains(x, y));
+        if open && eased >= 1.0 {
+            if pointer.just_pressed {
+                self.pressed_close = self.hover_close;
+            }
+            if pointer.just_released {
+                if self.pressed_close && self.hover_close {
+                    self.actions.push(Action::ToggleStats);
+                }
+                self.pressed_close = false;
+            }
+        }
     }
 }
 
@@ -218,45 +147,136 @@ impl Default for StatsPanel {
     }
 }
 
-/// A line of the finding list, with its tone.
-struct FindingBlock {
-    finding: Finding,
-    lines: Vec<String>,
-}
-
-fn draw(ui: &mut Ui, theme: &Theme, lang: Lang, stats: &Stats) -> Rect {
-    let inner_w = WIDTH - PAD * 2.0;
-    let sections = sections(stats, lang);
-    let blocks: Vec<FindingBlock> = stats
+/// The worst tone among the findings, and the headline that goes with it.
+fn headline(
+    stats: &Stats,
+    theme: &Theme,
+    lang: Lang,
+) -> (&'static str, dockview_domain::theme::Color) {
+    let worst = stats
         .findings
         .iter()
-        .map(|&finding| FindingBlock {
-            finding,
-            lines: wrap_text(ui, finding_text(finding, lang), NOTE, inner_w - 16.0),
+        .map(|&f| tone_color(f, theme))
+        .find(|c| *c == theme.error)
+        .or_else(|| {
+            stats
+                .findings
+                .iter()
+                .map(|&f| tone_color(f, theme))
+                .find(|c| *c == theme.warn)
+        });
+    match worst {
+        None => (tr(lang, Key::HealthOk), theme.brand),
+        Some(color) => (tr(lang, Key::HealthAttention), color),
+    }
+}
+
+/// Draws the card at the top right and returns its rectangle.
+fn draw(ui: &mut Ui, theme: &Theme, lang: Lang, stats: &Stats, close_hover: bool) -> Rect {
+    let (screen_w, _) = ui.logical_size();
+    let inner_w = WIDTH - PAD * 2.0;
+    let sections = sections(stats, lang);
+    let finding_lines: Vec<(Finding, Vec<String>)> = stats
+        .findings
+        .iter()
+        .map(|&finding| {
+            (
+                finding,
+                wrap_text(
+                    ui,
+                    finding_text(finding, lang),
+                    NOTE,
+                    inner_w - BLOCK_PAD * 2.0 - 16.0,
+                ),
+            )
         })
         .collect();
 
-    // Height: title, then each section, then the diagnosis.
-    let mut height = PAD + 22.0;
+    // The diagnosis block: a headline and what was found.
+    let mut block_h = BLOCK_PAD * 2.0 + HEADLINE_H;
+    for (_, lines) in &finding_lines {
+        block_h += FINDING_LINE * lines.len() as f32 + FINDING_GAP;
+    }
+    block_h -= if finding_lines.is_empty() {
+        0.0
+    } else {
+        FINDING_GAP
+    };
+
+    let mut height = PAD + HEADER_H + SECTION_GAP + block_h;
     for section in &sections {
         height += SECTION_GAP + SECTION_HEIGHT + ROW_HEIGHT * section.rows.len() as f32;
     }
-    height += SECTION_GAP + SECTION_HEIGHT;
-    for block in &blocks {
-        height += FINDING_LINE * block.lines.len() as f32 + FINDING_GAP;
-    }
-    height += PAD - FINDING_GAP;
+    height += PAD;
 
-    let panel = Rect::new(MARGIN, MARGIN, WIDTH, height);
-    ui.shadow(panel, 18.0, 24.0, theme.shadow);
-    ui.panel(panel, 18.0, theme.surface, theme.border, 1.0);
-
+    let panel = Rect::new(
+        (screen_w - MARGIN - WIDTH).max(MARGIN),
+        MARGIN,
+        WIDTH,
+        height,
+    );
+    ui.shadow(panel, RADIUS_CARD, 24.0, theme.shadow);
+    ui.panel(panel, RADIUS_CARD, theme.surface, theme.border, 1.0);
     let (x, right) = (panel.x + PAD, panel.x + WIDTH - PAD);
     let mut y = panel.y + PAD;
 
-    // The title (the panel is opened from the health button of the readouts).
-    ui.text(tr(lang, Key::Statistics), x, y - 1.0, TITLE, theme.text);
-    y += 22.0;
+    // The header: the pulse in a circle, the title and the close button.
+    let badge = Rect::new(x, y - 2.0, CLOSE, CLOSE);
+    ui.panel(badge, CLOSE / 2.0, theme.chrome, theme.border, 1.0);
+    let (bx, by) = badge.center();
+    ui.icon(ICON_PULSE, bx, by, 15.0, theme.brand);
+    ui.text(
+        tr(lang, Key::HudHealth),
+        x + CLOSE + 10.0,
+        y + 1.0,
+        TITLE,
+        theme.text,
+    );
+    let close = close_button(panel);
+    if close_hover {
+        ui.rect(close, CLOSE / 2.0, theme.hover);
+    }
+    let (cx, cy) = close.center();
+    ui.icon(
+        ICON_CLOSE,
+        cx,
+        cy,
+        15.0,
+        if close_hover {
+            theme.text
+        } else {
+            theme.text_dim
+        },
+    );
+    y += HEADER_H + SECTION_GAP;
+
+    // The diagnosis, first: it is what the user opened the card to read.
+    let (title, tone) = headline(stats, theme, lang);
+    let block = Rect::new(x, y, inner_w, block_h);
+    ui.panel(block, RADIUS_CONTROL, theme.chrome, theme.border, 1.0);
+    let mut by = block.y + BLOCK_PAD;
+    ui.rect(
+        Rect::new(block.x + BLOCK_PAD, by + 4.0, 7.0, 7.0),
+        3.5,
+        tone,
+    );
+    ui.text(title, block.x + BLOCK_PAD + 14.0, by, HEADLINE, tone);
+    by += HEADLINE_H;
+    for (finding, lines) in &finding_lines {
+        let dot = tone_color(*finding, theme);
+        ui.rect(Rect::new(block.x + BLOCK_PAD, by + 5.0, 6.0, 6.0), 3.0, dot);
+        for (i, line) in lines.iter().enumerate() {
+            ui.text(
+                line,
+                block.x + BLOCK_PAD + 14.0,
+                by + i as f32 * FINDING_LINE,
+                NOTE,
+                theme.text,
+            );
+        }
+        by += FINDING_LINE * lines.len() as f32 + FINDING_GAP;
+    }
+    y += block_h;
 
     for section in &sections {
         y += SECTION_GAP;
@@ -270,59 +290,7 @@ fn draw(ui: &mut Ui, theme: &Theme, lang: Lang, stats: &Stats) -> Rect {
             y += ROW_HEIGHT;
         }
     }
-
-    y += SECTION_GAP;
-    ui.text(
-        tr(lang, Key::Diagnosis),
-        x,
-        y + 3.0,
-        SECTION,
-        theme.text_dim,
-    );
-    y += SECTION_HEIGHT;
-    for block in &blocks {
-        let dot = tone_color(block.finding, theme);
-        ui.rect(Rect::new(x, y + 5.0, 8.0, 8.0), 4.0, dot);
-        for (i, line) in block.lines.iter().enumerate() {
-            ui.text(
-                line,
-                x + 16.0,
-                y + i as f32 * FINDING_LINE,
-                NOTE,
-                theme.text,
-            );
-        }
-        y += FINDING_LINE * block.lines.len() as f32 + FINDING_GAP;
-    }
     panel
-}
-
-/// Truncates a value that would overflow its column.
-fn fit(ui: &mut Ui, text: &str, style: TextStyle, max_w: f32) -> String {
-    if ui.measure(text, style).0 <= max_w {
-        return text.to_owned();
-    }
-    let chars: Vec<char> = text.chars().collect();
-    for keep in (1..chars.len()).rev() {
-        let candidate = chars[..keep].iter().collect::<String>() + "…";
-        if ui.measure(&candidate, style).0 <= max_w {
-            return candidate;
-        }
-    }
-    "…".to_owned()
-}
-
-pub(crate) fn tone_color(finding: Finding, theme: &Theme) -> dockview_domain::theme::Color {
-    match finding {
-        Finding::Healthy => theme.live,
-        Finding::NoVideo | Finding::VideoLost | Finding::AudioLost => theme.error,
-        Finding::NeedsUsb3
-        | Finding::CaptureBelowMode
-        | Finding::DroppingFrames
-        | Finding::HighCpu
-        | Finding::SlowGpu
-        | Finding::SwitchedToCompressed => theme.warn,
-    }
 }
 
 #[cfg(test)]
@@ -488,7 +456,7 @@ mod tests {
             findings,
             ..stats()
         };
-        draw(&mut ui, &Theme::dark(), lang, &s).h
+        draw(&mut ui, &Theme::dark(), lang, &s, false).h
     }
 
     #[test]
@@ -528,17 +496,62 @@ mod tests {
         let mut panel = StatsPanel::new();
         let theme = Theme::dark();
         ui.begin((1280, 720), 1.0);
-        panel.frame(&mut ui, &theme, Lang::En, &stats(), true, 0.016, true);
+        panel.frame(
+            &mut ui,
+            &theme,
+            Lang::En,
+            &stats(),
+            &Pointer::default(),
+            true,
+            0.016,
+            true,
+        );
         assert!(panel.is_visible() && panel.progress < 1.0);
         for _ in 0..30 {
-            panel.frame(&mut ui, &theme, Lang::En, &stats(), true, 0.016, true);
+            panel.frame(
+                &mut ui,
+                &theme,
+                Lang::En,
+                &stats(),
+                &Pointer::default(),
+                true,
+                0.016,
+                true,
+            );
         }
         assert_eq!(panel.progress, 1.0);
-        panel.frame(&mut ui, &theme, Lang::En, &stats(), false, 0.016, true);
+        panel.frame(
+            &mut ui,
+            &theme,
+            Lang::En,
+            &stats(),
+            &Pointer::default(),
+            false,
+            0.016,
+            true,
+        );
         assert!(panel.is_visible(), "fading out");
-        panel.frame(&mut ui, &theme, Lang::En, &stats(), true, 0.016, false);
+        panel.frame(
+            &mut ui,
+            &theme,
+            Lang::En,
+            &stats(),
+            &Pointer::default(),
+            true,
+            0.016,
+            false,
+        );
         assert_eq!(panel.progress, 1.0, "snaps when animations are off");
-        panel.frame(&mut ui, &theme, Lang::En, &stats(), false, 0.016, false);
+        panel.frame(
+            &mut ui,
+            &theme,
+            Lang::En,
+            &stats(),
+            &Pointer::default(),
+            false,
+            0.016,
+            false,
+        );
         assert!(!panel.is_visible());
     }
 
@@ -552,10 +565,105 @@ mod tests {
             &Theme::dark(),
             Lang::En,
             &stats(),
+            &Pointer::default(),
             false,
             0.016,
             true,
         );
         assert!(ui.vertices().is_empty());
+    }
+
+    fn settled_panel() -> (StatsPanel, Ui) {
+        let mut ui = Ui::new();
+        let mut panel = StatsPanel::new();
+        ui.begin((1280, 720), 1.0);
+        panel.frame(
+            &mut ui,
+            &Theme::dark(),
+            Lang::En,
+            &stats(),
+            &Pointer::default(),
+            true,
+            0.0,
+            false,
+        );
+        (panel, ui)
+    }
+
+    fn close_centre() -> (f32, f32) {
+        let mut ui = Ui::new();
+        ui.begin((1280, 720), 1.0);
+        let panel = draw(&mut ui, &Theme::dark(), Lang::En, &stats(), false);
+        close_button(panel).center()
+    }
+
+    #[test]
+    fn the_card_sits_at_the_top_right() {
+        let mut ui = Ui::new();
+        ui.begin((1280, 720), 1.0);
+        let panel = draw(&mut ui, &Theme::dark(), Lang::En, &stats(), false);
+        assert_eq!(panel.x + panel.w, 1280.0 - MARGIN);
+        assert_eq!(panel.y, MARGIN);
+        // It follows a narrower area (the video's, beside the Studio panel).
+        ui.begin((1280, 720), 1.0);
+        ui.limit_width(Some(900.0));
+        let narrow = draw(&mut ui, &Theme::dark(), Lang::En, &stats(), false);
+        assert_eq!(narrow.x + narrow.w, 900.0 - MARGIN);
+    }
+
+    #[test]
+    fn the_headline_follows_the_worst_finding() {
+        let t = Theme::dark();
+        let healthy = Stats {
+            findings: vec![Finding::Healthy],
+            ..stats()
+        };
+        assert_eq!(
+            headline(&healthy, &t, Lang::En),
+            ("PIPELINE HEALTHY", t.brand)
+        );
+        let warn = Stats {
+            findings: vec![Finding::HighCpu],
+            ..stats()
+        };
+        assert_eq!(headline(&warn, &t, Lang::En), ("NEEDS ATTENTION", t.warn));
+        let bad = Stats {
+            findings: vec![Finding::HighCpu, Finding::NoVideo],
+            ..stats()
+        };
+        assert_eq!(headline(&bad, &t, Lang::Es), ("REQUIERE ATENCIÓN", t.error));
+    }
+
+    #[test]
+    fn the_close_button_asks_to_toggle_the_statistics() {
+        let (mut panel, mut ui) = settled_panel();
+        let at = close_centre();
+        let mut p = Pointer {
+            pos: Some(at),
+            ..Pointer::default()
+        };
+        let frame = |panel: &mut StatsPanel, ui: &mut Ui, p: &Pointer| {
+            ui.begin((1280, 720), 1.0);
+            panel.frame(ui, &Theme::dark(), Lang::En, &stats(), p, true, 0.0, false);
+        };
+        frame(&mut panel, &mut ui, &p);
+        assert!(panel.wants_pointer());
+        p.press();
+        frame(&mut panel, &mut ui, &p);
+        p.end_frame();
+        p.release();
+        frame(&mut panel, &mut ui, &p);
+        assert_eq!(panel.take_actions(), [Action::ToggleStats]);
+        // A click elsewhere on the card does nothing.
+        let mut p = Pointer {
+            pos: Some((900.0, 300.0)),
+            ..Pointer::default()
+        };
+        p.press();
+        frame(&mut panel, &mut ui, &p);
+        p.end_frame();
+        p.release();
+        frame(&mut panel, &mut ui, &p);
+        assert!(panel.take_actions().is_empty());
     }
 }
