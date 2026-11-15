@@ -159,6 +159,16 @@ Hecho y subido, **sin abrir la app** (el autor está jugando; todo se verificó 
 
 **Tareas:** T-2.1 dominio (zona `Nav`, pestañas, `NavView`, textos); T-2.2 dibujo y puntero de la fila (`dockview-ui`, con pruebas de reparto en ventanas estrechas); T-2.3 `Core` y la plataforma (qué codificador hay, pérdidas, red, acciones de pestaña); T-2.4 cableado en el shell (inset, puntero, estado de la pestaña). Pausa de revisión con la app real al cerrar.
 
+## 5.3. Parte 3 — Barra lateral (diseño y estado)
+
+**Esqueleto:** una columna de iconos de línea a la izquierda, bajo la fila de navegación (la fila ocupa todo el ancho): arriba cámara, mezclador, pulso y capas; abajo terminal y ayuda. El icono activo lleva una caja con borde verde y una marca vertical verde en el borde izquierdo.
+
+**Adaptación (revisable):** ancho 52 px. Los cuatro iconos de arriba son **atajos a secciones del panel de Estudio**: cámara → *Fuentes*, mezclador → *Audio* (volumen, sincronía y micrófono; el mezclador de verdad ⏳), pulso → *Estadísticas*, capas → *Escenas*. Pulsarlos abre el panel (pestaña Estudio) en esa sección. El activo es el primero de ellos cuya sección está desplegada (ninguno con el panel cerrado). **Terminal** abre el archivo de registro en el explorador. **Ayuda** no se dibuja (no hay contenido que mostrar; igual que el botón de cuenta). Al dejar el puntero 0,45 s sobre un icono aparece su nombre a la derecha.
+
+**Estructura:** el modelo de la ventana gana la zona `Rail` y el contenido empieza a su derecha (`Ui::set_inset_left`); con pantalla completa la barra desaparece junto con el resto del marco.
+
+**Estado (2026-11-14):** T-3.1 a T-3.3 hechas y subidas, sin abrir la app. Falta la comprobación visual con la app real.
+
 ## 6. Decisiones
 
 **Tomadas (2026-11-14):**

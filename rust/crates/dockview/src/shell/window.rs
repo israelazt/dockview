@@ -26,7 +26,7 @@ impl Shell {
                 let command = pos.and_then(|p| self.chrome_input.press(&chrome, p, now_ms));
                 // The navigation row is the interface's own, like the content.
                 let on_frame = pos.is_some_and(|(x, y)| {
-                    !matches!(chrome.zone_at(x, y), Zone::Content | Zone::Nav)
+                    !matches!(chrome.zone_at(x, y), Zone::Content | Zone::Nav | Zone::Rail)
                 });
                 if on_frame {
                     self.chrome_held = true;
@@ -58,7 +58,8 @@ impl Shell {
         };
         let pointer = self.controls.wants_pointer()
             || self.studio.wants_pointer()
-            || self.navbar.wants_pointer();
+            || self.navbar.wants_pointer()
+            || self.rail.wants_pointer();
         let frame = self
             .cursor_phys
             .map(|(x, y)| self.chrome().zone_at(x, y).cursor())
@@ -133,6 +134,7 @@ impl Shell {
         };
         let pointer = self.content_pointer(&chrome);
         let nav_pointer = self.nav_pointer(&chrome);
+        let rail_pointer = self.rail_pointer(&chrome);
         let scale = self.ui_scale;
         // The Studio panel opens (and in full screen, goes at once) and takes
         // its room; the pointer belongs to the video or to the panel.
@@ -145,8 +147,9 @@ impl Shell {
         // Below the title bar and the navigation row: the content has the rest
         // of the window.
         let top_px = bar_px + chrome.nav_height();
+        let rail_px = chrome.rail_width();
         let content_size = (
-            window_size.0,
+            (window_size.0 as f32 - rail_px).max(1.0) as u32,
             (window_size.1 as f32 - top_px).max(1.0) as u32,
         );
         let place = studio::place(content_size, scale, self.studio.openness());
@@ -166,6 +169,7 @@ impl Shell {
         // The video fits the room the panel leaves (all of it when closed).
         // With the bar, the video always has an area of its own, under it.
         let area = (top_px > 0.0 || place.panel.is_some()).then_some(PhysicalRect {
+            x: place.video.x + rail_px,
             y: place.video.y + top_px,
             ..place.video
         });
@@ -187,10 +191,23 @@ impl Shell {
             self.last_video_shown = now;
         }
 
+        // The icon of the section the panel is showing, if it shows one.
+        let rail_active = model.studio_visible().then(|| {
+            [
+                StudioSection::Sources,
+                StudioSection::Audio,
+                StudioSection::Stats,
+                StudioSection::Scenes,
+            ]
+            .into_iter()
+            .find(|s| self.studio.shows(*s))
+        });
+        let rail_active = rail_active.flatten();
         let (ui, controls) = (&mut self.ui, &mut self.controls);
         let (scene_editor, edit_mods) = (&mut self.scene_editor, &self.edit_mods);
         let studio = &mut self.studio;
         let navbar = &mut self.navbar;
+        let rail = &mut self.rail;
         let stats_panel = &mut self.stats_panel;
         let (stats, stats_open) = (self.core.stats(), self.core.stats_open());
         let animations = self.animations;
@@ -199,6 +216,7 @@ impl Shell {
             {
                 ui.begin(presenter.size(), scale);
                 ui.set_inset_top(top_px / scale.max(0.1));
+                ui.set_inset_left(rail_px / scale.max(0.1));
                 // What floats over the video anchors to the video's room.
                 // The layer editor sits on the picture, under the controls; what
                 // the controls (the pill) use is not the editor's.
@@ -249,8 +267,11 @@ impl Shell {
                 );
                 // The tabs and the status, under the title bar.
                 if bar_px > 0.0 {
+                    ui.set_inset_left(0.0);
                     ui.set_inset_top(bar_px / scale.max(0.1));
                     navbar.frame(ui, &model, &nav_pointer);
+                    ui.set_inset_top(top_px / scale.max(0.1));
+                    rail.frame(ui, &model, &rail_pointer, rail_active, dt);
                 }
                 // The window's own title bar, over everything.
                 ui.set_inset_top(0.0);
@@ -288,6 +309,7 @@ impl Shell {
             .controls
             .take_studio_request()
             .or_else(|| self.navbar.take_studio_request())
+            .or_else(|| self.rail.take_studio_request())
         {
             self.studio.open_section(section);
         }
@@ -295,10 +317,16 @@ impl Shell {
         for action in actions
             .into_iter()
             .chain(self.navbar.take_actions())
+            .chain(self.rail.take_actions())
             .chain(self.studio.take_actions())
             .chain(editor)
         {
             self.core.apply(action);
+        }
+        if self.rail.take_log_request() {
+            if let Some(path) = crate::os::default_log_path() {
+                crate::os::reveal_file(&path);
+            }
         }
         self.apply_host_requests();
         self.update_cursor();
