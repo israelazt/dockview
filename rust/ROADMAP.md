@@ -104,9 +104,12 @@ Hoy: solo Windows; el binario se niega a compilar en otro sistema. Hecho: la reg
           `windows::` ni `dockview_platform::`
   5-0d ✅ El binario completo compila en Linux (solo dice que aún no tiene
           adaptadores) y sus tests pasan allí; el CI de Linux lo comprueba
-  5-0e    Revisión del codificador: la grabación y la repetición ya están tras
-          `ReplayMachine`; definir la forma del puerto `StreamOutput` (A-1) para
-          compartir el codificador
+  5-0e ✅ Revisión del codificador: la grabación y la repetición ya estaban tras
+          `ReplayMachine`, y el codificador ya entrega `EncodedFrame` (tipo neutro del
+          dominio). Diseño de la emisión fijado en `STREAMER_PLAN.md`: puertos
+          `VideoEncoder`/`AudioEncoder`, servicio portátil `StreamOutput` (FLV + RTMP +
+          reconexión) sobre un puerto `Transport` (TCP/TLS, igual en Windows y Linux)
+          en un crate nuevo `dockview-stream`
 ```
 (El codificador y la grabación ya estaban detrás de `ReplayMachine`; lo que faltaba era el renderizador, que el shell usaba directamente.)
 

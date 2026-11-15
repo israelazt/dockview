@@ -113,6 +113,26 @@ La brecha más grande es **emitir**. Todo lo demás (mezclador, superposiciones,
 - **Plugins** (G-1): conviene hacerlos **antes** de C-3/C-4 para que chat y alertas puedan ser plugins en vez de código propio.
 - **Linux** (G-2): el renderizador y el codificador siguen atados a Direct3D 11 y Media Foundation; poner A-1 sobre esos tipos concretos duplicaría el trabajo. Por eso 5-0 (puertos del renderizador y el codificador) va **antes** de A-1.
 
+## Diseño de la emisión (A-1), fijado en 5-0e
+
+El codificador de vídeo (`platform::encode::H264Encoder`, Media Foundation) ya entrega un tipo neutro del dominio, **`EncodedFrame`** (H.264 en Annex B con marca de tiempo, duración y si es fotograma clave). Hoy lo consumen el búfer de la repetición y el escritor de MP4; **emitir es un consumidor más**. De ahí sale esta forma:
+
+```
+ compositor ──► slot de salida ──► VideoEncoder (plataforma) ──► EncodedFrame ─┬─► búfer de repetición
+                                                                               ├─► escritor MP4 (grabación)
+ audio (mezclador) ──► AudioEncoder AAC (plataforma) ──► EncodedAudio ────────┤
+                                                                               └─► StreamOutput ──► Transport (TCP/TLS)
+```
+
+- **Puerto `VideoEncoder`** (dominio): configuración (resolución, FPS, bitrate, **CBR**, intervalo de fotograma clave de 2 s, baja latencia) y `encode(frame) -> EncodedFrame`, más `set_bitrate()` para el bitrate adaptativo. Windows: Media Foundation (NVENC/QuickSync/AMF/software); Linux: VAAPI/NVENC/x264.
+- **Puerto `AudioEncoder`** (dominio): PCM → AAC (o Opus para WHIP/SRT). Hoy el AAC lo hace el escritor de MP4 por dentro; para emitir hay que sacarlo como un codificador aparte (el transformador AAC de Media Foundation lo permite).
+- **`StreamOutput`** (servicio portátil, sin sistema operativo): empaqueta vídeo y audio codificados en **FLV**, habla **RTMP** (apretón de manos, fragmentos, comandos `connect`/`publish`), cuenta bitrate real y fotogramas perdidos y **reconecta** con retroceso. Es lógica pura sobre un `Transport`.
+- **Puerto `Transport`**: abrir, enviar y cerrar una conexión (RTMP sobre TCP, RTMPS sobre TLS); la implementación real usa `std::net` y `rustls`, **igual en Windows y en Linux**. Se pone en un crate nuevo, `dockview-stream`, que depende solo del dominio: así la parte de red se escribe una vez.
+- **Compartir el codificador**: grabar y emitir leen el mismo `EncodedFrame` cuando tienen la misma calidad; si piden calidades distintas, dos codificadores (A-4, medido).
+- **Salud**: el servicio publica `bitrate`, `dropped`, `rtt` en un `StreamStats` que la interfaz muestra y que el bitrate adaptativo (A-3) usa.
+
+**Riesgos de este diseño:** el AAC hay que desacoplarlo del escritor de MP4 (cambio en el grabador); el CBR estricto y el tamaño de GOP dependen del codificador de hardware de cada GPU (se medirá en la 1660 Ti y en otro equipo); y RTMP de Twitch pide ciertos detalles (Enhanced RTMP para HEVC/AV1) que se dejan para después de H.264.
+
 ## Riesgos
 
 1. **Mantener las plataformas de directo** (Twitch, YouTube y Kick cambian API y condiciones): C-2 (navegador) y D-2 (cuentas) dependen de terceros.
