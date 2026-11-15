@@ -364,6 +364,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "dockview-stream"
+version = "0.1.0"
+dependencies = [
+ "dockview-domain",
+]
+
+[[package]]
 name = "dockview-ui"
 version = "0.1.0"
 dependencies = [

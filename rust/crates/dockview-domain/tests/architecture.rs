@@ -43,8 +43,9 @@ fn dependencies_of(krate: &str) -> Vec<String> {
 fn each_crate_depends_only_on_what_the_layers_allow() {
     // crate -> every dependency it may have. Dependencies go only downward:
     // domain <- platform, ui, app <- the binary.
-    let allowed: [(&str, &[&str]); 5] = [
+    let allowed: [(&str, &[&str]); 6] = [
         ("dockview-domain", &["serde", "serde_json"]),
+        ("dockview-stream", &["dockview-domain"]),
         (
             "dockview-platform",
             &["dockview-domain", "serde", "serde_json", "windows"],

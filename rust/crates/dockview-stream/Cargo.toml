@@ -1,0 +1,12 @@
+[package]
+name = "dockview-stream"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# Going live: the FLV packaging, the RTMP protocol and the service that keeps a
+# stream running, over a `Transport` port. No Windows and no threads of its own
+# beyond what the transport does, so it is written once for every system and
+# tested against a fake server. See rust/STREAMER_PLAN.md.
+[dependencies]
+dockview-domain = { path = "../dockview-domain" }
