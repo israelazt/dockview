@@ -139,6 +139,24 @@ Hecho y subido, **sin abrir la app** (el autor está jugando; todo se verificó 
 - **Captura de pantalla de la propia ventana** (`exclude_from_capture`) y **superposiciones** no deben verse afectadas; se comprueba.
 - **Latencia:** la barra son pocas formas; se mide igualmente (E-1 del modo Estudio).
 
+## 5.2. Parte 2 — Fila de navegación (diseño)
+
+**Qué muestra el esqueleto:** bajo la barra de título, una fila de unos 56 px. A la izquierda, un contenedor en píldora con cuatro pestañas (**Visor Directo · Modo Estudio · Grabaciones · Ajustes**); la activa va rellena de verde con texto oscuro. A la derecha, otro contenedor con el estado: punto verde + `NVENC READY`, separador, `0 DROPS`, separador, punto gris + `Offline`; y un botón redondo de cuenta.
+
+**Cómo se adapta a lo que hay (decidido por mí, revisable):**
+- **Pestañas.** Hoy hay dos modos (Ver, que es el panel cerrado, y Estudio, que es el panel abierto) y las secciones *Grabación* y *Ajustes* viven dentro del panel. Hasta que existan las pantallas propias (partes 10 y 11): **Visor Directo** cierra el panel; **Modo Estudio** lo abre; **Grabaciones** lo abre en su sección de grabación; **Ajustes** lo abre en su sección de ajustes. La pestaña activa es Visor si el panel está cerrado y, si está abierto, la última de las otras tres que se eligió (Estudio si se abrió con `Tab` o con el botón de la píldora). Las partes 10 y 11 cambian solo a dónde lleva cada pestaña.
+- **Estado, con datos reales:**
+  - *Codificador:* `NVENC` / `QSV` / `AMF` / `H.264` según el codificador por hardware que Windows da en este PC; `LISTO` si está disponible, `ACTIVO` mientras la repetición o la grabación lo usan, `SIN CODIFICADOR` (en rojo) si no hay. El nombre se averigua **en segundo plano** al arrancar para no retrasar la ventana.
+  - *Pérdidas (drops):* imágenes perdidas en esta sesión (las que el visor no llegó a mostrar y las que la emisión tiró).
+  - *Red:* `Sin emitir` / `Conectando` / `EN DIRECTO` / `Reconectando` según la emisión.
+- **Botón de cuenta:** no hay cuentas; **no se dibuja** hasta que haya algo útil detrás (Acerca de, en una parte posterior).
+- **Ventana estrecha:** si no caben las dos mitades, primero desaparecen los datos del estado (de derecha a izquierda) y las pestañas se mantienen.
+- **Pantalla completa:** la fila desaparece junto con la barra de título.
+
+**Estructura:** el contenido ahora empieza bajo *barra + fila*. El modelo de la ventana (`window_chrome`) gana una zona `Nav` (el puntero ni llega al contenido ni a la barra), la interfaz dibuja la fila con el mismo `inset` de la parte 1, y el estado sale de un `NavView` en el modelo de vista.
+
+**Tareas:** T-2.1 dominio (zona `Nav`, pestañas, `NavView`, textos); T-2.2 dibujo y puntero de la fila (`dockview-ui`, con pruebas de reparto en ventanas estrechas); T-2.3 `Core` y la plataforma (qué codificador hay, pérdidas, red, acciones de pestaña); T-2.4 cableado en el shell (inset, puntero, estado de la pestaña). Pausa de revisión con la app real al cerrar.
+
 ## 6. Decisiones
 
 **Tomadas (2026-11-14):**
