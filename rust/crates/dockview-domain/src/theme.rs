@@ -105,6 +105,10 @@ pub struct Theme {
     /// The small rounded label next to the name (the version).
     pub chip: Color,
     pub chip_line: Color,
+    /// The brand's colour: the tab that is on, the logo.
+    pub brand: Color,
+    /// Text over the brand colour.
+    pub on_brand: Color,
 }
 
 impl Theme {
@@ -136,6 +140,8 @@ impl Theme {
             chrome_line: Color::hex(0x131417, 1.0),
             chip: Color::hex(0x0F1013, 1.0),
             chip_line: Color::hex(0x1A1B1E, 1.0),
+            brand: Color::hex(0x00E0A4, 1.0),
+            on_brand: Color::hex(0x04150F, 1.0),
         }
     }
 
@@ -160,6 +166,8 @@ impl Theme {
             chrome_line: Color::hex(0xD9D9DC, 1.0),
             chip: Color::hex(0xF6F6F8, 1.0),
             chip_line: Color::hex(0xDADADD, 1.0),
+            brand: Color::hex(0x00C98F, 1.0),
+            on_brand: Color::hex(0x04150F, 1.0),
         }
     }
 }
@@ -188,6 +196,7 @@ mod tests {
             assert!(contrast_ratio(theme.text, theme.chrome) >= 7.0);
             assert!(contrast_ratio(theme.text_dim, theme.chrome) >= 4.5);
             assert!(contrast_ratio(theme.text_dim, theme.chip) >= 4.5);
+            assert!(contrast_ratio(theme.on_brand, theme.brand) >= 7.0);
         }
     }
 

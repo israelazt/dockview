@@ -24,8 +24,6 @@ const CHIP_STYLE: TextStyle = TextStyle::new(11.0, Weight::Regular);
 const CHIP_HEIGHT: f32 = 20.0;
 const CHIP_PAD: f32 = 10.0;
 const ICON_SIZE: f32 = 14.0;
-/// The brand's colour for the provisional logo, until the real one arrives.
-const LOGO_TEAL: Color = Color::hex(0x00E0A4, 1.0);
 /// The red every Windows close button turns on hover.
 const CLOSE_HOVER: Color = Color::hex(0xE81123, 1.0);
 const CLOSE_PRESSED: Color = Color::hex(0xB50E1C, 1.0);
@@ -66,7 +64,7 @@ pub fn draw(ui: &mut Ui, theme: &Theme, lang: Lang, state: &TitleBarState, versi
 /// A provisional mark: a rounded square with a light in it.
 fn draw_logo(ui: &mut Ui, theme: &Theme, x: f32, mid: f32) {
     let r = Rect::new(x, mid - LOGO_SIZE / 2.0, LOGO_SIZE, LOGO_SIZE);
-    ui.rect(r, 5.0, LOGO_TEAL);
+    ui.rect(r, 5.0, theme.brand);
     let core = LOGO_SIZE * 0.42;
     let (cx, cy) = r.center();
     ui.rect(

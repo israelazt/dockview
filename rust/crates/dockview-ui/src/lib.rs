@@ -6,6 +6,7 @@ pub mod controls;
 mod fit;
 pub mod input;
 pub mod motion;
+pub mod navbar;
 mod options;
 pub mod rec;
 pub mod scene_editor;
