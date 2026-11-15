@@ -15,20 +15,20 @@ use super::studio::StudioSection;
 use super::text::Weight;
 use super::{Rect, TextStyle, Ui};
 
-const MARGIN: f32 = 18.0;
-const TABS_H: f32 = 42.0;
-const TAB_H: f32 = 34.0;
-const TAB_PAD: f32 = 20.0;
-const TAB_GAP: f32 = 4.0;
-const TABS_PAD: f32 = 4.0;
-const TAB_STYLE: TextStyle = TextStyle::new(14.0, Weight::Medium);
-const STATUS_H: f32 = 33.0;
-const STATUS_PAD: f32 = 16.0;
-const ITEM_GAP: f32 = 12.0;
-const STATUS_STYLE: TextStyle = TextStyle::new(12.0, Weight::Medium);
-const DOT: f32 = 6.0;
+const MARGIN: f32 = 14.0;
+const TABS_H: f32 = 32.0;
+const TAB_H: f32 = 26.0;
+const TAB_PAD: f32 = 14.0;
+const TAB_GAP: f32 = 2.0;
+const TABS_PAD: f32 = 3.0;
+const TAB_STYLE: TextStyle = TextStyle::new(12.5, Weight::Medium);
+const STATUS_H: f32 = 26.0;
+const STATUS_PAD: f32 = 12.0;
+const ITEM_GAP: f32 = 10.0;
+const STATUS_STYLE: TextStyle = TextStyle::new(11.0, Weight::Medium);
+const DOT: f32 = 5.0;
 /// Room kept between the tabs and the status.
-const MIN_GAP: f32 = 24.0;
+const MIN_GAP: f32 = 20.0;
 
 /// One thing in the status, before it is placed.
 #[derive(Debug, Clone, PartialEq)]
@@ -246,7 +246,7 @@ fn draw_status(ui: &mut Ui, theme: &Theme, items: &[Item], widths: &[f32], width
     for (i, (item, w)) in items.iter().zip(widths).enumerate() {
         if i > 0 {
             x += ITEM_GAP;
-            ui.rect(Rect::new(x, mid - 7.0, 1.0, 14.0), 0.0, theme.chip_line);
+            ui.rect(Rect::new(x, mid - 6.0, 1.0, 12.0), 0.0, theme.chip_line);
             x += 1.0 + ITEM_GAP;
         }
         let mut text_x = x;
@@ -422,11 +422,11 @@ mod tests {
     #[test]
     fn a_narrow_window_loses_the_status_from_the_right_end() {
         let widths = [90.0, 60.0, 50.0];
-        // 32 padding + 90 + (24+1+60) + (24+1+50) = 281
-        assert_eq!(items_that_fit(&widths, 300.0), 3);
-        assert_eq!(items_that_fit(&widths, 210.0), 2);
-        assert_eq!(items_that_fit(&widths, 200.0), 1);
-        assert_eq!(items_that_fit(&widths, 130.0), 1);
+        // 24 padding + 90 + (20+1+60) + (20+1+50) = 266
+        assert_eq!(items_that_fit(&widths, 270.0), 3);
+        assert_eq!(items_that_fit(&widths, 200.0), 2);
+        assert_eq!(items_that_fit(&widths, 190.0), 1);
+        assert_eq!(items_that_fit(&widths, 114.0), 1);
         assert_eq!(items_that_fit(&widths, 100.0), 0);
         assert_eq!(items_that_fit(&[], 500.0), 0);
     }

@@ -8,7 +8,7 @@ use crate::layout::Rect;
 /// Height of the title bar in logical pixels.
 pub const TITLE_BAR_HEIGHT: f32 = 34.0;
 /// Height of the navigation row under the title bar, in logical pixels.
-pub const NAV_HEIGHT: f32 = 56.0;
+pub const NAV_HEIGHT: f32 = 44.0;
 /// Width of each of the three window buttons in logical pixels.
 pub const BUTTON_WIDTH: f32 = 46.0;
 /// Thickness of the strip along each edge that resizes the window, in logical
@@ -254,8 +254,8 @@ mod tests {
         assert_eq!(hi.bar_height(), 68.0);
         assert_eq!(hi.bar().unwrap().h, 68.0);
         assert_eq!(hi.nav().unwrap().y, 68.0);
-        assert_eq!(hi.content().y, 68.0 + 112.0);
-        assert_eq!(hi.content().h, 720.0 - 180.0);
+        assert_eq!(hi.content().y, 68.0 + 2.0 * NAV_HEIGHT);
+        assert_eq!(hi.content().h, 720.0 - 68.0 - 2.0 * NAV_HEIGHT);
     }
 
     #[test]
@@ -292,12 +292,12 @@ mod tests {
     fn the_navigation_row_sits_under_the_bar_and_answers_for_itself() {
         let c = chrome();
         assert_eq!(c.nav().unwrap().y, 34.0);
-        assert_eq!(c.nav().unwrap().h, 56.0);
+        assert_eq!(c.nav().unwrap().h, NAV_HEIGHT);
         assert_eq!(c.zone_at(600.0, 40.0), Zone::Nav);
-        assert_eq!(c.zone_at(600.0, 89.0), Zone::Nav);
-        assert_eq!(c.zone_at(600.0, 90.0), Zone::Content);
-        assert_eq!(c.content().y, 90.0);
-        assert_eq!(c.content().h, 720.0 - 90.0);
+        assert_eq!(c.zone_at(600.0, 77.0), Zone::Nav);
+        assert_eq!(c.zone_at(600.0, 78.0), Zone::Content);
+        assert_eq!(c.content().y, 34.0 + NAV_HEIGHT);
+        assert_eq!(c.content().h, 720.0 - 34.0 - NAV_HEIGHT);
         // The side edges still resize from the row.
         assert_eq!(c.zone_at(2.0, 60.0), Zone::Resize(Edge::Left));
     }
