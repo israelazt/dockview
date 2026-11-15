@@ -15,6 +15,7 @@ pub mod studio;
 #[cfg(test)]
 mod test_model;
 pub mod text;
+pub mod titlebar;
 pub mod toast;
 
 use clip::{clip_quad, ClipRect};

@@ -98,6 +98,13 @@ pub struct Theme {
     /// The selected segment of a segmented control.
     pub segment_active: Color,
     pub shadow: Color,
+    /// The title bar's background (opaque: it never sits over the video).
+    pub chrome: Color,
+    /// The thin line under the title bar.
+    pub chrome_line: Color,
+    /// The small rounded label next to the name (the version).
+    pub chip: Color,
+    pub chip_line: Color,
 }
 
 impl Theme {
@@ -125,6 +132,10 @@ impl Theme {
             segment_track: Color::hex(0xFFFFFF, 0.07),
             segment_active: Color::hex(0xFFFFFF, 0.16),
             shadow: Color::hex(0x000000, 0.32),
+            chrome: Color::hex(0x090A0D, 1.0),
+            chrome_line: Color::hex(0x131417, 1.0),
+            chip: Color::hex(0x0F1013, 1.0),
+            chip_line: Color::hex(0x1A1B1E, 1.0),
         }
     }
 
@@ -145,6 +156,10 @@ impl Theme {
             segment_track: Color::hex(0x000000, 0.06),
             segment_active: Color::hex(0xFFFFFF, 1.0),
             shadow: Color::hex(0x000000, 0.14),
+            chrome: Color::hex(0xECECEE, 1.0),
+            chrome_line: Color::hex(0xD9D9DC, 1.0),
+            chip: Color::hex(0xF6F6F8, 1.0),
+            chip_line: Color::hex(0xDADADD, 1.0),
         }
     }
 }
@@ -165,6 +180,15 @@ mod tests {
     fn contrast_of_black_on_white_is_21() {
         let ratio = contrast_ratio(Color::hex(0x000000, 1.0), Color::hex(0xFFFFFF, 1.0));
         assert!((ratio - 21.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn the_title_bar_text_is_readable_in_both_themes() {
+        for theme in [Theme::dark(), Theme::light()] {
+            assert!(contrast_ratio(theme.text, theme.chrome) >= 7.0);
+            assert!(contrast_ratio(theme.text_dim, theme.chrome) >= 4.5);
+            assert!(contrast_ratio(theme.text_dim, theme.chip) >= 4.5);
+        }
     }
 
     #[test]
