@@ -12,7 +12,6 @@
 // (a terminal it was started from is attached to in `run`). Debug builds keep
 // the console, to see the log while developing.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
-
 // Elsewhere than Windows the program only says it has no adapters yet, so the
 // window's code (which does build there) is not used.
 #![cfg_attr(not(windows), allow(dead_code))]
