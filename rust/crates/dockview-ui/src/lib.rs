@@ -8,6 +8,7 @@ pub mod input;
 pub mod motion;
 pub mod navbar;
 mod options;
+pub mod rail;
 pub mod rec;
 pub mod scene_editor;
 pub mod snip;
