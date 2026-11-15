@@ -154,12 +154,16 @@ impl ApplicationHandler for Shell {
                     // Escape closes the list of sources first.
                     self.source_picker.close();
                     self.needs_redraw = true;
-                } else if self.studio.is_editing() {
+                } else if self.studio.is_editing() || self.side.is_editing() {
                     // A name is being typed: the keys are for the field and not
                     // for the shortcuts (F, Tab, the arrows...).
                     let text = event.text.as_deref();
                     if let Some(key) = text_key_for(&event.logical_key, text) {
-                        self.studio.key(key);
+                        if self.side.is_editing() {
+                            self.side.key(key);
+                        } else {
+                            self.studio.key(key);
+                        }
                     }
                 } else if let Some(command) = command_with(&event.logical_key, self.ctrl) {
                     self.core.on_key(command);
@@ -183,8 +187,9 @@ impl ApplicationHandler for Shell {
             self.recreate_graphics();
         }
         self.refresh_host_info();
-        let lists_shown = self.studio.shows(StudioSection::Sources)
-            || self.studio.shows(StudioSection::Scenes)
+        let lists_shown = [StudioSection::Sources, StudioSection::Scenes]
+            .into_iter()
+            .any(|s| self.studio.shows(s) || self.side.shows(s))
             || self.source_picker.is_open();
         self.core.tick(lists_shown);
         self.show_events();
@@ -217,6 +222,7 @@ impl ApplicationHandler for Shell {
             || self.toasts.is_visible()
             || self.core.rec_is_on()
             || self.studio.is_animating()
+            || self.side.is_animating()
             || self.hud_moving;
         if new_frame || animating || std::mem::take(&mut self.needs_redraw) {
             if let Some(window) = &self.window {

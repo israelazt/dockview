@@ -5,7 +5,7 @@ use dockview_domain::presenter::Screenshot;
 use dockview_domain::render_plan::{render_plan, video_frame_due};
 use dockview_domain::view::RecState;
 use dockview_ui::input::Pointer;
-use dockview_ui::studio::route_pointer;
+use dockview_ui::studio::{route_pointer, Scope};
 use dockview_ui::titlebar::TitleBarState;
 
 use super::*;
@@ -56,6 +56,8 @@ impl Shell {
         // its room; the pointer belongs to the video or to the panel.
         self.studio
             .update(model.studio_visible(), model.fullscreen, dt);
+        self.side
+            .update(model.studio_visible(), model.fullscreen, dt);
         self.studio_openness = self.studio.openness();
         // The rail slides with the panel, so the frame is read after it moved.
         let chrome = self.chrome();
@@ -85,7 +87,14 @@ impl Shell {
             (window_size.1 as f32 - content_top_px).max(1.0) as u32,
         );
         let place = studio::place(content_size, scale, self.studio.openness());
-        let (video_pointer, panel_pointer) = route_pointer(&pointer, place.panel);
+        // With the left column out, the panel keeps the other four sections.
+        self.studio.set_scope(if place.side.is_some() {
+            Scope::Main
+        } else {
+            Scope::Full
+        });
+        let (rest_pointer, panel_pointer) = route_pointer(&pointer, place.panel);
+        let (video_pointer, side_pointer) = route_pointer(&rest_pointer, place.side);
         // The first seconds include start-up work; wait for steady numbers.
         let settled = !self.core.cli().show_stats || self.core.measurement_windows() >= 3;
         let capture = self.core.cli().screenshot.is_some()
@@ -132,12 +141,13 @@ impl Shell {
                 StudioSection::Scenes,
             ]
             .into_iter()
-            .find(|s| self.studio.shows(*s))
+            .find(|s| self.studio.shows(*s) || self.side.shows(*s))
         });
         let rail_active = rail_active.flatten();
         let (ui, controls) = (&mut self.ui, &mut self.controls);
         let (scene_editor, edit_mods) = (&mut self.scene_editor, &self.edit_mods);
         let studio = &mut self.studio;
+        let side = &mut self.side;
         let hud = &mut self.hud;
         let source_picker = &mut self.source_picker;
         // The readouts show in the viewer: no panel, not in full screen.
@@ -242,8 +252,17 @@ impl Shell {
                 source_picker.frame(ui, &model, &float_pointer, hud.source_card());
                 ui.set_inset_top(top_l);
                 ui.set_inset_left(rail_l);
-                // The panel, on top, in the room it took.
+                // The panel and the left column, on top, in the room they took.
                 ui.limit_width(None);
+                side.frame(
+                    ui,
+                    &model,
+                    stats,
+                    place.side,
+                    place.side_full_width,
+                    &side_pointer,
+                    dt,
+                );
                 studio.frame(
                     ui,
                     &model,
@@ -297,6 +316,7 @@ impl Shell {
             .or_else(|| self.rail.take_studio_request())
         {
             self.studio.open_section(section);
+            self.side.open_section(section);
         }
         let editor = self.scene_editor.take_actions();
         for action in actions
@@ -307,6 +327,7 @@ impl Shell {
             .chain(self.navbar.take_actions())
             .chain(self.rail.take_actions())
             .chain(self.studio.take_actions())
+            .chain(self.side.take_actions())
             .chain(editor)
         {
             self.core.apply(action);

@@ -22,13 +22,21 @@ pub const PANEL_WIDTH: f32 = 320.0;
 /// window still shows a useful video.
 pub const PANEL_MAX_SHARE: f32 = 0.45;
 
-/// Where the video area and the panel go.
+/// Width of the left column (scenes and sources) in logical pixels.
+pub const SIDE_WIDTH: f32 = 260.0;
+/// The left column only exists in a window at least this wide (logical
+/// pixels): with it and the panel, the video still keeps ~600 px.
+pub const SIDE_MIN_WINDOW: f32 = 1200.0;
+
+/// Where the video area, the panel and the left column go.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct StudioLayout {
     /// The area the video is fitted into (the whole window when closed).
     pub video: Rect,
     /// The panel, on the right; `None` when it takes no room.
     pub panel: Option<Rect>,
+    /// The column on the left, only in a wide window; `None` otherwise.
+    pub side: Option<Rect>,
 }
 
 /// Shares a `window` (physical pixels) at interface `scale`. `openness` goes
@@ -46,13 +54,26 @@ pub fn studio_layout(window: (u32, u32), scale: f32, openness: f32) -> StudioLay
                 h: wh,
             },
             panel: None,
+            side: None,
         };
     }
+    let wide = ww >= SIDE_MIN_WINDOW * scale.max(0.1);
+    let side_w = if wide {
+        (SIDE_WIDTH * scale.max(0.1) * openness.clamp(0.0, 1.0)).round()
+    } else {
+        0.0
+    };
     StudioLayout {
-        video: Rect {
+        side: (side_w >= 1.0).then_some(Rect {
             x: 0.0,
             y: 0.0,
-            w: ww - width,
+            w: side_w,
+            h: wh,
+        }),
+        video: Rect {
+            x: side_w,
+            y: 0.0,
+            w: ww - width - side_w,
             h: wh,
         },
         panel: Some(Rect {
@@ -85,12 +106,12 @@ mod tests {
 
     #[test]
     fn open_takes_the_panel_width_from_the_right() {
-        let l = studio_layout((1920, 1080), 1.0, 1.0);
-        assert_eq!(l.video.w, 1600.0);
+        let l = studio_layout((1100, 1080), 1.0, 1.0);
+        assert_eq!(l.video.w, 780.0);
         assert_eq!(
             l.panel,
             Some(Rect {
-                x: 1600.0,
+                x: 780.0,
                 y: 0.0,
                 w: 320.0,
                 h: 1080.0
@@ -100,9 +121,9 @@ mod tests {
 
     #[test]
     fn the_panel_grows_with_the_interface_scale() {
-        let l = studio_layout((1920, 1080), 1.5, 1.0);
+        let l = studio_layout((1500, 1080), 1.5, 1.0);
         assert_eq!(l.panel.unwrap().w, 480.0);
-        assert_eq!(l.video.w, 1440.0);
+        assert_eq!(l.video.w, 1020.0);
     }
 
     #[test]
@@ -114,9 +135,9 @@ mod tests {
 
     #[test]
     fn half_open_is_half_the_width() {
-        let l = studio_layout((1920, 1080), 1.0, 0.5);
+        let l = studio_layout((1100, 1080), 1.0, 0.5);
         assert_eq!(l.panel.unwrap().w, 160.0);
-        assert_eq!(l.video.w + l.panel.unwrap().w, 1920.0);
+        assert_eq!(l.video.w + l.panel.unwrap().w, 1100.0);
     }
 
     #[test]
@@ -127,10 +148,38 @@ mod tests {
     }
 
     #[test]
+    fn a_wide_window_gets_a_left_column_and_the_video_keeps_the_middle() {
+        let l = studio_layout((1920, 1080), 1.0, 1.0);
+        let side = l.side.expect("wide");
+        assert_eq!((side.x, side.w), (0.0, SIDE_WIDTH));
+        assert_eq!((l.video.x, l.video.w), (SIDE_WIDTH, 1920.0 - 320.0 - SIDE_WIDTH));
+        assert_eq!(l.video.x + l.video.w, l.panel.unwrap().x);
+    }
+
+    #[test]
+    fn a_narrow_window_has_no_left_column() {
+        let l = studio_layout((1100, 700), 1.0, 1.0);
+        assert_eq!(l.side, None);
+        assert_eq!(l.video.x, 0.0);
+        let edge = studio_layout((1200, 700), 1.0, 1.0);
+        assert!(edge.side.is_some(), "1200 is wide enough");
+        assert!(edge.video.w >= 600.0);
+    }
+
+    #[test]
+    fn the_left_column_follows_the_scale_and_the_opening() {
+        let l = studio_layout((2880, 1620), 1.5, 1.0);
+        assert_eq!(l.side.unwrap().w, SIDE_WIDTH * 1.5);
+        let half = studio_layout((1920, 1080), 1.0, 0.5);
+        assert_eq!(half.side.unwrap().w, SIDE_WIDTH / 2.0);
+        assert_eq!(studio_layout((1920, 1080), 1.0, 0.0).side, None);
+    }
+
+    #[test]
     fn the_panel_contains_its_own_pixels_only() {
-        let panel = studio_layout((1920, 1080), 1.0, 1.0).panel.unwrap();
-        assert!(panel.contains(1600.0, 0.0));
-        assert!(!panel.contains(1599.0, 10.0));
-        assert!(!panel.contains(1920.0, 10.0));
+        let panel = studio_layout((1100, 1080), 1.0, 1.0).panel.unwrap();
+        assert!(panel.contains(780.0, 0.0));
+        assert!(!panel.contains(779.0, 10.0));
+        assert!(!panel.contains(1100.0, 10.0));
     }
 }

@@ -34,7 +34,7 @@ use dockview_ui::scene_editor::SceneEditor;
 use dockview_ui::source_picker::SourcePicker;
 use dockview_ui::stats::StatsPanel;
 use dockview_ui::strip::ShortcutStrip;
-use dockview_ui::studio::{StudioPanel, StudioSection};
+use dockview_ui::studio::{Scope, StudioPanel, StudioSection};
 use dockview_ui::toast::{ToastHost, ToastKind};
 use dockview_ui::Ui;
 use winit::window::{CursorIcon, Window};
@@ -87,6 +87,9 @@ pub struct Shell {
     stats_panel: StatsPanel,
     /// The side panel of the Studio mode.
     studio: StudioPanel,
+    /// The column on the left of the video with the scenes and the sources,
+    /// only in a wide window (otherwise the panel lists them).
+    side: StudioPanel,
     /// The tabs and the status under the title bar.
     navbar: NavBar,
     /// The icon rail on the left.
@@ -122,9 +125,15 @@ impl Shell {
         controls.set_animations(animations);
         let mut studio = StudioPanel::new();
         studio.set_animations(animations);
+        let mut side = StudioPanel::with_scope(Scope::Side);
+        side.set_animations(animations);
+        // The column shows both lists open from the start.
+        side.unfold(StudioSection::Sources);
+        side.unfold(StudioSection::Scenes);
         let section = core.cli().studio_section.clone();
         if let Some(section) = section.as_deref().and_then(StudioSection::from_name) {
             studio.unfold(section);
+            side.unfold(section);
         }
         Self {
             core,
@@ -150,6 +159,7 @@ impl Shell {
             animations,
             stats_panel: StatsPanel::new(),
             studio,
+            side,
             navbar: NavBar::new(),
             rail: Rail::new(),
             strip: ShortcutStrip::new(),

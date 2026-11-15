@@ -17,8 +17,13 @@ pub struct StudioPlace {
     pub video: PhysicalRect,
     /// The room the panel has now, in logical pixels; `None` when it is closed.
     pub panel: Option<Rect>,
+    /// The left column (scenes and sources), in logical pixels; `None` when
+    /// the window is too narrow for it or the Studio is closed.
+    pub side: Option<Rect>,
     /// What the panel measures when fully open, in logical pixels.
     pub full_width: f32,
+    /// What the left column measures when fully open, in logical pixels.
+    pub side_full_width: f32,
     /// The width left for the video, in logical pixels: what the controls over
     /// it anchor to.
     pub video_width: f32,
@@ -37,30 +42,31 @@ pub fn place(window: (u32, u32), scale: f32, openness: f32) -> StudioPlace {
     // With the panel out, both it and the video are cards with a margin: the
     // video has it at left, top and bottom and half of it to the panel; the
     // panel has it at right, top and bottom and the other half to the video.
-    let (video, panel) = match layout.panel {
-        None => (layout.video, None),
+    // Every card has the margin towards the window's edge and half of it
+    // towards its neighbour, so two cards are one margin apart.
+    let (video, panel, side) = match layout.panel {
+        None => (layout.video, None, None),
         Some(p) => {
             let m = (CARD_MARGIN * scale * openness.clamp(0.0, 1.0)).round();
-            let v = layout.video;
-            (
+            let ww = window.0 as f32;
+            let card = |r: PhysicalRect| {
+                let left = if r.x <= 0.0 { m } else { m * 0.5 };
+                let right = if r.x + r.w >= ww { m } else { m * 0.5 };
                 PhysicalRect {
-                    x: v.x + m,
-                    y: v.y + m,
-                    w: (v.w - m * 1.5).max(1.0),
-                    h: (v.h - m * 2.0).max(1.0),
-                },
-                Some(PhysicalRect {
-                    x: p.x + m * 0.5,
-                    y: p.y + m,
-                    w: (p.w - m * 1.5).max(1.0),
-                    h: (p.h - m * 2.0).max(1.0),
-                }),
-            )
+                    x: r.x + left,
+                    y: r.y + m,
+                    w: (r.w - left - right).max(1.0),
+                    h: (r.h - m * 2.0).max(1.0),
+                }
+            };
+            (card(layout.video), Some(card(p)), layout.side.map(card))
         }
     };
     StudioPlace {
         video,
         panel: panel.map(logical),
+        side: side.map(logical),
+        side_full_width: full.side.map_or(0.0, |s| s.w / scale - CARD_MARGIN * 1.5),
         full_width: full.panel.map_or(0.0, |p| p.w / scale),
         video_width: video.w / scale,
         video_logical: logical(video),
@@ -87,30 +93,27 @@ pub fn draw_card_frame(
     let v = place.video_logical;
     ui.set_opacity(openness.clamp(0.0, 1.0));
     let air = theme.backdrop;
-    // Above, below, left of the video; between the cards; right of the panel.
-    for r in [
+    // Above and below the cards; then the stretches between the cards in a
+    // row, from the left edge to the right one.
+    let mut air_rects = vec![
         Rect::new(0.0, 0.0, w, v.y),
         Rect::new(0.0, v.y + v.h, w, (h - v.y - v.h).max(0.0)),
-        Rect::new(0.0, v.y, v.x, v.h),
-        Rect::new(v.x + v.w, v.y, (panel.x - v.x - v.w).max(0.0), v.h),
-        Rect::new(
-            panel.x + panel.w,
-            v.y,
-            (w - panel.x - panel.w).max(0.0),
-            v.h,
-        ),
-    ] {
+    ];
+    let mut edge = 0.0;
+    for card in place.side.into_iter().chain([v, panel]) {
+        air_rects.push(Rect::new(edge, v.y, (card.x - edge).max(0.0), v.h));
+        edge = card.x + card.w;
+    }
+    air_rects.push(Rect::new(edge, v.y, (w - edge).max(0.0), v.h));
+    for r in air_rects {
         if r.w > 0.0 && r.h > 0.0 {
             ui.rect(r, 0.0, air);
         }
     }
     ui.outline(v, 1.0, theme.border);
-    ui.shadow(
-        panel,
-        dockview_domain::design::RADIUS_CARD,
-        18.0,
-        theme.shadow,
-    );
+    for card in place.side.into_iter().chain([panel]) {
+        ui.shadow(card, dockview_domain::design::RADIUS_CARD, 18.0, theme.shadow);
+    }
     ui.set_opacity(1.0);
 }
 
@@ -129,19 +132,19 @@ mod tests {
 
     #[test]
     fn open_the_panel_and_the_video_are_cards_with_a_margin_around_them() {
-        let p = place((1920, 1080), 1.0, 1.0);
+        let p = place((1100, 1080), 1.0, 1.0);
         let panel = p.panel.expect("open");
         let m = CARD_MARGIN;
         // The video: margin at left, top and bottom; half of it towards the panel.
         assert_eq!((p.video.x, p.video.y, p.video.h), (m, m, 1080.0 - 2.0 * m));
-        assert_eq!(p.video.w, 1600.0 - 1.5 * m);
+        assert_eq!(p.video.w, 780.0 - 1.5 * m);
         // The panel: the other half towards the video, the margin at right, top and bottom.
         assert_eq!(
             (panel.x, panel.y, panel.h),
-            (1600.0 + m / 2.0, m, 1080.0 - 2.0 * m)
+            (780.0 + m / 2.0, m, 1080.0 - 2.0 * m)
         );
         assert_eq!(panel.w, 320.0 - 1.5 * m);
-        assert_eq!(panel.x + panel.w, 1920.0 - m, "the margin at the right");
+        assert_eq!(panel.x + panel.w, 1100.0 - m, "the margin at the right");
         // A gap of one margin between the two cards.
         assert_eq!(panel.x - (p.video.x + p.video.w), m);
         assert_eq!(p.video_width, p.video.w);
@@ -150,7 +153,7 @@ mod tests {
 
     #[test]
     fn at_a_higher_scale_the_panel_is_the_same_in_logical_pixels_and_so_is_the_margin() {
-        let p = place((2880, 1620), 1.5, 1.0);
+        let p = place((1650, 1080), 1.5, 1.0);
         let panel = p.panel.expect("open");
         assert_eq!(p.full_width, 320.0);
         assert_eq!(panel.w, 320.0 - 1.5 * CARD_MARGIN);
@@ -160,7 +163,7 @@ mod tests {
             "physical pixels for the renderer"
         );
         assert_eq!(p.video_logical.x, CARD_MARGIN);
-        assert_eq!(panel.x + panel.w, 2880.0 / 1.5 - CARD_MARGIN);
+        assert_eq!(panel.x + panel.w, 1650.0 / 1.5 - CARD_MARGIN);
     }
 
     #[test]
@@ -180,6 +183,24 @@ mod tests {
         assert_eq!(p.full_width, 270.0, "45 % of 600");
         assert_eq!(panel.w, 270.0 - 1.5 * CARD_MARGIN);
         assert!(p.video.w + panel.w < 600.0);
+    }
+
+    #[test]
+    fn a_wide_window_has_three_cards_one_margin_apart() {
+        let p = place((1920, 1080), 1.0, 1.0);
+        let (side, panel) = (p.side.expect("wide"), p.panel.expect("open"));
+        let m = CARD_MARGIN;
+        assert_eq!((side.x, side.y, side.h), (m, m, 1080.0 - 2.0 * m));
+        assert_eq!(p.video_logical.x - (side.x + side.w), m);
+        assert_eq!(panel.x - (p.video_logical.x + p.video_logical.w), m);
+        assert_eq!(panel.x + panel.w, 1920.0 - m);
+        assert!(p.video_width >= 600.0, "{}", p.video_width);
+    }
+
+    #[test]
+    fn a_narrow_window_has_no_left_card() {
+        assert_eq!(place((1100, 700), 1.0, 1.0).side, None);
+        assert_eq!(place((1920, 1080), 1.0, 0.0).side, None);
     }
 
     #[test]

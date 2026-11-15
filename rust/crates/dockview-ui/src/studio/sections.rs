@@ -10,6 +10,39 @@ use crate::Ui;
 /// Height of a section's header row, in logical pixels.
 pub const HEADER_H: f32 = 42.0;
 
+/// Which sections a panel lists, and whether it has a header of its own.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Scope {
+    /// Every section, under a header with the close button.
+    Full,
+    /// The right panel when the left column exists: everything but the
+    /// scenes and the sources.
+    Main,
+    /// The left column: the scenes and the sources, with no header.
+    Side,
+}
+
+impl Scope {
+    /// Whether this panel lists `section`.
+    pub fn includes(self, section: StudioSection) -> bool {
+        let side = matches!(section, StudioSection::Sources | StudioSection::Scenes);
+        match self {
+            Self::Full => true,
+            Self::Main => !side,
+            Self::Side => side,
+        }
+    }
+
+    /// Height of the panel's own header.
+    pub fn top(self) -> f32 {
+        if self == Self::Side {
+            0.0
+        } else {
+            super::TOP_H
+        }
+    }
+}
+
 /// One of the sections of the panel.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum StudioSection {
@@ -93,12 +126,19 @@ impl SectionRow {
 
 /// Stacks the sections. `expanded[i]` goes from 0 (folded) to 1 (open) for
 /// `StudioSection::ALL[i]`, so the folding can be animated, and `heights[i]`
-/// is how tall its body is when open. Returns the rows and the height of the
-/// whole list.
-pub fn stack(expanded: &[f32; 6], heights: &[f32; 6]) -> (Vec<SectionRow>, f32) {
+/// is how tall its body is when open. Only the sections `scope` lists are
+/// stacked. Returns the rows and the height of the whole list.
+pub fn stack(
+    scope: Scope,
+    expanded: &[f32; 6],
+    heights: &[f32; 6],
+) -> (Vec<SectionRow>, f32) {
     let mut rows = Vec::with_capacity(StudioSection::ALL.len());
     let mut top = 0.0;
     for ((section, open), full) in StudioSection::ALL.into_iter().zip(expanded).zip(heights) {
+        if !scope.includes(section) {
+            continue;
+        }
         let row = SectionRow {
             section,
             top,
@@ -119,8 +159,39 @@ mod tests {
     const BODY_H: f32 = 76.0;
 
     #[test]
+    fn each_scope_lists_its_own_sections() {
+        let count = |scope: Scope| {
+            StudioSection::ALL
+                .iter()
+                .filter(|s| scope.includes(**s))
+                .count()
+        };
+        assert_eq!(count(Scope::Full), 6);
+        assert_eq!(count(Scope::Main), 4);
+        assert_eq!(count(Scope::Side), 2);
+        for s in StudioSection::ALL {
+            assert_ne!(Scope::Main.includes(s), Scope::Side.includes(s), "{s:?}");
+        }
+        assert_eq!(Scope::Side.top(), 0.0);
+        assert!(Scope::Main.top() > 0.0);
+    }
+
+    #[test]
+    fn a_scope_stacks_only_its_sections() {
+        let (rows, height) = stack(Scope::Side, &[0.0; 6], &[BODY_H; 6]);
+        assert_eq!(rows.len(), 2);
+        assert_eq!(height, HEADER_H * 2.0);
+        let (rows, _) = stack(Scope::Main, &[0.0; 6], &[BODY_H; 6]);
+        assert!(rows.iter().all(|r| !matches!(
+            r.section,
+            StudioSection::Sources | StudioSection::Scenes
+        )));
+        assert_eq!(rows[0].top, 0.0);
+    }
+
+    #[test]
     fn folded_sections_are_just_their_headers() {
-        let (rows, height) = stack(&[0.0; 6], &[BODY_H; 6]);
+        let (rows, height) = stack(Scope::Full, &[0.0; 6], &[BODY_H; 6]);
         assert_eq!(rows.len(), 6);
         assert_eq!(height, HEADER_H * 6.0);
         assert_eq!(rows[2].top, HEADER_H * 2.0);
@@ -131,7 +202,7 @@ mod tests {
     fn opening_a_section_pushes_the_ones_below_it_down() {
         let mut open = [0.0; 6];
         open[1] = 1.0;
-        let (rows, height) = stack(&open, &[BODY_H; 6]);
+        let (rows, height) = stack(Scope::Full, &open, &[BODY_H; 6]);
         assert_eq!(rows[1].body, BODY_H);
         assert_eq!(rows[2].top, rows[1].bottom());
         assert_eq!(rows[2].top, HEADER_H * 2.0 + BODY_H);
@@ -142,13 +213,13 @@ mod tests {
     fn a_half_open_section_is_half_as_tall() {
         let mut open = [0.0; 6];
         open[0] = 0.5;
-        let (rows, _) = stack(&open, &[BODY_H; 6]);
+        let (rows, _) = stack(Scope::Full, &open, &[BODY_H; 6]);
         assert_eq!(rows[0].body, (BODY_H / 2.0).round());
     }
 
     #[test]
     fn out_of_range_amounts_are_kept_in_range() {
-        let (rows, _) = stack(&[2.0, -1.0, 0.0, 0.0, 0.0, 0.0], &[BODY_H; 6]);
+        let (rows, _) = stack(Scope::Full, &[2.0, -1.0, 0.0, 0.0, 0.0, 0.0], &[BODY_H; 6]);
         assert_eq!(rows[0].body, BODY_H);
         assert_eq!(rows[1].body, 0.0);
     }
@@ -157,13 +228,13 @@ mod tests {
     fn each_section_can_have_its_own_height() {
         let mut heights = [BODY_H; 6];
         heights[0] = 200.0;
-        let (rows, height) = stack(&[1.0; 6], &heights);
+        let (rows, height) = stack(Scope::Full, &[1.0; 6], &heights);
         assert_eq!(rows[0].body, 200.0);
         assert_eq!(rows[0].full, 200.0);
         assert_eq!(rows[1].top, HEADER_H + 200.0);
         assert_eq!(height, HEADER_H * 6.0 + 200.0 + BODY_H * 5.0);
         // Folded, a tall body takes no room however tall it would be.
-        let (rows, _) = stack(&[0.0; 6], &heights);
+        let (rows, _) = stack(Scope::Full, &[0.0; 6], &heights);
         assert_eq!((rows[0].body, rows[0].full), (0.0, 200.0));
     }
 

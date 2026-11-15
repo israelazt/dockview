@@ -1013,6 +1013,6 @@ fn a_folded_section_takes_no_room_and_costs_no_measuring() {
         .filter(|(h, _)| matches!(h, PanelHit::Header(_)))
         .count();
     assert_eq!(folded, 6);
-    let (_, content_h) = stack(&rig.panel.amount, &[0.0; 6]);
+    let (_, content_h) = stack(Scope::Full, &rig.panel.amount, &[0.0; 6]);
     assert_eq!(content_h, HEADER_H * 6.0, "only the six headers");
 }

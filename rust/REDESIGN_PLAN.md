@@ -232,7 +232,7 @@ Hecho y subido, **sin abrir la app** (el autor está jugando; todo se verificó 
 
 **Etapas** (cada una deja la app usable):
 1. **6.1 · Tarjetas (hecha, 2026-11-14).** Con el panel abierto, el vídeo y el panel pasan a ser **tarjetas con aire** (12 px alrededor y entre ellas, que crece con la animación de apertura); el aire se pinta con un tono propio del tema (`backdrop`), el panel es una tarjeta redondeada con sombra y el vídeo lleva un marco fino. Lo que flota sobre el vídeo (barra, tarjetas de datos, avisos) se ancla ahora al rectángulo del vídeo, no a toda el área.
-2. **6.2 · Columna izquierda.** Escenas y Fuentes salen del panel y pasan a una columna a la izquierda del vídeo (tarjetas propias), solo si la ventana es ancha; si no, siguen en el panel.
+2. **6.2 · Columna izquierda (hecha, 2026-11-15).** Con el contenido de al menos 1200 px de ancho, Fuentes y Escenas salen del panel y pasan a una tarjeta a la izquierda del vídeo (260 px, sin cabecera, ambas abiertas); el panel derecho conserva las otras cuatro secciones. Por debajo de 1200 px siguen en el panel. Son dos `StudioPanel` con distinto `Scope` (`Full`/`Main`/`Side`); el diseño lo calcula `studio_layout` (campo `side`). Pendiente anotado: los avisos (toasts) son más anchos que el vídeo cuando este es estrecho y la tarjeta izquierda los tapa.
 3. **6.3 · Columna derecha y franja de estado.** El panel conserva Audio, Grabación, Ajustes y Estadísticas; arriba, la franja con escena activa, FPS y latencia.
 Las partes 7 a 9 (escenas y capas, lienzo y transiciones, emisión) rellenan esas columnas.
 

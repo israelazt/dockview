@@ -35,7 +35,7 @@ use dockview_domain::view::{Action, Model};
 
 pub use edit::TextKey;
 pub use route::route_pointer;
-pub use sections::StudioSection;
+pub use sections::{Scope, StudioSection};
 
 use crate::input::Pointer;
 use crate::motion::{ease_out_cubic, move_toward, smooth};
@@ -85,6 +85,8 @@ enum PanelHit {
 }
 
 pub struct StudioPanel {
+    /// Which sections it lists.
+    scope: Scope,
     /// Which sections are meant to be open.
     open: [bool; 6],
     /// How open each one is now (0 to 1), moving towards `open`.
@@ -134,6 +136,7 @@ pub struct StudioPanel {
 impl StudioPanel {
     pub fn new() -> Self {
         Self {
+            scope: Scope::Full,
             open: [false; 6],
             amount: [0.0; 6],
             scroll: 0.0,
@@ -163,6 +166,20 @@ impl StudioPanel {
         }
     }
 
+    /// A panel that lists only what `scope` says.
+    pub fn with_scope(scope: Scope) -> Self {
+        Self {
+            scope,
+            ..Self::new()
+        }
+    }
+
+    /// Changes what the panel lists (the right panel gives the scenes and the
+    /// sources to the left column when the window is wide).
+    pub fn set_scope(&mut self, scope: Scope) {
+        self.scope = scope;
+    }
+
     /// Unfolds `section` (for the command line, which starts with one open).
     pub fn unfold(&mut self, section: StudioSection) {
         if let Some(i) = StudioSection::ALL.iter().position(|s| *s == section) {
@@ -182,6 +199,7 @@ impl StudioPanel {
     /// unfolded (the application refreshes the lists it shows then).
     pub fn shows(&self, section: StudioSection) -> bool {
         self.area.is_some()
+            && self.scope.includes(section)
             && StudioSection::ALL
                 .iter()
                 .position(|s| *s == section)
@@ -270,12 +288,8 @@ impl StudioPanel {
             return;
         };
         let panel = Rect::new(visible.x, visible.y, full_width, visible.h);
-        let list = Rect::new(
-            panel.x,
-            panel.y + TOP_H,
-            panel.w,
-            (panel.h - TOP_H).max(0.0),
-        );
+        let top = self.scope.top();
+        let list = Rect::new(panel.x, panel.y + top, panel.w, (panel.h - top).max(0.0));
 
         self.step_sections();
         self.apply_typed_keys(ui);
@@ -283,11 +297,11 @@ impl StudioPanel {
         // (some of them wrap text, which is not free).
         let mut heights = [0.0; 6];
         for (i, section) in StudioSection::ALL.into_iter().enumerate() {
-            if self.open[i] || self.amount[i] > 0.0 {
+            if self.scope.includes(section) && (self.open[i] || self.amount[i] > 0.0) {
                 heights[i] = section.body_height(ui, m, stats, full_width);
             }
         }
-        let (rows, content_h) = stack(&self.amount, &heights);
+        let (rows, content_h) = stack(self.scope, &self.amount, &heights);
         self.scroll_target = scroll::clamp_scroll(self.scroll_target, content_h, list.h);
         self.hovered = self.hit_at(pointer.pos);
         self.interact(pointer, visible, content_h, list.h);
@@ -304,7 +318,9 @@ impl StudioPanel {
         self.next_sliders.clear();
         ui.set_opacity(fade);
         self.draw_frame(ui, t, panel);
-        self.draw_top(ui, m, panel);
+        if self.scope != Scope::Side {
+            self.draw_top(ui, m, panel);
+        }
         self.draw_sections(ui, m, stats, &rows, list);
         self.draw_scroll_bar(ui, t, list, content_h);
         ui.set_clip(None);
