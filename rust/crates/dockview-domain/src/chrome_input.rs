@@ -81,8 +81,8 @@ impl ChromeInput {
                     Some(WindowCommand::Drag)
                 }
             }
-            // The navigation row and the content are the interface's own.
-            Zone::Nav | Zone::Content => None,
+            // The navigation row, the rail and the content are the interface's own.
+            Zone::Nav | Zone::Rail | Zone::Content => None,
         }
     }
 

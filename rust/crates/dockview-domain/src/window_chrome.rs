@@ -9,6 +9,8 @@ use crate::layout::Rect;
 pub const TITLE_BAR_HEIGHT: f32 = 34.0;
 /// Height of the navigation row under the title bar, in logical pixels.
 pub const NAV_HEIGHT: f32 = 44.0;
+/// Width of the icon rail on the left, in logical pixels.
+pub const RAIL_WIDTH: f32 = 52.0;
 /// Width of each of the three window buttons in logical pixels.
 pub const BUTTON_WIDTH: f32 = 46.0;
 /// Thickness of the strip along each edge that resizes the window, in logical
@@ -55,6 +57,8 @@ pub enum Zone {
     Resize(Edge),
     /// The navigation row under the bar: the interface answers there.
     Nav,
+    /// The icon rail on the left, under the row.
+    Rail,
 }
 
 /// The shape the mouse cursor takes over a zone.
@@ -140,13 +144,35 @@ impl Chrome {
         })
     }
 
-    /// Everything below the bar and the row: where the application draws.
-    pub fn content(&self) -> Rect {
+    /// Width of the icon rail in physical pixels (0 in full screen).
+    pub fn rail_width(&self) -> f32 {
+        if self.fullscreen {
+            0.0
+        } else {
+            self.px(RAIL_WIDTH)
+        }
+    }
+
+    /// The icon rail, on the left under the row, or `None` in full screen.
+    pub fn rail(&self) -> Option<Rect> {
         let top = self.bar_height() + self.nav_height();
-        Rect {
+        (!self.fullscreen).then(|| Rect {
             x: 0.0,
             y: top,
-            w: self.size.0 as f32,
+            w: self.rail_width(),
+            h: (self.size.1 as f32 - top).max(0.0),
+        })
+    }
+
+    /// Everything right of the rail and below the bar and the row: where the
+    /// application draws.
+    pub fn content(&self) -> Rect {
+        let top = self.bar_height() + self.nav_height();
+        let left = self.rail_width();
+        Rect {
+            x: left,
+            y: top,
+            w: (self.size.0 as f32 - left).max(0.0),
             h: (self.size.1 as f32 - top).max(0.0),
         }
     }
@@ -197,6 +223,9 @@ impl Chrome {
         }
         if y < self.bar_height() + self.nav_height() {
             return Zone::Nav;
+        }
+        if x < self.rail_width() {
+            return Zone::Rail;
         }
         Zone::Content
     }
@@ -298,6 +327,27 @@ mod tests {
         assert_eq!(c.zone_at(600.0, 78.0), Zone::Content);
         assert_eq!(c.content().y, 34.0 + NAV_HEIGHT);
         assert_eq!(c.content().h, 720.0 - 34.0 - NAV_HEIGHT);
+    }
+
+    #[test]
+    fn the_rail_is_on_the_left_under_the_row_and_the_content_is_what_is_left() {
+        let c = chrome();
+        let rail = c.rail().unwrap();
+        assert_eq!(
+            (rail.x, rail.y, rail.w),
+            (0.0, 34.0 + NAV_HEIGHT, RAIL_WIDTH)
+        );
+        assert_eq!(rail.h, 720.0 - 34.0 - NAV_HEIGHT);
+        assert_eq!(c.zone_at(20.0, 300.0), Zone::Rail);
+        assert_eq!(c.zone_at(RAIL_WIDTH - 1.0, 300.0), Zone::Rail);
+        assert_eq!(c.zone_at(RAIL_WIDTH, 300.0), Zone::Content);
+        assert_eq!(c.content().x, RAIL_WIDTH);
+        assert_eq!(c.content().w, 1280.0 - RAIL_WIDTH);
+        // The row runs over the rail, and the left edge still resizes.
+        assert_eq!(c.zone_at(20.0, 60.0), Zone::Nav);
+        assert_eq!(c.zone_at(2.0, 300.0), Zone::Resize(Edge::Left));
+        let hi = Chrome { scale: 2.0, ..c };
+        assert_eq!(hi.content().x, RAIL_WIDTH * 2.0);
         // The side edges still resize from the row.
         assert_eq!(c.zone_at(2.0, 60.0), Zone::Resize(Edge::Left));
     }
@@ -340,7 +390,7 @@ mod tests {
         };
         assert!(!c.resizable());
         assert_eq!(c.zone_at(640.0, 1.0), Zone::TitleBar);
-        assert_eq!(c.zone_at(1.0, 300.0), Zone::Content);
+        assert_eq!(c.zone_at(1.0, 300.0), Zone::Rail);
         assert_eq!(c.zone_at(1279.0, 1.0), Zone::Button(WindowButton::Close));
     }
 
@@ -355,7 +405,9 @@ mod tests {
         assert_eq!(c.zone_at(640.0, 1.0), Zone::Content);
         assert_eq!(c.zone_at(1279.0, 1.0), Zone::Content);
         assert_eq!(c.zone_at(600.0, 40.0), Zone::Content);
-        assert!(c.nav().is_none());
+        assert!(c.nav().is_none() && c.rail().is_none());
+        assert_eq!(c.zone_at(20.0, 300.0), Zone::Content);
+        assert_eq!(c.content().x, 0.0);
         assert_eq!(c.content().y, 0.0);
         assert_eq!(c.content().h, 720.0);
     }

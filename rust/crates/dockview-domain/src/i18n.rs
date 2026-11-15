@@ -215,6 +215,7 @@ strings! {
     NavConnecting => "Connecting", "Conectando";
     NavLive => "LIVE", "EN DIRECTO";
     NavReconnecting => "Reconnecting", "Reconectando";
+    RailLog => "Open the log", "Abrir el registro";
     WindowMinimize => "Minimize", "Minimizar";
     WindowMaximize => "Maximize", "Maximizar";
     WindowRestore => "Restore", "Restaurar";

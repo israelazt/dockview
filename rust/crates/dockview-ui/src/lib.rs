@@ -90,6 +90,8 @@ pub struct Ui {
     /// Room kept free at the top (the title bar): everything drawn is pushed
     /// down by it and [`Ui::logical_size`] is that much shorter.
     inset_top: f32,
+    /// Room kept free at the left (the icon rail), like `inset_top`.
+    inset_left: f32,
 }
 
 impl Ui {
@@ -104,6 +106,7 @@ impl Ui {
             clip: None,
             width_limit: None,
             inset_top: 0.0,
+            inset_left: 0.0,
         }
     }
 
@@ -118,6 +121,7 @@ impl Ui {
         self.clip = None;
         self.width_limit = None;
         self.inset_top = 0.0;
+        self.inset_left = 0.0;
     }
 
     /// Cuts off everything drawn from now on outside `area` (in the same
@@ -127,7 +131,7 @@ impl Ui {
         let s = self.scale;
         self.clip = area.map(|r| {
             let (x, y) = (
-                (r.x + self.offset.0) * s,
+                (r.x + self.offset.0 + self.inset_left) * s,
                 (r.y + self.offset.1 + self.inset_top) * s,
             );
             [x, y, x + r.w * s, y + r.h * s]
@@ -149,6 +153,12 @@ impl Ui {
         self.inset_top = height.max(0.0);
     }
 
+    /// Keeps `width` logical pixels free at the left (for the icon rail), like
+    /// [`Ui::set_inset_top`]. `0.0` goes back to the whole window.
+    pub fn set_inset_left(&mut self, width: f32) {
+        self.inset_left = width.max(0.0);
+    }
+
     /// Translates everything drawn from now on, in logical pixels.
     pub fn set_offset(&mut self, dx: f32, dy: f32) {
         self.offset = (dx, dy);
@@ -165,7 +175,7 @@ impl Ui {
 
     /// Viewport size in logical pixels (narrowed by [`Ui::limit_width`]).
     pub fn logical_size(&self) -> (f32, f32) {
-        let width = self.viewport.0 as f32 / self.scale;
+        let width = (self.viewport.0 as f32 / self.scale - self.inset_left).max(0.0);
         (
             self.width_limit.map_or(width, |limit| limit.min(width)),
             (self.viewport.1 as f32 / self.scale - self.inset_top).max(0.0),
@@ -242,7 +252,7 @@ impl Ui {
         let s = self.scale;
         let (w, h) = (r.w * s, r.h * s);
         let (x, y) = (
-            (r.x + self.offset.0) * s,
+            (r.x + self.offset.0 + self.inset_left) * s,
             (r.y + self.offset.1 + self.inset_top) * s,
         );
         let pad = margin * s.max(1.0) + 1.0;
@@ -333,7 +343,7 @@ impl Ui {
         let shaped = self.text.shape(s, size * scale, face, tabular);
         // Snap the origin to whole pixels so glyph edges stay crisp.
         let (ox, oy) = (
-            ((x + self.offset.0) * scale).round(),
+            ((x + self.offset.0 + self.inset_left) * scale).round(),
             ((y + self.offset.1 + self.inset_top) * scale).round(),
         );
         let atlas = ATLAS_SIZE as f32;
@@ -579,6 +589,22 @@ mod tests {
         assert_eq!(ui.logical_size().1, 720.0 - 34.0);
         ui.set_clip(Some(Rect::new(0.0, 0.0, 10.0, 10.0)));
         assert_eq!(ui.clip, Some([0.0, 68.0, 20.0, 88.0]));
+    }
+
+    #[test]
+    fn the_left_inset_pushes_drawing_right_and_narrows_the_window() {
+        let mut ui = ui();
+        ui.rect(Rect::new(10.0, 10.0, 20.0, 20.0), 2.0, Theme::dark().text);
+        let plain = ui.vertices()[0].pos;
+        ui.begin((1280, 720), 1.0);
+        let width = ui.logical_size().0;
+        ui.set_inset_left(52.0);
+        assert_eq!(ui.logical_size().0, width - 52.0);
+        ui.rect(Rect::new(10.0, 10.0, 20.0, 20.0), 2.0, Theme::dark().text);
+        let moved = ui.vertices()[0].pos;
+        assert_eq!((moved[0] - plain[0], moved[1] - plain[1]), (52.0, 0.0));
+        ui.begin((1280, 720), 1.0);
+        assert_eq!(ui.logical_size().0, width);
     }
 
     #[test]
