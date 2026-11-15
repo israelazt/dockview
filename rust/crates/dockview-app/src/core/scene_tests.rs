@@ -353,6 +353,39 @@ fn the_scene_change_can_be_a_cut_and_the_choice_is_saved() {
 }
 
 #[test]
+fn the_length_of_a_smooth_change_is_chosen_kept_in_range_and_saved() {
+    let mut rig = rig_with_scenes(&["One", "Two"]);
+    assert_eq!(rig.core.model().scenes.transition_ms, 400);
+    rig.core.apply(Action::SetTransitionMs(800));
+    assert_eq!(rig.core.model().scenes.transition_ms, 800);
+    assert_eq!(rig.saved_soon().expect("saved").scene_transition_ms, 800);
+    rig.core.apply(Action::SetTransitionMs(1));
+    assert_eq!(
+        rig.core.model().scenes.transition_ms,
+        100,
+        "not shorter than 100 ms"
+    );
+    rig.core.apply(Action::SetTransitionMs(60_000));
+    assert_eq!(
+        rig.core.model().scenes.transition_ms,
+        2000,
+        "not longer than 2 s"
+    );
+    // The change that follows lasts as long as was chosen.
+    rig.core.apply(Action::SetTransitionMs(800));
+    rig.core
+        .apply(Action::Scene(SceneAction::Activate(Some(0))));
+    rig.core.finish_transition();
+    rig.core
+        .apply(Action::Scene(SceneAction::Activate(Some(1))));
+    let running = rig.core.scenes.transition.as_ref().expect("travelling");
+    assert_eq!(
+        running.transition.duration(),
+        std::time::Duration::from_millis(800)
+    );
+}
+
+#[test]
 fn the_scene_hotkeys_pick_a_scene_the_plain_source_or_nothing() {
     let mut rig = rig_with_scenes(&["One", "Two"]);
     assert_eq!(rig.core.model().scenes.active, None);

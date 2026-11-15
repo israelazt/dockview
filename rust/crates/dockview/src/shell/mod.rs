@@ -25,6 +25,7 @@ use dockview_domain::chrome_input::{ChromeInput, WindowCommand};
 use dockview_domain::i18n;
 use dockview_domain::presenter::Presenter;
 use dockview_domain::window_chrome::{Chrome, Zone};
+use dockview_ui::canvas_bar::CanvasBar;
 use dockview_ui::controls::Controls;
 use dockview_ui::hud::Hud;
 use dockview_ui::input::Pointer;
@@ -85,6 +86,8 @@ pub struct Shell {
     cursor_hidden: bool,
     animations: bool,
     stats_panel: StatsPanel,
+    /// The transition bar under the video in the Studio mode.
+    canvas_bar: CanvasBar,
     /// The side panel of the Studio mode.
     studio: StudioPanel,
     /// The column on the left of the video with the scenes and the sources,
@@ -158,6 +161,7 @@ impl Shell {
             cursor_hidden: false,
             animations,
             stats_panel: StatsPanel::new(),
+            canvas_bar: CanvasBar::new(),
             studio,
             side,
             navbar: NavBar::new(),

@@ -248,6 +248,15 @@ Las partes 7 a 9 (escenas y capas, lienzo y transiciones, emisión) rellenan esa
 
 **Cambiar la fuente en el Visor (2026-11-14):** al quitar de la barra el botón de fuentes, la tarjeta de **fuente** de la fila de datos pasa a ser clicable (con una flecha): abre una **lista bajo ella** con las capturadoras, las pantallas y las ventanas, con la actual marcada; elegir una cambia la fuente y cierra la lista; se cierra con `Esc`, con un clic fuera o con la tarjeta; se desplaza con la rueda si es larga, y mientras está abierta se refrescan las listas de pantallas y ventanas. Solo existe mientras la fila de datos está visible.
 
+## 5.9. Parte 8 — Lienzo y transiciones (por etapas)
+
+**Maqueta:** bajo el vídeo, una barra con la transición (Corte, Disolución, Stinger, «Transicionar al aire», Previo/Vivo) y herramientas del lienzo (guías, «Snap to Grid», zoom, «Ajustar»). **Hoy:** hay corte y movimiento suave (las capas comunes viajan, las demás se funden, 0,4 s fijo), elegible solo en Ajustes; el editor de capas ya se pega a bordes y centros de las otras capas y de la imagen (Alt lo desactiva). Stinger y Previo/Vivo no existen: **no se dibujan** (⏳).
+
+**Etapas** (cada una deja la app usable):
+1. **8.1 · Barra de transición (hecha, 2026-11-15; sin probar en la app).** Con el Estudio abierto, una tarjeta de 52 px bajo el vídeo (el vídeo cede esa franja; las columnas laterales conservan su altura) con el título «Transición», *Suave | Corte* y la duración *0,2 s | 0,4 s | 0,8 s* (apagada con Corte). Dato nuevo `scene_transition_ms` (guardado; por defecto 400; el núcleo lo acota a 100–2000 ms), acción `SetTransitionMs` y `ScenesView.transition_ms`. Datos puros en `canvas_bar.rs`. El selector de Ajustes sigue igual.
+2. **8.2 · Herramientas del lienzo.** Interruptor de imán (hoy siempre activo), guías visibles al pegarse (líneas sobre la imagen), cuadrícula opcional y «Ajustar» (la capa elegida a la imagen entera).
+3. **8.3 · Zoom.** Aplazable: el renderizador solo pinta un rectángulo; hace falta decidir si el zoom es solo del editor o de la imagen.
+
 ## 6. Decisiones
 
 **Tomadas (2026-11-14):**

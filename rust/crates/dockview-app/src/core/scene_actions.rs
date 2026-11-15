@@ -91,6 +91,7 @@ impl Core {
             selected: self.view.layer_selected.filter(|i| *i < layers.len()),
             editing: self.view.scene_editing && active.is_some(),
             transition: self.settings.scene_transition,
+            transition_ms: self.settings.scene_transition_ms,
             layers,
         }
     }

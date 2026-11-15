@@ -113,6 +113,19 @@ pub enum SceneTransition {
     Cut,
 }
 
+/// The durations of a smooth scene change the interface offers, in
+/// milliseconds, shortest first.
+pub const TRANSITION_CHOICES_MS: [u32; 3] = [200, 400, 800];
+/// The shortest and the longest a smooth scene change may last, in milliseconds.
+pub const MIN_TRANSITION_MS: u32 = 100;
+pub const MAX_TRANSITION_MS: u32 = 2000;
+/// How long a smooth scene change lasts unless the user chose otherwise.
+pub const DEFAULT_TRANSITION_MS: u32 = 400;
+
+fn default_transition_ms() -> u32 {
+    DEFAULT_TRANSITION_MS
+}
+
 /// Quality of the video the replay buffer and recordings are encoded at. One
 /// encoder serves both, so it is one choice.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -255,6 +268,9 @@ pub struct AppSettings {
     pub video_mode: VideoModePref,
     /// How the picture changes from one scene to another.
     pub scene_transition: SceneTransition,
+    /// How long a smooth scene change takes, in milliseconds.
+    #[serde(default = "default_transition_ms")]
+    pub scene_transition_ms: u32,
     /// What the user chose about screenshots.
     #[serde(skip_serializing_if = "CaptureSettings::is_default")]
     pub capture: CaptureSettings,
@@ -301,6 +317,7 @@ impl Default for AppSettings {
             language: LangMode::default(),
             video_mode: VideoModePref::default(),
             scene_transition: SceneTransition::default(),
+            scene_transition_ms: DEFAULT_TRANSITION_MS,
             capture: CaptureSettings::default(),
             stream: StreamSettings::default(),
             replay_enabled: true,
@@ -478,6 +495,7 @@ mod tests {
             language: LangMode::Es,
             video_mode: VideoModePref::Compressed,
             scene_transition: SceneTransition::Cut,
+            scene_transition_ms: 800,
             capture: CaptureSettings {
                 copy: false,
                 folder: Some(r"D:\shots".into()),
@@ -558,6 +576,7 @@ mod tests {
         let old: AppSettings = serde_json::from_str("{}").unwrap();
         assert_eq!(old.video_mode, VideoModePref::Auto);
         assert_eq!(old.scene_transition, SceneTransition::Smooth);
+        assert_eq!(old.scene_transition_ms, DEFAULT_TRANSITION_MS);
         let cut = AppSettings {
             scene_transition: SceneTransition::Cut,
             ..AppSettings::default()

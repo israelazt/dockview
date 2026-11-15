@@ -21,7 +21,7 @@ use dockview_domain::frame::FrameSlot;
 use dockview_domain::ports::{CaptureHandle, SceneCompositor, ScreenHandle, SourceMachine};
 use dockview_domain::scene::{NormRect, Scene, SceneLayer, SourceRef};
 use dockview_domain::sources::{CaptureOptions, CaptureStatus, Layer, ScreenStatus};
-use dockview_domain::transition::{Easing, Transition, DEFAULT_DURATION};
+use dockview_domain::transition::{Easing, Transition};
 
 use crate::sources::Reconnect;
 
@@ -65,7 +65,7 @@ pub struct Overlay {
 
 /// A scene change in progress.
 pub struct ActiveTransition {
-    transition: Transition,
+    pub(crate) transition: Transition,
     started: Instant,
     /// Pictures asked of the compositor so far (printed with `--stats`).
     ticks: u32,
@@ -289,9 +289,15 @@ impl ScenesService {
     /// Starts the change from `old` to `new`. `leaving` are the overlays of the
     /// old scene that the new one does not have: they fade out and are dropped
     /// when the change ends.
-    pub fn begin_transition(&mut self, old: &Scene, new: &Scene, leaving: Vec<Overlay>) {
+    pub fn begin_transition(
+        &mut self,
+        old: &Scene,
+        new: &Scene,
+        leaving: Vec<Overlay>,
+        duration: Duration,
+    ) {
         self.transition = Some(ActiveTransition {
-            transition: Transition::new(old, new, DEFAULT_DURATION, Easing::EaseInOut),
+            transition: Transition::new(old, new, duration, Easing::EaseInOut),
             started: Instant::now(),
             ticks: 0,
             leaving,

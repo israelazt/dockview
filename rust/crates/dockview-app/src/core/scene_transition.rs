@@ -8,6 +8,7 @@
 //! of the application: which sources to start and keep.
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use dockview_domain::events::AppEvent;
 use dockview_domain::frame::FrameSlot;
@@ -59,7 +60,9 @@ impl Core {
 
         match old {
             Some(old) => {
-                self.scenes.begin_transition(&old, scene, previous);
+                let duration = Duration::from_millis(u64::from(self.settings.scene_transition_ms));
+                self.scenes
+                    .begin_transition(&old, scene, previous, duration);
                 self.tick_transition();
             }
             // Nothing to come from: just show the scene.

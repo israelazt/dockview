@@ -236,6 +236,8 @@ pub enum Action {
     SetLang(LangMode),
     SetVideoMode(VideoModePref),
     SetSceneTransition(SceneTransition),
+    /// How long a smooth scene change takes, in milliseconds.
+    SetTransitionMs(u32),
     ToggleStats,
     /// Open or close the Studio side panel.
     ToggleStudio,
@@ -340,6 +342,8 @@ pub struct ScenesView {
     pub editing: bool,
     /// How the picture changes between scenes.
     pub transition: SceneTransition,
+    /// How long a smooth change takes, in milliseconds.
+    pub transition_ms: u32,
 }
 
 #[cfg(test)]

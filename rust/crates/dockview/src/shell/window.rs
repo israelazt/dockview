@@ -94,7 +94,8 @@ impl Shell {
             Scope::Full
         });
         let (rest_pointer, panel_pointer) = route_pointer(&pointer, place.panel);
-        let (video_pointer, side_pointer) = route_pointer(&rest_pointer, place.side);
+        let (rest_pointer, side_pointer) = route_pointer(&rest_pointer, place.side);
+        let (video_pointer, bar_pointer) = route_pointer(&rest_pointer, place.bar);
         // The first seconds include start-up work; wait for steady numbers.
         let settled = !self.core.cli().show_stats || self.core.measurement_windows() >= 3;
         let capture = self.core.cli().screenshot.is_some()
@@ -156,6 +157,7 @@ impl Shell {
         let rail = &mut self.rail;
         let strip = &mut self.strip;
         let stats_panel = &mut self.stats_panel;
+        let canvas_bar = &mut self.canvas_bar;
         let (stats, stats_open) = (self.core.stats(), self.core.stats_open());
         let animations = self.animations;
         let toasts = &mut self.toasts;
@@ -177,6 +179,14 @@ impl Shell {
                     self.studio_openness,
                 );
                 studio::draw_status(ui, &model, stats, &place, self.studio_openness);
+                studio::draw_bar(
+                    ui,
+                    canvas_bar,
+                    &model,
+                    &place,
+                    &bar_pointer,
+                    self.studio_openness,
+                );
                 // What floats over the video anchors to the video's room.
                 // The layer editor sits on the picture, under the controls; what
                 // the controls (the pill) use is not the editor's.
@@ -325,6 +335,7 @@ impl Shell {
             .chain(self.hud.take_actions())
             .chain(self.source_picker.take_actions())
             .chain(self.stats_panel.take_actions())
+            .chain(self.canvas_bar.take_actions())
             .chain(self.navbar.take_actions())
             .chain(self.rail.take_actions())
             .chain(self.studio.take_actions())

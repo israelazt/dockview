@@ -19,6 +19,7 @@ pub mod stats;
 mod stats_data;
 pub mod strip;
 pub mod studio;
+pub mod canvas_bar;
 pub mod studio_status;
 #[cfg(test)]
 mod test_model;

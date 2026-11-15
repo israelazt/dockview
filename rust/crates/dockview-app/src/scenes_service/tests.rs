@@ -6,6 +6,7 @@ use std::time::{Duration, Instant};
 use dockview_domain::frame::FrameSlot;
 use dockview_domain::scene::{NormRect, Scene, SceneLayer, SourceRef};
 use dockview_domain::sources::{CaptureStatus, CaptureTarget, ScreenOptions, ScreenStatus};
+use dockview_domain::transition::DEFAULT_DURATION;
 
 use super::{Overlay, OverlayRunning, SceneEnv, ScenesService};
 use crate::sources::Reconnect;
@@ -294,7 +295,7 @@ fn a_change_between_scenes_feeds_the_compositor_and_can_be_finished_at_once() {
     // The new scene's overlay is already running (Core started it).
     service.overlays.push(world.screen_overlay(1, "a"));
 
-    service.begin_transition(&old, &new, Vec::new());
+    service.begin_transition(&old, &new, Vec::new(), DEFAULT_DURATION);
     assert!(service.transition.is_some());
     // Mid-change the compositor is fed by the change, not by `sync_compositor`.
     let finished = service.tick_transition(&world.env(), false);
@@ -321,7 +322,12 @@ fn overlays_that_leave_keep_running_until_the_change_ends() {
     old.add_layer(source("gone"));
     let new = Scene::with_base("new", source("main"));
 
-    service.begin_transition(&old, &new, vec![world.screen_overlay(1, "gone")]);
+    service.begin_transition(
+        &old,
+        &new,
+        vec![world.screen_overlay(1, "gone")],
+        DEFAULT_DURATION,
+    );
     assert!(service.leaving_has_screen());
 
     service.finish_transition(&world.env());

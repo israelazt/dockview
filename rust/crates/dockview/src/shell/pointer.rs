@@ -53,6 +53,7 @@ impl Shell {
         let pointer = self.controls.wants_pointer()
             || self.studio.wants_pointer()
             || self.side.wants_pointer()
+            || self.canvas_bar.wants_pointer()
             || self.navbar.wants_pointer()
             || self.hud.wants_pointer()
             || self.source_picker.wants_pointer()

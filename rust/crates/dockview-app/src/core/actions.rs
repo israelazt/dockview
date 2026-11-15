@@ -305,6 +305,12 @@ impl Core {
             Action::SetSceneTransition(transition) => {
                 self.settings.scene_transition = transition;
             }
+            Action::SetTransitionMs(ms) => {
+                self.settings.scene_transition_ms = ms.clamp(
+                    dockview_domain::settings::MIN_TRANSITION_MS,
+                    dockview_domain::settings::MAX_TRANSITION_MS,
+                );
+            }
             Action::SetVideoMode(mode) => {
                 self.settings.video_mode = mode;
                 // A deliberate choice ends any automatic switch and allows a

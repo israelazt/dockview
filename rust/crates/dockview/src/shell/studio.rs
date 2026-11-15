@@ -9,6 +9,7 @@ use dockview_ui::Rect;
 /// Space around the video and the panel while the Studio is open, in logical
 /// pixels: both become cards with air around them (it grows with the opening).
 pub const CARD_MARGIN: f32 = 12.0;
+pub use dockview_ui::canvas_bar::BAR_H;
 pub use dockview_ui::studio_status::STATUS_H;
 
 /// The room the video and the panel have in this frame.
@@ -26,6 +27,9 @@ pub struct StudioPlace {
     /// The status strip over the cards, in logical pixels; `None` when the
     /// Studio is closed.
     pub status: Option<Rect>,
+    /// The transition bar under the video, in logical pixels; `None` when the
+    /// Studio is closed.
+    pub bar: Option<Rect>,
     /// What the left column measures when fully open, in logical pixels.
     pub side_full_width: f32,
     /// The width left for the video, in logical pixels: what the controls over
@@ -52,8 +56,8 @@ pub fn place(window: (u32, u32), scale: f32, openness: f32) -> StudioPlace {
     // panel has it at right, top and bottom and the other half to the video.
     // Every card has the margin towards the window's edge and half of it
     // towards its neighbour, so two cards are one margin apart.
-    let (video, panel, side, status) = match layout.panel {
-        None => (layout.video, None, None, None),
+    let (video, panel, side, status, bar) = match layout.panel {
+        None => (layout.video, None, None, None, None),
         Some(p) => {
             let m = (CARD_MARGIN * scale * openness.clamp(0.0, 1.0)).round();
             let ww = window.0 as f32;
@@ -67,7 +71,18 @@ pub fn place(window: (u32, u32), scale: f32, openness: f32) -> StudioPlace {
                     h: (r.h - m * 2.0).max(1.0),
                 }
             };
-            let (video, panel) = (card(layout.video), card(p));
+            let (mut video, panel) = (card(layout.video), card(p));
+            // The transition bar takes a band under the video (one margin of
+            // air above it); the other cards keep the full height.
+            let bar_h = BAR_H * scale * open;
+            let taken = (bar_h + m).min((video.h - 1.0).max(0.0));
+            video.h -= taken;
+            let bar = PhysicalRect {
+                x: video.x,
+                y: video.y + video.h + m,
+                w: video.w,
+                h: (taken - m).max(0.0),
+            };
             let side = layout.side.map(card);
             let left = side.map_or(video.x, |s| s.x);
             let strip = PhysicalRect {
@@ -76,7 +91,7 @@ pub fn place(window: (u32, u32), scale: f32, openness: f32) -> StudioPlace {
                 w: panel.x + panel.w - left,
                 h: STATUS_H * scale * open,
             };
-            (video, Some(panel), side, Some(strip))
+            (video, Some(panel), side, Some(strip), Some(bar))
         }
     };
     StudioPlace {
@@ -84,6 +99,7 @@ pub fn place(window: (u32, u32), scale: f32, openness: f32) -> StudioPlace {
         panel: panel.map(logical),
         side: side.map(logical),
         status: status.map(logical),
+        bar: bar.map(logical),
         side_full_width: full.side.map_or(0.0, |s| s.w / scale - CARD_MARGIN * 1.5),
         full_width: full.panel.map_or(0.0, |p| p.w / scale - CARD_MARGIN * 1.5),
         video_width: video.w / scale,
@@ -103,6 +119,26 @@ pub fn draw_status(
         ui.set_opacity(openness.clamp(0.0, 1.0));
         dockview_ui::studio_status::draw(ui, model, stats, area);
         ui.set_opacity(1.0);
+    }
+}
+
+/// The transition bar under the video, fading in with the Studio.
+pub fn draw_bar(
+    ui: &mut dockview_ui::Ui,
+    bar: &mut dockview_ui::canvas_bar::CanvasBar,
+    model: &dockview_domain::view::Model,
+    place: &StudioPlace,
+    pointer: &dockview_ui::input::Pointer,
+    openness: f32,
+) {
+    match place.bar.filter(|a| a.h > 0.0) {
+        Some(area) => {
+            ui.set_opacity(openness.clamp(0.0, 1.0));
+            bar.frame(ui, model, area, pointer);
+            ui.set_opacity(1.0);
+        }
+        // Nothing is drawn, so nothing can be pointed at.
+        None => bar.frame_hidden(),
     }
 }
 
@@ -176,7 +212,7 @@ mod tests {
         let band = STATUS_H + m;
         assert_eq!(
             (p.video.x, p.video.y, p.video.h),
-            (m, m + band, 1080.0 - 2.0 * m - band)
+            (m, m + band, 1080.0 - 2.0 * m - band - BAR_H - m)
         );
         assert_eq!(p.video.w, 780.0 - 1.5 * m);
         // The panel: the other half towards the video, the margin at right, top and bottom.
@@ -189,7 +225,11 @@ mod tests {
         // A gap of one margin between the two cards.
         assert_eq!(panel.x - (p.video.x + p.video.w), m);
         assert_eq!(p.video_width, p.video.w);
-        assert_eq!(p.full_width, 320.0 - 1.5 * CARD_MARGIN, "the card, not the slot");
+        assert_eq!(
+            p.full_width,
+            320.0 - 1.5 * CARD_MARGIN,
+            "the card, not the slot"
+        );
     }
 
     #[test]
@@ -221,7 +261,11 @@ mod tests {
     fn a_small_window_never_gives_the_panel_more_than_its_share() {
         let p = place((600, 400), 1.0, 1.0);
         let panel = p.panel.expect("open");
-        assert_eq!(p.full_width, 270.0 - 1.5 * CARD_MARGIN, "45 % of 600, as a card");
+        assert_eq!(
+            p.full_width,
+            270.0 - 1.5 * CARD_MARGIN,
+            "45 % of 600, as a card"
+        );
         assert_eq!(panel.w, 270.0 - 1.5 * CARD_MARGIN);
         assert!(p.video.w + panel.w < 600.0);
     }
@@ -253,6 +297,30 @@ mod tests {
         assert_eq!(place((1920, 1080), 1.0, 0.0).status, None);
         let narrow = place((1100, 700), 1.0, 1.0);
         assert_eq!(narrow.status.unwrap().x, narrow.video_logical.x);
+    }
+
+    #[test]
+    fn the_transition_bar_sits_under_the_video_one_margin_away_and_as_wide() {
+        let p = place((1920, 1080), 1.0, 1.0);
+        let (bar, v) = (p.bar.expect("open"), p.video_logical);
+        assert_eq!((bar.x, bar.w, bar.h), (v.x, v.w, BAR_H));
+        assert_eq!(bar.y - (v.y + v.h), CARD_MARGIN);
+        assert_eq!(
+            bar.y + bar.h,
+            1080.0 - CARD_MARGIN,
+            "the margin at the bottom"
+        );
+        // The other cards keep their whole height.
+        let panel = p.panel.expect("open");
+        assert_eq!(panel.y + panel.h, bar.y + bar.h);
+        assert_eq!(place((1920, 1080), 1.0, 0.0).bar, None);
+    }
+
+    #[test]
+    fn a_very_short_window_keeps_some_video_above_the_bar() {
+        let p = place((1100, 200), 1.0, 1.0);
+        assert!(p.video.h >= 1.0, "{}", p.video.h);
+        assert!(p.bar.expect("open").h >= 0.0);
     }
 
     #[test]
