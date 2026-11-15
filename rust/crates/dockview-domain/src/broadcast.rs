@@ -3,6 +3,8 @@
 //!
 //! The encoders are implemented by the platform (Media Foundation on Windows,
 //! VAAPI/NVENC/x264 on Linux); the streaming service only sees these traits.
+//! They are not `Send`: Media Foundation objects live on the thread that made
+//! them, so the stream thread creates its encoders itself.
 
 use crate::encoded::EncodedFrame;
 use crate::frame::Frame;
@@ -52,7 +54,7 @@ impl VideoEncoderConfig {
 }
 
 /// Turns pictures into H.264, for a live stream.
-pub trait VideoEncoder: Send {
+pub trait VideoEncoder {
     /// Encodes one picture; the result may be empty while the encoder fills
     /// its pipeline, and may hold more than one unit when it drains.
     fn encode(&mut self, frame: &Frame) -> Result<Vec<EncodedFrame>, String>;
@@ -80,8 +82,24 @@ pub struct AudioConfig {
     pub specific_config: Vec<u8>,
 }
 
+/// The AudioSpecificConfig of AAC-LC (two bytes): what a player needs to read
+/// the stream. `None` for a sample rate AAC has no code for.
+pub fn audio_specific_config(sample_rate: u32, channels: u8) -> Option<Vec<u8>> {
+    const RATES: [u32; 13] = [
+        96_000, 88_200, 64_000, 48_000, 44_100, 32_000, 24_000, 22_050, 16_000, 12_000, 11_025,
+        8_000, 7_350,
+    ];
+    let index = RATES.iter().position(|&r| r == sample_rate)? as u16;
+    if !(1..=7).contains(&channels) {
+        return None;
+    }
+    // 5 bits object type (2 = AAC-LC), 4 bits rate, 4 bits channels, 3 zeros.
+    let bits = (2u16 << 11) | (index << 7) | (u16::from(channels) << 3);
+    Some(bits.to_be_bytes().to_vec())
+}
+
 /// Turns 48 kHz stereo PCM into AAC.
-pub trait AudioEncoder: Send {
+pub trait AudioEncoder {
     /// What the player needs to decode what `encode` returns.
     fn config(&self) -> AudioConfig;
     /// Encodes interleaved 32-bit float samples stamped `timestamp` (100 ns).
@@ -163,6 +181,15 @@ mod tests {
             ..Default::default()
         };
         assert!((s.drop_ratio() - 0.1).abs() < 1e-6);
+    }
+
+    #[test]
+    fn aac_lc_config_for_48k_stereo_is_1190() {
+        assert_eq!(audio_specific_config(48_000, 2), Some(vec![0x11, 0x90]));
+        assert_eq!(audio_specific_config(44_100, 2), Some(vec![0x12, 0x10]));
+        assert_eq!(audio_specific_config(44_100, 1), Some(vec![0x12, 0x08]));
+        assert_eq!(audio_specific_config(12_345, 2), None);
+        assert_eq!(audio_specific_config(48_000, 0), None);
     }
 
     #[test]

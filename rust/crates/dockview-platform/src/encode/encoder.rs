@@ -19,11 +19,19 @@ pub struct H264Encoder {
     frame_duration: i64,
     provides_samples: bool,
     output_buffer_len: u32,
+    /// The codec settings, when the encoder has them (rate changes, forced
+    /// keyframes).
+    codec: Option<ICodecAPI>,
 }
 
 impl H264Encoder {
     /// Opens the first hardware H.264 encoder. Fails when there is none.
-    pub fn new(_session: &MfSession, settings: &EncodeSettings) -> Result<Self> {
+    pub fn new(session: &MfSession, settings: &EncodeSettings) -> Result<Self> {
+        Self::with_gop(session, settings, settings.fps)
+    }
+
+    /// Like [`H264Encoder::new`], with a keyframe every `gop` pictures.
+    pub fn with_gop(_session: &MfSession, settings: &EncodeSettings, gop: u32) -> Result<Self> {
         let EncodeSettings {
             width,
             height,
@@ -86,14 +94,15 @@ impl H264Encoder {
 
             // Best-effort tuning: constant bitrate, a keyframe every second so
             // the buffer can be cut cleanly, no B-frames (lower latency).
-            if let Ok(codec) = transform.cast::<ICodecAPI>() {
+            let codec = transform.cast::<ICodecAPI>().ok();
+            if let Some(codec) = &codec {
                 let set = |key: &windows::core::GUID, value: u32| {
                     let variant = variant_u32(value);
                     let _ = codec.SetValue(key, &variant);
                 };
                 set(&CODECAPI_AVEncCommonRateControlMode, 0); // CBR
                 set(&CODECAPI_AVEncCommonMeanBitRate, bitrate_bps);
-                set(&CODECAPI_AVEncMPVGOPSize, fps);
+                set(&CODECAPI_AVEncMPVGOPSize, gop.max(1));
                 set(&CODECAPI_AVEncMPVDefaultBPictureCount, 0);
                 let _ = codec.SetValue(&CODECAPI_AVLowLatencyMode, &variant_bool(true));
             }
@@ -113,8 +122,30 @@ impl H264Encoder {
                 frame_duration: frame_duration_100ns(fps),
                 provides_samples,
                 output_buffer_len: info.cbSize.max(1 << 20),
+                codec,
             })
         }
+    }
+
+    /// Changes the target bitrate while encoding (adaptive bitrate). Encoders
+    /// that cannot change it on the fly report an error.
+    pub fn set_bitrate(&mut self, bitrate_bps: u32) -> Result<()> {
+        let codec = self
+            .codec
+            .as_ref()
+            .ok_or_else(|| Error::new(E_FAIL, "the encoder has no codec settings"))?;
+        // SAFETY: SetValue with a well-formed VT_UI4 variant.
+        unsafe { codec.SetValue(&CODECAPI_AVEncCommonMeanBitRate, &variant_u32(bitrate_bps)) }
+    }
+
+    /// Makes the next picture a keyframe.
+    pub fn request_keyframe(&mut self) -> Result<()> {
+        let codec = self
+            .codec
+            .as_ref()
+            .ok_or_else(|| Error::new(E_FAIL, "the encoder has no codec settings"))?;
+        // SAFETY: SetValue with a well-formed VT_UI4 variant.
+        unsafe { codec.SetValue(&CODECAPI_AVEncVideoForceKeyFrame, &variant_u32(1)) }
     }
 
     /// The compressed stream's media type. After the first frames it carries

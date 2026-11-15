@@ -165,21 +165,5 @@ pub(super) fn encode_frame(
     timestamp: i64,
     scratch: &mut Vec<u8>,
 ) -> windows::core::Result<Vec<EncodedFrame>> {
-    if frame.stride == frame.width {
-        return encoder.encode(&frame.data, timestamp);
-    }
-    let (w, h, stride) = (
-        frame.width as usize,
-        frame.height as usize,
-        frame.stride as usize,
-    );
-    scratch.clear();
-    for row in 0..h {
-        scratch.extend_from_slice(&frame.data[row * stride..row * stride + w]);
-    }
-    let uv = stride * h;
-    for row in 0..h / 2 {
-        scratch.extend_from_slice(&frame.data[uv + row * stride..uv + row * stride + w]);
-    }
-    encoder.encode(scratch, timestamp)
+    encoder.encode(crate::encode::tight_nv12(frame, scratch), timestamp)
 }

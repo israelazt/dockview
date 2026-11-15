@@ -4,11 +4,15 @@
 //! with NVENC, Quick Sync or AMD VCN the GPU's dedicated encoder does the
 //! work; otherwise Windows falls back to its (much slower) software encoder.
 
+mod aac;
 mod encoder;
+mod live;
 mod remuxer;
 mod writer;
 
+pub use aac::AacEncoder;
 pub use encoder::H264Encoder;
+pub use live::LiveVideoEncoder;
 pub use remuxer::Mp4Remuxer;
 use writer::pack;
 pub use writer::Mp4Writer;
@@ -19,25 +23,26 @@ use windows::core::{Error, Interface, Result, HSTRING};
 use windows::Win32::Foundation::{E_FAIL, VARIANT_BOOL};
 use windows::Win32::Media::MediaFoundation::{
     eAVEncH264VProfile_High, CODECAPI_AVEncCommonMeanBitRate, CODECAPI_AVEncCommonRateControlMode,
-    CODECAPI_AVEncMPVDefaultBPictureCount, CODECAPI_AVEncMPVGOPSize, CODECAPI_AVLowLatencyMode,
-    ICodecAPI, IMFActivate, IMFAttributes, IMFMediaEventGenerator, IMFMediaType, IMFSinkWriter,
-    IMFTransform, METransformDrainComplete, METransformHaveOutput, METransformNeedInput,
-    MFAudioFormat_AAC, MFAudioFormat_PCM, MFCreateAttributes, MFCreateMediaType,
-    MFCreateMemoryBuffer, MFCreateSample, MFCreateSinkWriterFromURL, MFMediaType_Audio,
-    MFMediaType_Video, MFSampleExtension_CleanPoint, MFTEnumEx, MFT_FRIENDLY_NAME_Attribute,
-    MFTranscodeContainerType_FMPEG4, MFVideoFormat_H264, MFVideoFormat_NV12,
-    MFVideoInterlace_Progressive, MFT_CATEGORY_VIDEO_ENCODER, MFT_ENUM_FLAG_HARDWARE,
-    MFT_ENUM_FLAG_SORTANDFILTER, MFT_MESSAGE_COMMAND_DRAIN, MFT_MESSAGE_NOTIFY_BEGIN_STREAMING,
-    MFT_MESSAGE_NOTIFY_END_STREAMING, MFT_MESSAGE_NOTIFY_START_OF_STREAM, MFT_OUTPUT_DATA_BUFFER,
-    MFT_OUTPUT_STREAM_PROVIDES_SAMPLES, MFT_REGISTER_TYPE_INFO, MF_EVENT_FLAG_NO_WAIT,
-    MF_E_NO_EVENTS_AVAILABLE, MF_E_TRANSFORM_NEED_MORE_INPUT, MF_LOW_LATENCY,
-    MF_MT_AAC_AUDIO_PROFILE_LEVEL_INDICATION, MF_MT_AAC_PAYLOAD_TYPE,
-    MF_MT_ALL_SAMPLES_INDEPENDENT, MF_MT_AUDIO_AVG_BYTES_PER_SECOND, MF_MT_AUDIO_BITS_PER_SAMPLE,
-    MF_MT_AUDIO_BLOCK_ALIGNMENT, MF_MT_AUDIO_NUM_CHANNELS, MF_MT_AUDIO_SAMPLES_PER_SECOND,
-    MF_MT_AVG_BITRATE, MF_MT_DEFAULT_STRIDE, MF_MT_FRAME_RATE, MF_MT_FRAME_SIZE,
-    MF_MT_INTERLACE_MODE, MF_MT_MAJOR_TYPE, MF_MT_MPEG2_PROFILE, MF_MT_MPEG_SEQUENCE_HEADER,
-    MF_MT_PIXEL_ASPECT_RATIO, MF_MT_SUBTYPE, MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS,
-    MF_SINK_WRITER_DISABLE_THROTTLING, MF_TRANSCODE_CONTAINERTYPE, MF_TRANSFORM_ASYNC_UNLOCK,
+    CODECAPI_AVEncMPVDefaultBPictureCount, CODECAPI_AVEncMPVGOPSize,
+    CODECAPI_AVEncVideoForceKeyFrame, CODECAPI_AVLowLatencyMode, ICodecAPI, IMFActivate,
+    IMFAttributes, IMFMediaEventGenerator, IMFMediaType, IMFSinkWriter, IMFTransform,
+    METransformDrainComplete, METransformHaveOutput, METransformNeedInput, MFAudioFormat_AAC,
+    MFAudioFormat_PCM, MFCreateAttributes, MFCreateMediaType, MFCreateMemoryBuffer, MFCreateSample,
+    MFCreateSinkWriterFromURL, MFMediaType_Audio, MFMediaType_Video, MFSampleExtension_CleanPoint,
+    MFTEnumEx, MFT_FRIENDLY_NAME_Attribute, MFTranscodeContainerType_FMPEG4, MFVideoFormat_H264,
+    MFVideoFormat_NV12, MFVideoInterlace_Progressive, MFT_CATEGORY_VIDEO_ENCODER,
+    MFT_ENUM_FLAG_HARDWARE, MFT_ENUM_FLAG_SORTANDFILTER, MFT_MESSAGE_COMMAND_DRAIN,
+    MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, MFT_MESSAGE_NOTIFY_END_STREAMING,
+    MFT_MESSAGE_NOTIFY_START_OF_STREAM, MFT_OUTPUT_DATA_BUFFER, MFT_OUTPUT_STREAM_PROVIDES_SAMPLES,
+    MFT_REGISTER_TYPE_INFO, MF_EVENT_FLAG_NO_WAIT, MF_E_NO_EVENTS_AVAILABLE,
+    MF_E_TRANSFORM_NEED_MORE_INPUT, MF_LOW_LATENCY, MF_MT_AAC_AUDIO_PROFILE_LEVEL_INDICATION,
+    MF_MT_AAC_PAYLOAD_TYPE, MF_MT_ALL_SAMPLES_INDEPENDENT, MF_MT_AUDIO_AVG_BYTES_PER_SECOND,
+    MF_MT_AUDIO_BITS_PER_SAMPLE, MF_MT_AUDIO_BLOCK_ALIGNMENT, MF_MT_AUDIO_NUM_CHANNELS,
+    MF_MT_AUDIO_SAMPLES_PER_SECOND, MF_MT_AVG_BITRATE, MF_MT_DEFAULT_STRIDE, MF_MT_FRAME_RATE,
+    MF_MT_FRAME_SIZE, MF_MT_INTERLACE_MODE, MF_MT_MAJOR_TYPE, MF_MT_MPEG2_PROFILE,
+    MF_MT_MPEG_SEQUENCE_HEADER, MF_MT_PIXEL_ASPECT_RATIO, MF_MT_SUBTYPE,
+    MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS, MF_SINK_WRITER_DISABLE_THROTTLING,
+    MF_TRANSCODE_CONTAINERTYPE, MF_TRANSFORM_ASYNC_UNLOCK,
 };
 use windows::Win32::System::Com::CoTaskMemFree;
 use windows::Win32::System::Variant::{
@@ -45,6 +50,7 @@ use windows::Win32::System::Variant::{
 };
 
 use dockview_domain::encoded::EncodedFrame;
+use dockview_domain::frame::Frame;
 
 use crate::mf::{get_string, MfSession};
 
@@ -56,6 +62,28 @@ pub fn frame_duration_100ns(fps: u32) -> i64 {
 /// Bytes in a tightly packed NV12 frame.
 pub fn nv12_len(width: u32, height: u32) -> usize {
     width as usize * height as usize * 3 / 2
+}
+
+/// The NV12 bytes of `frame` with no padding between rows: the frame's own
+/// data when its stride is the width, else a repacked copy in `scratch`.
+pub fn tight_nv12<'a>(frame: &'a Frame, scratch: &'a mut Vec<u8>) -> &'a [u8] {
+    if frame.stride == frame.width {
+        return &frame.data;
+    }
+    let (w, h, stride) = (
+        frame.width as usize,
+        frame.height as usize,
+        frame.stride as usize,
+    );
+    scratch.clear();
+    for row in 0..h {
+        scratch.extend_from_slice(&frame.data[row * stride..row * stride + w]);
+    }
+    let uv = stride * h;
+    for row in 0..h / 2 {
+        scratch.extend_from_slice(&frame.data[uv + row * stride..uv + row * stride + w]);
+    }
+    scratch
 }
 
 /// Names of the hardware H.264 encoders Windows can use on this PC, best
