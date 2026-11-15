@@ -120,7 +120,7 @@ mod tests {
             scale: 1.0,
             maximized: false,
             fullscreen: false,
-            panel_open: true,
+            rail_out: 1.0,
         }
     }
 

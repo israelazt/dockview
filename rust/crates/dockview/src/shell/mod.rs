@@ -160,7 +160,7 @@ impl Shell {
             scale: self.ui_scale,
             maximized,
             fullscreen: self.core.fullscreen(),
-            panel_open: self.core.studio_panel_open(),
+            rail_out: self.studio.openness(),
         }
     }
 
@@ -230,9 +230,12 @@ impl Shell {
             .cursor_phys
             .is_some_and(|(x, y)| chrome.zone_at(x, y) == Zone::Rail);
         let top = (chrome.bar_height() + chrome.nav_height()) / self.ui_scale.max(0.1);
+        // While it slides, its icons are that much to the left.
+        let slide =
+            dockview_domain::window_chrome::RAIL_WIDTH * (1.0 - chrome.rail_out.clamp(0.0, 1.0));
         Pointer {
             pos: if over_rail && !self.chrome_held {
-                self.pointer.pos.map(|(x, y)| (x, y - top))
+                self.pointer.pos.map(|(x, y)| (x + slide, y - top))
             } else {
                 None
             },

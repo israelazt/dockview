@@ -125,6 +125,11 @@ impl Shell {
         let now = Instant::now();
         let dt = now.duration_since(self.last_frame).as_secs_f32().min(0.1);
         self.last_frame = now;
+        // The Studio panel opens (and in full screen, goes at once) and takes
+        // its room; the pointer belongs to the video or to the panel.
+        self.studio
+            .update(model.studio_visible(), model.fullscreen, dt);
+        // The rail slides with the panel, so the frame is read after it moved.
         let chrome = self.chrome();
         let bar_px = chrome.bar_height();
         let bar_state = TitleBarState {
@@ -136,10 +141,6 @@ impl Shell {
         let nav_pointer = self.nav_pointer(&chrome);
         let rail_pointer = self.rail_pointer(&chrome);
         let scale = self.ui_scale;
-        // The Studio panel opens (and in full screen, goes at once) and takes
-        // its room; the pointer belongs to the video or to the panel.
-        self.studio
-            .update(model.studio_visible(), model.fullscreen, dt);
         let window_size = self.window.as_ref().map_or((1, 1), |w| {
             let size = w.inner_size();
             (size.width, size.height)
@@ -277,7 +278,21 @@ impl Shell {
                     ui.set_inset_top(top_px / scale.max(0.1));
                     // Only with the panel open: the viewer has no rail.
                     if rail_px > 0.0 {
+                        // It slides in from the left, cut off at the edge of the
+                        // room it has taken so far.
+                        let slide = dockview_domain::window_chrome::RAIL_WIDTH
+                            * (1.0 - chrome.rail_out.clamp(0.0, 1.0));
+                        let (_, rail_h) = ui.logical_size();
+                        ui.set_clip(Some(dockview_ui::Rect::new(
+                            0.0,
+                            0.0,
+                            rail_px / scale.max(0.1),
+                            rail_h,
+                        )));
+                        ui.set_offset(-slide, 0.0);
                         rail.frame(ui, &model, &rail_pointer, rail_active, dt);
+                        ui.set_offset(0.0, 0.0);
+                        ui.set_clip(None);
                     }
                     ui.set_inset_left(rail_px / scale.max(0.1));
                     strip.frame(ui, &model);

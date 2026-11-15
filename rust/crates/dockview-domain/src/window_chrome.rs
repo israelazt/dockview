@@ -103,9 +103,10 @@ pub struct Chrome {
     pub maximized: bool,
     /// Full screen shows only the content: no bar and no resize edges.
     pub fullscreen: bool,
-    /// The Studio panel is open: only then is there an icon rail (the viewer
-    /// gives all its width to the picture).
-    pub panel_open: bool,
+    /// How far the icon rail is out, from 0 (not there: the viewer gives all
+    /// its width to the picture) to 1 (fully there, with the Studio panel
+    /// open). It follows the opening of the panel, so it slides in and out.
+    pub rail_out: f32,
 }
 
 impl Chrome {
@@ -153,17 +154,17 @@ impl Chrome {
 
     /// Width of the icon rail in physical pixels (0 in full screen).
     pub fn rail_width(&self) -> f32 {
-        if self.fullscreen || !self.panel_open {
+        if self.fullscreen {
             0.0
         } else {
-            self.px(RAIL_WIDTH)
+            (self.px(RAIL_WIDTH) * self.rail_out.clamp(0.0, 1.0)).round()
         }
     }
 
-    /// The icon rail, on the left under the row, or `None` in full screen.
+    /// The icon rail, on the left under the row, or `None` when it is not out.
     pub fn rail(&self) -> Option<Rect> {
         let top = self.bar_height() + self.nav_height();
-        (!self.fullscreen && self.panel_open).then(|| Rect {
+        (self.rail_width() > 0.0).then(|| Rect {
             x: 0.0,
             y: top,
             w: self.rail_width(),
@@ -301,7 +302,7 @@ mod tests {
             scale: 1.0,
             maximized: false,
             fullscreen: false,
-            panel_open: true,
+            rail_out: 1.0,
         }
     }
 
@@ -369,7 +370,7 @@ mod tests {
     #[test]
     fn without_the_panel_there_is_no_rail_and_the_content_has_the_width() {
         let c = Chrome {
-            panel_open: false,
+            rail_out: 0.0,
             ..chrome()
         };
         assert!(c.rail().is_none());
@@ -381,6 +382,26 @@ mod tests {
         assert_eq!(c.strip().unwrap().w, 1280.0);
         // The bar and the row do not depend on it.
         assert_eq!(c.zone_at(600.0, 40.0), Zone::Nav);
+    }
+
+    #[test]
+    fn while_it_slides_the_rail_and_the_content_share_the_width_in_proportion() {
+        let half = Chrome {
+            rail_out: 0.5,
+            ..chrome()
+        };
+        assert_eq!(half.rail_width(), 26.0);
+        assert_eq!(half.rail().unwrap().w, 26.0);
+        assert_eq!(half.content().x, 26.0);
+        assert_eq!(half.content().w, 1280.0 - 26.0);
+        assert_eq!(half.zone_at(20.0, 300.0), Zone::Rail);
+        assert_eq!(half.zone_at(30.0, 300.0), Zone::Content);
+        // Out of range values are held to 0..1.
+        let over = Chrome {
+            rail_out: 3.0,
+            ..chrome()
+        };
+        assert_eq!(over.rail_width(), RAIL_WIDTH);
     }
 
     #[test]

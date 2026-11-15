@@ -180,7 +180,7 @@ Hecho y subido, **sin abrir la app** (el autor está jugando; todo se verificó 
 
 **Estructura:** el modelo de la ventana gana la zona `Rail` y el contenido empieza a su derecha (`Ui::set_inset_left`); con pantalla completa la barra desaparece junto con el resto del marco.
 
-**Estado (2026-11-14):** T-3.1 a T-3.3 hechas y subidas, sin abrir la app. Falta la comprobación visual con la app real.
+**Estado (2026-11-14):** T-3.1 a T-3.3 hechas y subidas, sin abrir la app. La barra **entra y sale deslizándose** con el mismo ritmo que el panel de Estudio (el contenido y la franja de atajos se reparten el ancho a la vez). Falta la comprobación visual con la app real.
 
 ## 5.4. Parte 4 — Franja de atajos (diseño y estado)
 
