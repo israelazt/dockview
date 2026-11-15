@@ -275,7 +275,10 @@ impl Shell {
                     ui.set_inset_top(bar_px / scale.max(0.1));
                     navbar.frame(ui, &model, &nav_pointer);
                     ui.set_inset_top(top_px / scale.max(0.1));
-                    rail.frame(ui, &model, &rail_pointer, rail_active, dt);
+                    // Only with the panel open: the viewer has no rail.
+                    if rail_px > 0.0 {
+                        rail.frame(ui, &model, &rail_pointer, rail_active, dt);
+                    }
                     ui.set_inset_left(rail_px / scale.max(0.1));
                     strip.frame(ui, &model);
                     ui.set_inset_left(0.0);
