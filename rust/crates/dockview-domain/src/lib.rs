@@ -37,6 +37,7 @@ pub mod snap;
 pub mod sources;
 pub mod stats;
 pub mod stream;
+pub mod stream_settings;
 pub mod theme;
 pub mod transition;
 pub mod tray;

@@ -201,6 +201,38 @@ pub trait StreamMachine {
     ) -> Result<Box<dyn StreamHandle>, String>;
 }
 
+/// Where secrets (the stream key) are kept: apart from `settings.json`, and on
+/// Windows encrypted for the current user.
+pub trait SecretStore {
+    fn get(&self, name: &str) -> Option<String>;
+    fn set(&self, name: &str, value: &str) -> Result<(), String>;
+    fn remove(&self, name: &str);
+}
+
+/// Secrets kept in memory, for tests and previews.
+#[derive(Debug, Default)]
+pub struct MemorySecrets(std::sync::Mutex<std::collections::HashMap<String, String>>);
+
+impl SecretStore for MemorySecrets {
+    fn get(&self, name: &str) -> Option<String> {
+        self.0.lock().ok()?.get(name).cloned()
+    }
+
+    fn set(&self, name: &str, value: &str) -> Result<(), String> {
+        self.0
+            .lock()
+            .map_err(|_| "secrets are unavailable".to_string())?
+            .insert(name.to_string(), value.to_string());
+        Ok(())
+    }
+
+    fn remove(&self, name: &str) {
+        if let Ok(mut map) = self.0.lock() {
+            map.remove(name);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

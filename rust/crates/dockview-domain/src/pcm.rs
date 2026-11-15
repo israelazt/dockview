@@ -160,6 +160,9 @@ pub struct AudioTap {
     ready: Condvar,
     capacity: usize,
     dropped: AtomicU64,
+    /// A second queue that gets a copy of everything offered here (the stream
+    /// listening to the same sound as the replay).
+    mirror: Mutex<Option<std::sync::Arc<AudioTap>>>,
 }
 
 impl AudioTap {
@@ -169,12 +172,27 @@ impl AudioTap {
             ready: Condvar::new(),
             capacity: capacity.max(1),
             dropped: AtomicU64::new(0),
+            mirror: Mutex::new(None),
         }
+    }
+
+    /// Also sends everything offered from now on to `mirror` (or, with `None`,
+    /// stops doing so).
+    pub fn set_mirror(&self, mirror: Option<std::sync::Arc<AudioTap>>) {
+        *self.mirror.lock().unwrap_or_else(|e| e.into_inner()) = mirror;
     }
 
     /// Queues `samples` that were *received* at `arrived`; the chunk's start
     /// is that instant minus its own length.
     pub fn offer(&self, arrived: Instant, samples: &[f32]) {
+        let mirror = self
+            .mirror
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
+        if let Some(mirror) = mirror {
+            mirror.offer(arrived, samples);
+        }
         let length =
             Duration::from_secs_f64((samples.len() / CHANNELS) as f64 / f64::from(SAMPLE_RATE));
         let start = arrived.checked_sub(length).unwrap_or(arrived);
@@ -231,6 +249,19 @@ mod tests {
 
     fn second() -> i64 {
         TICKS_PER_SECOND
+    }
+
+    #[test]
+    fn a_mirror_gets_a_copy_until_it_is_removed() {
+        let tap = AudioTap::new(4);
+        let mirror = std::sync::Arc::new(AudioTap::new(4));
+        tap.set_mirror(Some(std::sync::Arc::clone(&mirror)));
+        tap.offer(Instant::now(), &tone(10, 0.5));
+        assert!(tap.take(Duration::ZERO).is_some());
+        assert_eq!(mirror.take(Duration::ZERO).unwrap().samples.len(), 20);
+        tap.set_mirror(None);
+        tap.offer(Instant::now(), &tone(10, 0.5));
+        assert!(mirror.take(Duration::ZERO).is_none());
     }
 
     #[test]
