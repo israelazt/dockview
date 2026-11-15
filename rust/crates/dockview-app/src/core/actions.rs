@@ -359,7 +359,6 @@ impl Core {
             KeyCommand::SyncEarlier => self.change_offset(-OFFSET_STEP_MS),
             KeyCommand::SyncLater => self.change_offset(OFFSET_STEP_MS),
             KeyCommand::CyclePreset => self.cycle_preset(),
-            KeyCommand::ToggleStats => self.view.stats_open = !self.view.stats_open,
             KeyCommand::ToggleHud => {
                 self.settings.hud = !self.settings.hud;
                 self.settings_changed();

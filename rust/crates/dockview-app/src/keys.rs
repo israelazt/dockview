@@ -17,7 +17,6 @@ pub enum KeyCommand {
     /// Undoes the last move or resize of a layer in the editor.
     Undo,
     CyclePreset,
-    ToggleStats,
     /// Shows or hides the row of readouts over the picture.
     ToggleHud,
     NextVideo,

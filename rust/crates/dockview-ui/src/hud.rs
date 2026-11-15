@@ -16,21 +16,25 @@ use super::{Rect, TextStyle, Ui};
 
 const ICON_HEALTH: char = '\u{e038}';
 
-const MARGIN: f32 = 12.0;
-const TOP: f32 = 10.0;
-const CARD_H: f32 = 40.0;
-const GAP: f32 = 8.0;
-const PAD: f32 = 12.0;
-const BUTTON: f32 = 40.0;
+const MARGIN: f32 = 16.0;
+const TOP: f32 = 12.0;
+const CARD_H: f32 = 52.0;
+const GAP: f32 = 12.0;
+const PAD: f32 = 18.0;
+const BUTTON: f32 = 52.0;
+/// Space between two pieces of a card.
+const PIECE_GAP: f32 = 14.0;
+/// Space on each side of a divider.
+const DIVIDER_GAP: f32 = 16.0;
 /// Room the row takes from the top of the content, so what else anchors to
 /// the top (notices, the recording mark) can sit below it.
 pub const HEIGHT: f32 = TOP + CARD_H + GAP;
 const FADE_SECS: f32 = 0.18;
 const SLIDE: f32 = 6.0;
 
-const VALUE: TextStyle = TextStyle::new(13.0, Weight::SemiBold);
-const LABEL: TextStyle = TextStyle::new(10.5, Weight::Medium);
-const MAX_NAME_W: f32 = 190.0;
+const VALUE: TextStyle = TextStyle::new(14.0, Weight::SemiBold);
+const LABEL: TextStyle = TextStyle::new(11.0, Weight::Medium);
+const MAX_NAME_W: f32 = 210.0;
 
 /// One piece of a card, left to right.
 #[derive(Debug, Clone, PartialEq)]
@@ -318,13 +322,13 @@ impl Hud {
 
 fn piece_width(ui: &mut Ui, p: &Piece) -> f32 {
     match p {
-        Piece::Dot(_) => 6.0 + 4.0,
+        Piece::Dot(_) => 6.0 + 10.0,
         Piece::Stack(top, bottom, _) => {
             let top = clip_name(ui, top);
             ui.measure(&top, VALUE).0.max(ui.measure(bottom, LABEL).0)
         }
-        Piece::Line(text, _) => ui.measure(text, LABEL).0 + 12.0,
-        Piece::Divider => 1.0 + 20.0,
+        Piece::Line(text, _) => ui.measure(text, LABEL).0 + 16.0,
+        Piece::Divider => 1.0 + DIVIDER_GAP * 2.0,
     }
 }
 
@@ -334,15 +338,24 @@ fn clip_name(ui: &mut Ui, text: &str) -> String {
 }
 
 fn card_width(ui: &mut Ui, card: &Card, _lang: Lang) -> f32 {
-    PAD * 2.0
-        + card.pieces.iter().map(|p| piece_width(ui, p)).sum::<f32>()
-        + 8.0
-            * card
-                .pieces
-                .iter()
-                .filter(|p| matches!(p, Piece::Stack(..) | Piece::Line(..)))
-                .count()
-                .saturating_sub(1) as f32
+    // The same walk `draw_card` makes: a gap goes between two texts that are
+    // not separated by a divider.
+    let mut width = PAD * 2.0;
+    let mut first_text = true;
+    for piece in &card.pieces {
+        match piece {
+            Piece::Stack(..) | Piece::Line(..) => {
+                if !first_text {
+                    width += PIECE_GAP;
+                }
+                first_text = false;
+            }
+            Piece::Divider => first_text = true,
+            Piece::Dot(_) => {}
+        }
+        width += piece_width(ui, piece);
+    }
+    width
 }
 
 fn draw_card(ui: &mut Ui, theme: &Theme, card: &Card, r: Rect) {
@@ -355,11 +368,11 @@ fn draw_card(ui: &mut Ui, theme: &Theme, card: &Card, r: Rect) {
         match piece {
             Piece::Dot(color) => {
                 ui.rect(Rect::new(x, mid - 3.0, 6.0, 6.0), 3.0, *color);
-                x += 10.0;
+                x += 16.0;
             }
             Piece::Stack(top, bottom, color) => {
                 if !first_text {
-                    x += 8.0;
+                    x += PIECE_GAP;
                 }
                 first_text = false;
                 let top = clip_name(ui, top);
@@ -373,11 +386,11 @@ fn draw_card(ui: &mut Ui, theme: &Theme, card: &Card, r: Rect) {
             }
             Piece::Line(text, color) => {
                 if !first_text {
-                    x += 8.0;
+                    x += PIECE_GAP;
                 }
                 first_text = false;
                 let (w, h) = ui.measure(text, LABEL);
-                let chip = Rect::new(x, mid - (h + 6.0) / 2.0, w + 12.0, h + 6.0);
+                let chip = Rect::new(x, mid - (h + 8.0) / 2.0, w + 16.0, h + 8.0);
                 ui.panel(
                     chip,
                     chip.h / 2.0,
@@ -385,13 +398,13 @@ fn draw_card(ui: &mut Ui, theme: &Theme, card: &Card, r: Rect) {
                     color.with_alpha(0.35),
                     1.0,
                 );
-                ui.text(text, chip.x + 6.0, chip.y + 3.0, LABEL, *color);
+                ui.text(text, chip.x + 8.0, chip.y + 4.0, LABEL, *color);
                 x += chip.w;
             }
             Piece::Divider => {
-                x += 10.0;
-                ui.rect(Rect::new(x, mid - 8.0, 1.0, 16.0), 0.0, theme.chrome_line);
-                x += 1.0 + 9.0;
+                x += DIVIDER_GAP;
+                ui.rect(Rect::new(x, mid - 10.0, 1.0, 20.0), 0.0, theme.chrome_line);
+                x += 1.0 + DIVIDER_GAP;
                 first_text = true;
             }
         }

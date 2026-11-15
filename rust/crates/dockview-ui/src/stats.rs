@@ -254,13 +254,8 @@ fn draw(ui: &mut Ui, theme: &Theme, lang: Lang, stats: &Stats) -> Rect {
     let (x, right) = (panel.x + PAD, panel.x + WIDTH - PAD);
     let mut y = panel.y + PAD;
 
-    // Title and the key that toggles the panel.
+    // The title (the panel is opened from the health button of the readouts).
     ui.text(tr(lang, Key::Statistics), x, y - 1.0, TITLE, theme.text);
-    let hint = TextStyle::new(12.0, Weight::Medium);
-    let key_w = ui.measure("I", hint).0 + 12.0;
-    let key_box = Rect::new(right - key_w, y, key_w, 20.0);
-    ui.rect(key_box, 6.0, theme.segment_track);
-    ui.text("I", key_box.x + 6.0, y + 1.0, hint, theme.text_dim);
     y += 22.0;
 
     for section in &sections {
