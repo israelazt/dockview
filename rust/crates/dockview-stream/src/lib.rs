@@ -4,4 +4,5 @@
 pub mod annexb;
 pub mod flv;
 pub mod rtmp;
+pub mod testing;
 pub mod transport;

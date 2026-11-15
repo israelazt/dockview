@@ -2,3 +2,4 @@
 
 pub mod amf;
 pub mod chunk;
+pub mod publisher;

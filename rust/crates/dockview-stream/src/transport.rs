@@ -7,8 +7,9 @@ use std::io;
 pub trait Transport: Send {
     /// Sends all of `data`.
     fn send(&mut self, data: &[u8]) -> io::Result<()>;
-    /// Reads up to `buf.len()` bytes, waiting for at least one. `Ok(0)` means
-    /// the other end closed the connection.
+    /// Reads up to `buf.len()` bytes. `Ok(0)` means the other end closed the
+    /// connection. When nothing arrives within a short wait it fails with
+    /// `WouldBlock` or `TimedOut`, which only means "nothing yet".
     fn recv(&mut self, buf: &mut [u8]) -> io::Result<usize>;
 }
 

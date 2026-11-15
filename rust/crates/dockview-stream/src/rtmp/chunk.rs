@@ -97,7 +97,8 @@ impl Default for ChunkReader {
 }
 
 impl ChunkReader {
-    /// The other end changed its chunk size.
+    /// Sets the chunk size by hand (a Set Chunk Size message that arrives is
+    /// applied by `feed` itself).
     pub fn set_chunk_size(&mut self, size: usize) {
         self.chunk_size = size.max(1);
     }
@@ -197,6 +198,14 @@ impl ChunkReader {
             payload: std::mem::take(&mut state.payload),
         });
         self.streams.insert(csid, state);
+        // Set Chunk Size changes how the very next chunk is cut.
+        if let Some(m) = message
+            .as_ref()
+            .filter(|m| m.type_id == 1 && m.payload.len() == 4)
+        {
+            let size = u32::from_be_bytes([m.payload[0], m.payload[1], m.payload[2], m.payload[3]]);
+            self.chunk_size = (size as usize).max(1);
+        }
         Ok(Some((at, message)))
     }
 }
