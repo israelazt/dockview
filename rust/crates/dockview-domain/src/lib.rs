@@ -9,6 +9,7 @@ pub mod audio_sync;
 pub mod brand;
 pub mod broadcast;
 pub mod capture_settings;
+pub mod chrome_input;
 pub mod desktop;
 pub mod device;
 pub mod device_names;

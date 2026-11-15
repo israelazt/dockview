@@ -53,6 +53,34 @@ pub enum Zone {
     Resize(Edge),
 }
 
+/// The shape the mouse cursor takes over a zone.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChromeCursor {
+    /// The ordinary arrow (or whatever the content wants).
+    Default,
+    /// Up and down arrows (top and bottom edges).
+    ResizeVertical,
+    /// Left and right arrows (left and right edges).
+    ResizeHorizontal,
+    /// Along the line from top left to bottom right.
+    ResizeNwSe,
+    /// Along the line from top right to bottom left.
+    ResizeNeSw,
+}
+
+impl Zone {
+    /// The cursor to show over this zone.
+    pub fn cursor(self) -> ChromeCursor {
+        match self {
+            Zone::Resize(Edge::Top | Edge::Bottom) => ChromeCursor::ResizeVertical,
+            Zone::Resize(Edge::Left | Edge::Right) => ChromeCursor::ResizeHorizontal,
+            Zone::Resize(Edge::TopLeft | Edge::BottomRight) => ChromeCursor::ResizeNwSe,
+            Zone::Resize(Edge::TopRight | Edge::BottomLeft) => ChromeCursor::ResizeNeSw,
+            _ => ChromeCursor::Default,
+        }
+    }
+}
+
 /// The window as it is now.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Chrome {
@@ -287,6 +315,43 @@ mod tests {
         assert_eq!(c.zone_at(1279.0, 1.0), Zone::Content);
         assert_eq!(c.content().y, 0.0);
         assert_eq!(c.content().h, 720.0);
+    }
+
+    #[test]
+    fn each_edge_has_the_cursor_that_points_along_it() {
+        assert_eq!(
+            Zone::Resize(Edge::Top).cursor(),
+            ChromeCursor::ResizeVertical
+        );
+        assert_eq!(
+            Zone::Resize(Edge::Bottom).cursor(),
+            ChromeCursor::ResizeVertical
+        );
+        assert_eq!(
+            Zone::Resize(Edge::Left).cursor(),
+            ChromeCursor::ResizeHorizontal
+        );
+        assert_eq!(
+            Zone::Resize(Edge::TopLeft).cursor(),
+            ChromeCursor::ResizeNwSe
+        );
+        assert_eq!(
+            Zone::Resize(Edge::BottomRight).cursor(),
+            ChromeCursor::ResizeNwSe
+        );
+        assert_eq!(
+            Zone::Resize(Edge::TopRight).cursor(),
+            ChromeCursor::ResizeNeSw
+        );
+        assert_eq!(
+            Zone::Resize(Edge::BottomLeft).cursor(),
+            ChromeCursor::ResizeNeSw
+        );
+        assert_eq!(Zone::TitleBar.cursor(), ChromeCursor::Default);
+        assert_eq!(
+            Zone::Button(WindowButton::Close).cursor(),
+            ChromeCursor::Default
+        );
     }
 
     #[test]
