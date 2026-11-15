@@ -131,6 +131,8 @@ El codificador de vídeo (`platform::encode::H264Encoder`, Media Foundation) ya 
 - **Compartir el codificador**: grabar y emitir leen el mismo `EncodedFrame` cuando tienen la misma calidad; si piden calidades distintas, dos codificadores (A-4, medido).
 - **Salud**: el servicio publica `bitrate`, `dropped`, `rtt` en un `StreamStats` que la interfaz muestra y que el bitrate adaptativo (A-3) usa.
 
+**Estado de A-1 (2026-11-14):** hecho el lado portátil, probado contra un servidor RTMP falso y por un socket real en local: puertos `VideoEncoder`/`AudioEncoder`, `EncodedAudio` y `StreamStats` en el dominio; crate `dockview-stream` con Annex B→AVCC, cargas FLV, AMF0, chunks, `Publisher` (apretón de manos, `connect`, `createStream`, `publish`), `StreamOutput` (reconexión con retroceso 1→30 s, espera de keyframe, bitrate real, fotogramas perdidos) y `TcpConnector`. **Falta:** TLS para `rtmps://` (YouTube y Kick lo piden), los adaptadores de Windows (codificador CBR y AAC aparte), el hilo que lo une al compositor, y probarlo contra un servidor real.
+
 **Riesgos de este diseño:** el AAC hay que desacoplarlo del escritor de MP4 (cambio en el grabador); el CBR estricto y el tamaño de GOP dependen del codificador de hardware de cada GPU (se medirá en la 1660 Ti y en otro equipo); y RTMP de Twitch pide ciertos detalles (Enhanced RTMP para HEVC/AV1) que se dejan para después de H.264.
 
 ## Riesgos
