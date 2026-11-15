@@ -69,7 +69,7 @@ impl StudioPanel {
         list: Rect,
     ) {
         let t = &m.theme;
-        let fade = self.openness();
+        let cards = self.scope.cards();
         for row in rows {
             let top = list.y + row.top - self.scroll;
             if top + HEADER_H + row.body < list.y || top > list.y + list.h {
@@ -77,6 +77,21 @@ impl StudioPanel {
             }
             ui.set_clip(Some(list));
             let header = Rect::new(list.x, top, list.w, HEADER_H);
+            if cards {
+                // A card of its own: always open, so the header is a title.
+                let card = Rect::new(list.x, top, list.w, HEADER_H + row.body);
+                ui.panel(card, RADIUS_CARD, t.surface_solid, t.border, 1.0);
+                let line_h = ui.measure("Ag", SECTION).1;
+                ui.text(
+                    tr(m.lang, row.section.title()),
+                    header.x + PAD,
+                    header.y + (HEADER_H - line_h) / 2.0,
+                    SECTION,
+                    t.text,
+                );
+                self.draw_section_body(ui, m, stats, row, header, list);
+                continue;
+            }
             // Only the part of the header on show can be pointed at.
             if let Some(shown) = intersect(header, list) {
                 self.register(PanelHit::Header(row.section), shown);
@@ -105,35 +120,52 @@ impl StudioPanel {
                 SECTION,
                 t.text,
             );
-            if row.body > 0.0 {
-                // The body is laid out at its full height and cut to the part
-                // that is open, so it unfolds like a curtain.
-                let body = Rect::new(list.x, header.y + HEADER_H, list.w, row.full);
-                let open_part = Rect::new(body.x, body.y, body.w, row.body);
-                if let Some(shown) = intersect(open_part, list) {
-                    ui.set_clip(Some(shown));
-                    self.clip = shown;
-                    let amount = if row.full > 0.0 {
-                        row.body / row.full
-                    } else {
-                        1.0
-                    };
-                    ui.set_opacity(fade * amount);
-                    self.draw_body(ui, m, stats, row.section, body);
-                    ui.set_opacity(fade);
-                }
-                ui.set_clip(Some(list));
-            }
+            self.draw_section_body(ui, m, stats, row, header, list);
             let end = header.y + HEADER_H + row.body;
             ui.rect(Rect::new(list.x, end - 1.0, list.w, 1.0), 0.0, t.border);
         }
     }
 
+    /// The body of a section under its `header`, cut to the part that is open
+    /// and to the list.
+    fn draw_section_body(
+        &mut self,
+        ui: &mut Ui,
+        m: &Model,
+        stats: &Stats,
+        row: &SectionRow,
+        header: Rect,
+        list: Rect,
+    ) {
+        if row.body <= 0.0 {
+            return;
+        }
+        let fade = self.openness();
+        // The body is laid out at its full height and cut to the part that is
+        // open, so it unfolds like a curtain.
+        let body = Rect::new(list.x, header.y + HEADER_H, list.w, row.full);
+        let open_part = Rect::new(body.x, body.y, body.w, row.body);
+        if let Some(shown) = intersect(open_part, list) {
+            ui.set_clip(Some(shown));
+            self.clip = shown;
+            let amount = if row.full > 0.0 {
+                row.body / row.full
+            } else {
+                1.0
+            };
+            ui.set_opacity(fade * amount);
+            self.draw_body(ui, m, stats, row.section, body);
+            ui.set_opacity(fade);
+        }
+        ui.set_clip(Some(list));
+    }
+
     pub(super) fn is_open(&self, section: StudioSection) -> bool {
-        StudioSection::ALL
-            .iter()
-            .position(|s| *s == section)
-            .is_some_and(|i| self.open[i])
+        self.scope.cards()
+            || StudioSection::ALL
+                .iter()
+                .position(|s| *s == section)
+                .is_some_and(|i| self.open[i])
     }
 
     /// A thin bar at the right edge while the list is longer than the room.

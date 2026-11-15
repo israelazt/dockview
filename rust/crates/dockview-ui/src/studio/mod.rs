@@ -203,7 +203,7 @@ impl StudioPanel {
             && StudioSection::ALL
                 .iter()
                 .position(|s| *s == section)
-                .is_some_and(|i| self.open[i])
+                .is_some_and(|i| self.open[i] || self.scope.cards())
     }
 
     /// Turns motion on or off (off snaps every change, honouring the Windows
@@ -297,7 +297,7 @@ impl StudioPanel {
         // (some of them wrap text, which is not free).
         let mut heights = [0.0; 6];
         for (i, section) in StudioSection::ALL.into_iter().enumerate() {
-            if self.scope.includes(section) && (self.open[i] || self.amount[i] > 0.0) {
+            if self.scope.includes(section) && (self.is_open(section) || self.amount[i] > 0.0) {
                 heights[i] = section.body_height(ui, m, stats, full_width);
             }
         }
@@ -317,7 +317,9 @@ impl StudioPanel {
         self.next_items.clear();
         self.next_sliders.clear();
         ui.set_opacity(fade);
-        self.draw_frame(ui, t, panel);
+        if !self.scope.cards() {
+            self.draw_frame(ui, t, panel);
+        }
         if self.scope != Scope::Side {
             self.draw_top(ui, m, panel);
         }
@@ -333,7 +335,7 @@ impl StudioPanel {
     /// Moves each section's opening towards what it is meant to be.
     fn step_sections(&mut self) {
         for (amount, open) in self.amount.iter_mut().zip(self.open) {
-            let target = if open { 1.0 } else { 0.0 };
+            let target = if open || self.scope.cards() { 1.0 } else { 0.0 };
             *amount = if self.animations {
                 smooth(*amount, target, self.dt, EXPAND_RATE)
             } else {

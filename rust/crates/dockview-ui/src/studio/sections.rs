@@ -33,6 +33,21 @@ impl Scope {
         }
     }
 
+    /// Whether each section is a card of its own, always open (the left
+    /// column), instead of a fold in one list.
+    pub fn cards(self) -> bool {
+        self == Self::Side
+    }
+
+    /// Air between the sections, in logical pixels.
+    pub fn gap(self) -> f32 {
+        if self.cards() {
+            12.0
+        } else {
+            0.0
+        }
+    }
+
     /// Height of the panel's own header.
     pub fn top(self) -> f32 {
         if self == Self::Side {
@@ -135,18 +150,25 @@ pub fn stack(
 ) -> (Vec<SectionRow>, f32) {
     let mut rows = Vec::with_capacity(StudioSection::ALL.len());
     let mut top = 0.0;
-    for ((section, open), full) in StudioSection::ALL.into_iter().zip(expanded).zip(heights) {
-        if !scope.includes(section) {
-            continue;
-        }
+    // The cards of the left column list the scenes first.
+    let mut order: Vec<usize> = (0..StudioSection::ALL.len())
+        .filter(|i| scope.includes(StudioSection::ALL[*i]))
+        .collect();
+    if scope.cards() {
+        order.sort_by_key(|i| StudioSection::ALL[*i] != StudioSection::Scenes);
+    }
+    for i in order {
         let row = SectionRow {
-            section,
+            section: StudioSection::ALL[i],
             top,
-            body: (full * open.clamp(0.0, 1.0)).round(),
-            full: *full,
+            body: (heights[i] * expanded[i].clamp(0.0, 1.0)).round(),
+            full: heights[i],
         };
-        top = row.bottom();
+        top = row.bottom() + scope.gap();
         rows.push(row);
+    }
+    if !rows.is_empty() {
+        top -= scope.gap();
     }
     (rows, top)
 }
@@ -177,10 +199,20 @@ mod tests {
     }
 
     #[test]
+    fn the_side_cards_are_apart_and_the_scenes_come_first() {
+        let (rows, height) = stack(Scope::Side, &[1.0; 6], &[BODY_H; 6]);
+        assert_eq!(rows[0].section, StudioSection::Scenes);
+        assert_eq!(rows[1].section, StudioSection::Sources);
+        assert_eq!(rows[1].top, rows[0].bottom() + Scope::Side.gap());
+        assert_eq!(height, rows[1].bottom(), "no air after the last card");
+        assert!(Scope::Side.cards() && !Scope::Main.cards());
+    }
+
+    #[test]
     fn a_scope_stacks_only_its_sections() {
         let (rows, height) = stack(Scope::Side, &[0.0; 6], &[BODY_H; 6]);
         assert_eq!(rows.len(), 2);
-        assert_eq!(height, HEADER_H * 2.0);
+        assert_eq!(height, HEADER_H * 2.0 + Scope::Side.gap());
         let (rows, _) = stack(Scope::Main, &[0.0; 6], &[BODY_H; 6]);
         assert!(rows.iter().all(|r| !matches!(
             r.section,

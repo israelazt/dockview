@@ -236,6 +236,16 @@ Hecho y subido, **sin abrir la app** (el autor está jugando; todo se verificó 
 3. **6.3 · Franja de estado (hecha, 2026-11-15).** El panel derecho ya conservaba Audio, Grabación, Ajustes y Estadísticas (6.2); arriba de las tarjetas hay ahora una franja de 36 px con la escena en uso (o «Fuente simple») y, a la derecha, fps, latencia (color por nivel) y pérdidas; si falta sitio se ocultan las últimas cifras. Datos puros en `studio_status.rs`. De paso se corrigió que el contenido del panel derecho se maquetaba a 320 px dentro de una tarjeta de 302 y se salía por el borde.
 Las partes 7 a 9 (escenas y capas, lienzo y transiciones, emisión) rellenan esas columnas.
 
+## 5.8. Parte 7 — Escenas y capas (por etapas)
+
+**Maqueta:** la columna izquierda son **dos tarjetas sueltas**: *ESCENAS* (cabecera con botón «+», filas con punto de escena activa, nombre, subtítulo —«3 fuentes directas + overlay»— y chip de atajo F1…) y *CAPAS & FUENTES* (cabecera con «+» y ajustes; filas con asa de arrastre, icono del tipo de fuente, nombre, subtítulo con el formato —«NV12 · 2160p30»—, ojo y candado; pie «4 capas compuestas» con flechas arriba/abajo). **Hoy:** la columna es una tarjeta con dos secciones plegables (Fuentes, Escenas) y las capas viven dentro de Escenas.
+
+**Etapas** (cada una deja la app usable):
+1. **7.1 · Tarjetas sueltas (hecha, 2026-11-15).** En la columna izquierda cada sección pasa a ser su propia tarjeta (redondeada, con aire entre ellas), siempre abierta (sin plegar ni chevron), con la cabecera como título. Un solo desplazamiento para la columna.
+2. **7.2 · Filas de escena.** Punto de escena activa, nombre, subtítulo con el número de capas y chip del atajo; «+» en la cabecera; renombrar y borrar salen de la lista a la fila activa.
+3. **7.3 · Capas y fuentes.** Las capas salen de Escenas a su propia tarjeta: icono del tipo de fuente, nombre, subtítulo (tipo y formato reales), ojo, subir/bajar; añadir fuente desde el «+»; pie con el número de capas. Sin escena, la tarjeta es la lista de fuentes de hoy.
+4. **7.4 · Candado y arrastrar.** Candado por capa (dato nuevo en `SceneLayer`, guardado con la escena, bloquea el editor del lienzo) y reordenar arrastrando el asa en vez de con flechas.
+
 **Cambiar la fuente en el Visor (2026-11-14):** al quitar de la barra el botón de fuentes, la tarjeta de **fuente** de la fila de datos pasa a ser clicable (con una flecha): abre una **lista bajo ella** con las capturadoras, las pantallas y las ventanas, con la actual marcada; elegir una cambia la fuente y cierra la lista; se cierra con `Esc`, con un clic fuera o con la tarjeta; se desplaza con la rueda si es larga, y mientras está abierta se refrescan las listas de pantallas y ventanas. Solo existe mientras la fila de datos está visible.
 
 ## 6. Decisiones

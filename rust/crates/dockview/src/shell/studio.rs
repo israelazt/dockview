@@ -133,7 +133,8 @@ pub fn draw_card_frame(
         Rect::new(0.0, v.y + v.h, w, (h - v.y - v.h).max(0.0)),
     ];
     let mut edge = 0.0;
-    for card in place.side.into_iter().chain([v, panel]) {
+    // The left column paints its own cards over the air.
+    for card in [v, panel] {
         air_rects.push(Rect::new(edge, v.y, (card.x - edge).max(0.0), v.h));
         edge = card.x + card.w;
     }
@@ -144,9 +145,12 @@ pub fn draw_card_frame(
         }
     }
     ui.outline(v, 1.0, theme.border);
-    for card in place.side.into_iter().chain([panel]) {
-        ui.shadow(card, dockview_domain::design::RADIUS_CARD, 18.0, theme.shadow);
-    }
+    ui.shadow(
+        panel,
+        dockview_domain::design::RADIUS_CARD,
+        18.0,
+        theme.shadow,
+    );
     ui.set_opacity(1.0);
 }
 
