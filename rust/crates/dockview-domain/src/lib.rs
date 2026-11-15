@@ -25,6 +25,7 @@ pub mod image;
 pub mod layer_edit;
 pub mod layout;
 pub mod log;
+pub mod navigation;
 pub mod overlay_input;
 pub mod pcm;
 pub mod ports;

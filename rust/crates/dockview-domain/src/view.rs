@@ -6,6 +6,7 @@ use crate::settings::{LangMode, RecordingQuality, RenderPreset, SceneTransition,
 
 use crate::broadcast::StreamState;
 use crate::i18n::Lang;
+use crate::navigation::NavView;
 use crate::scene::NormRect;
 use crate::theme::{Theme, ThemeMode};
 
@@ -202,6 +203,7 @@ pub struct Model {
     pub sources: SourcesView,
     pub scenes: ScenesView,
     pub stream: StreamView,
+    pub nav: NavView,
 }
 
 impl Model {
@@ -241,6 +243,8 @@ pub enum Action {
     ToggleReplay,
     /// Go live, or end the stream.
     ToggleStream,
+    /// Go to a tab of the navigation row.
+    GoTo(crate::navigation::NavTab),
     /// The server address the stream goes to.
     SetStreamUrl(String),
     /// The stream key, which is kept apart from the settings.
@@ -346,6 +350,7 @@ mod tests {
             sources: SourcesView::default(),
             scenes: ScenesView::default(),
             stream: StreamView::default(),
+            nav: NavView::default(),
         }
     }
 

@@ -19,6 +19,26 @@ use crate::recorder::ReplayRecorder;
 use crate::recording::disk_free_bytes;
 use crate::tap_capture::{CaptureSource, TapCapture};
 
+/// The hardware encoders Windows lists, found once on a thread of their own
+/// (asking takes a moment and must not hold up the window).
+fn encoder_lookup() -> &'static std::sync::Mutex<Option<Vec<String>>> {
+    use std::sync::{Mutex, OnceLock};
+    static FOUND: OnceLock<Mutex<Option<Vec<String>>>> = OnceLock::new();
+    FOUND.get_or_init(|| {
+        let found = Mutex::new(None);
+        // The lookup needs Media Foundation on its own thread.
+        let _ = std::thread::Builder::new()
+            .name("encoder-lookup".into())
+            .spawn(|| {
+                let names = crate::mf::MfSession::start()
+                    .and_then(|session| crate::encode::hardware_h264_encoders(&session))
+                    .unwrap_or_default();
+                *encoder_lookup().lock().unwrap_or_else(|e| e.into_inner()) = Some(names);
+            });
+        found
+    })
+}
+
 /// The machine the app really runs on.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct PlatformReplay;
@@ -81,6 +101,18 @@ impl ReplayMachine for PlatformReplay {
 
     fn hotkey_labels(&self) -> (String, String) {
         (hotkey::LABEL.to_owned(), hotkey::RECORD_LABEL.to_owned())
+    }
+
+    fn encoder(&self) -> dockview_domain::navigation::EncoderInfo {
+        use dockview_domain::navigation::EncoderInfo;
+        let found = encoder_lookup().lock().unwrap_or_else(|e| e.into_inner());
+        match found.as_ref() {
+            None => EncoderInfo::Checking,
+            Some(names) => names
+                .first()
+                .cloned()
+                .map_or(EncoderInfo::Missing, EncoderInfo::Found),
+        }
     }
 
     fn show_saved(&self, newest: Option<&Path>, folder: &Path) {

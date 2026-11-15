@@ -7,6 +7,8 @@ use crate::layout::Rect;
 
 /// Height of the title bar in logical pixels.
 pub const TITLE_BAR_HEIGHT: f32 = 34.0;
+/// Height of the navigation row under the title bar, in logical pixels.
+pub const NAV_HEIGHT: f32 = 56.0;
 /// Width of each of the three window buttons in logical pixels.
 pub const BUTTON_WIDTH: f32 = 46.0;
 /// Thickness of the strip along each edge that resizes the window, in logical
@@ -51,6 +53,8 @@ pub enum Zone {
     TitleBar,
     Button(WindowButton),
     Resize(Edge),
+    /// The navigation row under the bar: the interface answers there.
+    Nav,
 }
 
 /// The shape the mouse cursor takes over a zone.
@@ -117,14 +121,33 @@ impl Chrome {
         })
     }
 
-    /// Everything below the bar: where the application draws.
+    /// Height of the navigation row in physical pixels (0 in full screen).
+    pub fn nav_height(&self) -> f32 {
+        if self.fullscreen {
+            0.0
+        } else {
+            self.px(NAV_HEIGHT)
+        }
+    }
+
+    /// The navigation row, just under the bar, or `None` in full screen.
+    pub fn nav(&self) -> Option<Rect> {
+        (!self.fullscreen).then(|| Rect {
+            x: 0.0,
+            y: self.bar_height(),
+            w: self.size.0 as f32,
+            h: self.nav_height(),
+        })
+    }
+
+    /// Everything below the bar and the row: where the application draws.
     pub fn content(&self) -> Rect {
-        let bar = self.bar_height();
+        let top = self.bar_height() + self.nav_height();
         Rect {
             x: 0.0,
-            y: bar,
+            y: top,
             w: self.size.0 as f32,
-            h: (self.size.1 as f32 - bar).max(0.0),
+            h: (self.size.1 as f32 - top).max(0.0),
         }
     }
 
@@ -171,6 +194,9 @@ impl Chrome {
                 }
             }
             return Zone::TitleBar;
+        }
+        if y < self.bar_height() + self.nav_height() {
+            return Zone::Nav;
         }
         Zone::Content
     }
@@ -227,8 +253,9 @@ mod tests {
         };
         assert_eq!(hi.bar_height(), 68.0);
         assert_eq!(hi.bar().unwrap().h, 68.0);
-        assert_eq!(hi.content().y, 68.0);
-        assert_eq!(hi.content().h, 720.0 - 68.0);
+        assert_eq!(hi.nav().unwrap().y, 68.0);
+        assert_eq!(hi.content().y, 68.0 + 112.0);
+        assert_eq!(hi.content().h, 720.0 - 180.0);
     }
 
     #[test]
@@ -259,6 +286,20 @@ mod tests {
         );
         assert_eq!(c.zone_at(1100.0, 17.0), Zone::TitleBar);
         assert_eq!(c.zone_at(600.0, 300.0), Zone::Content);
+    }
+
+    #[test]
+    fn the_navigation_row_sits_under_the_bar_and_answers_for_itself() {
+        let c = chrome();
+        assert_eq!(c.nav().unwrap().y, 34.0);
+        assert_eq!(c.nav().unwrap().h, 56.0);
+        assert_eq!(c.zone_at(600.0, 40.0), Zone::Nav);
+        assert_eq!(c.zone_at(600.0, 89.0), Zone::Nav);
+        assert_eq!(c.zone_at(600.0, 90.0), Zone::Content);
+        assert_eq!(c.content().y, 90.0);
+        assert_eq!(c.content().h, 720.0 - 90.0);
+        // The side edges still resize from the row.
+        assert_eq!(c.zone_at(2.0, 60.0), Zone::Resize(Edge::Left));
     }
 
     #[test]
@@ -313,6 +354,8 @@ mod tests {
         assert!(c.button(WindowButton::Close).is_none());
         assert_eq!(c.zone_at(640.0, 1.0), Zone::Content);
         assert_eq!(c.zone_at(1279.0, 1.0), Zone::Content);
+        assert_eq!(c.zone_at(600.0, 40.0), Zone::Content);
+        assert!(c.nav().is_none());
         assert_eq!(c.content().y, 0.0);
         assert_eq!(c.content().h, 720.0);
     }

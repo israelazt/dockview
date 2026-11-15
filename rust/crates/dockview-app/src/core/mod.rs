@@ -18,6 +18,9 @@ mod actions;
 mod api;
 mod devices;
 mod helpers;
+mod nav;
+#[cfg(test)]
+mod nav_tests;
 mod overlays;
 mod replay;
 mod resident;
@@ -154,6 +157,8 @@ struct ViewState {
     system_appearance: Appearance,
     system_lang: Lang,
     stats_open: bool,
+    /// The tab chosen in the navigation row while the panel is open.
+    nav_tab: dockview_domain::navigation::NavTab,
     /// The layer of the active scene the editor works on.
     layer_selected: Option<usize>,
     /// The layer editor is on, over the picture.

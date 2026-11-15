@@ -1,6 +1,7 @@
 //! A model to draw in tests: a live capture card, nothing else going on.
 
 use dockview_domain::i18n::Lang;
+use dockview_domain::navigation::NavView;
 use dockview_domain::settings::{LangMode, RenderPreset, VideoModePref};
 use dockview_domain::theme::{Theme, ThemeMode};
 use dockview_domain::view::*;
@@ -32,5 +33,6 @@ pub(crate) fn model() -> Model {
         sources: SourcesView::default(),
         scenes: ScenesView::default(),
         stream: StreamView::default(),
+        nav: NavView::default(),
     }
 }

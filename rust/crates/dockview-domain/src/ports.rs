@@ -90,6 +90,11 @@ pub trait ReplayMachine {
     fn default_folder(&self) -> PathBuf;
     /// Whether files can be written to `folder`.
     fn is_writable_folder(&self, folder: &Path) -> bool;
+    /// The hardware video encoder of this PC. Asking never waits: it says
+    /// `Checking` until the machine knows.
+    fn encoder(&self) -> crate::navigation::EncoderInfo {
+        crate::navigation::EncoderInfo::Checking
+    }
     /// How the hotkeys are written for the user: (save a clip, record).
     fn hotkey_labels(&self) -> (String, String);
 }

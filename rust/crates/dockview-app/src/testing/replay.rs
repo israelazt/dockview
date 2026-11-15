@@ -39,6 +39,8 @@ pub struct World {
     pub buffers_started: u32,
     /// The queues the buffer hands out (made on first use, then the same).
     pub game_tap: Option<Arc<AudioTap>>,
+    /// What the machine says about its encoder.
+    pub encoder: dockview_domain::navigation::EncoderInfo,
     pub mic_tap: Option<Arc<AudioTap>>,
 }
 
@@ -102,6 +104,9 @@ impl ReplayMachine for FakeMachine {
     }
     fn hotkey_labels(&self) -> (String, String) {
         ("Ctrl+S".into(), "Ctrl+R".into())
+    }
+    fn encoder(&self) -> dockview_domain::navigation::EncoderInfo {
+        self.0.lock().unwrap().encoder.clone()
     }
     fn show_saved(&self, newest: Option<&Path>, folder: &Path) {
         self.0

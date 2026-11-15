@@ -49,6 +49,7 @@ impl Core {
                 system_appearance: Appearance::Dark,
                 system_lang,
                 stats_open: show_stats,
+                nav_tab: dockview_domain::navigation::NavTab::Studio,
                 layer_selected: cli.edit_layers.then_some(1),
                 scene_editing: cli.edit_layers,
                 window_hidden: false,

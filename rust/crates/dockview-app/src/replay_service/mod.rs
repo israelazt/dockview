@@ -154,6 +154,11 @@ impl ReplayService {
         self.machine.hotkey_labels()
     }
 
+    /// The hardware video encoder of this PC, if it is known yet.
+    pub fn encoder(&self) -> dockview_domain::navigation::EncoderInfo {
+        self.machine.encoder()
+    }
+
     // -- hotkeys --------------------------------------------------------
 
     /// Registers the global hotkeys.

@@ -81,7 +81,8 @@ impl ChromeInput {
                     Some(WindowCommand::Drag)
                 }
             }
-            Zone::Content => None,
+            // The navigation row and the content are the interface's own.
+            Zone::Nav | Zone::Content => None,
         }
     }
 
@@ -216,6 +217,8 @@ mod tests {
             Some(WindowCommand::Resize(Edge::BottomLeft))
         );
         assert_eq!(input.press(&c, (640.0, 300.0), 0), None);
+        // The navigation row under the bar belongs to the interface.
+        assert_eq!(input.press(&c, (640.0, 60.0), 0), None);
     }
 
     #[test]

@@ -142,6 +142,7 @@ impl Core {
                 .view(self.lang_mode().resolve(self.view.system_lang)),
             scenes: self.scenes_view(self.lang_mode().resolve(self.view.system_lang)),
             stream: self.stream_view(),
+            nav: self.nav_view(),
         }
     }
 
@@ -189,6 +190,10 @@ impl Core {
                 } else {
                     AppEvent::ReplayOff
                 });
+            }
+            Action::GoTo(tab) => {
+                self.go_to(tab);
+                return;
             }
             Action::ToggleStream => {
                 self.toggle_stream();
