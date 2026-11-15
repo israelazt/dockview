@@ -197,6 +197,10 @@ impl Core {
                 return;
             }
             Action::ToggleHud => self.settings.hud = !self.settings.hud,
+            Action::Capture => {
+                self.host.start_capture(self.settings.capture.mode);
+                return;
+            }
             Action::ToggleStream => {
                 self.toggle_stream();
                 return;

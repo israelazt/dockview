@@ -232,6 +232,14 @@ strings! {
     HudReplayNone => "NO REPLAY", "SIN REPLAY";
     HudHealth => "Pipeline health", "Salud del pipeline";
     HudDrops => "drops", "pérdidas";
+    BarSave => "Save clip", "Guardar clip";
+    BarRecord => "Record", "Grabar";
+    BarCapture => "Screenshot", "Captura";
+    TipCapture => "Take a screenshot", "Hacer una captura de pantalla";
+    TipMicOn => "Turn the microphone on", "Encender el micrófono";
+    TipMicOff => "Turn the microphone off", "Apagar el micrófono";
+    TipHudHide => "Hide the readouts (H)", "Ocultar los datos (H)";
+    TipHudShow => "Show the readouts (H)", "Mostrar los datos (H)";
     RailLog => "Open the log", "Abrir el registro";
     WindowMinimize => "Minimize", "Minimizar";
     WindowMaximize => "Maximize", "Maximizar";

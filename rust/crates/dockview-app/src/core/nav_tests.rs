@@ -123,3 +123,22 @@ fn pictures_the_viewer_never_showed_are_counted_as_lost() {
     slot.publish(picture()); // replaces the first one before it was shown
     assert_eq!(rig.core.model().nav.drops, 1);
 }
+
+#[test]
+fn the_capture_button_starts_a_screenshot_in_the_chosen_mode() {
+    use dockview_domain::select::Mode;
+    let mut rig = Rig::new();
+    rig.core.apply(Action::Capture);
+    assert_eq!(rig.host.lock().unwrap().captures, [Mode::Rectangle]);
+}
+
+#[test]
+fn the_readouts_can_be_hidden_and_shown_and_it_is_remembered() {
+    let mut rig = Rig::new();
+    assert!(rig.core.model().hud);
+    rig.core.apply(Action::ToggleHud);
+    assert!(!rig.core.model().hud);
+    assert!(!rig.saved_soon().unwrap().hud);
+    rig.core.apply(Action::ToggleHud);
+    assert!(rig.core.model().hud);
+}

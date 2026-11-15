@@ -203,6 +203,23 @@ Hecho y subido, **sin abrir la app** (el autor está jugando; todo se verificó 
 
 **Estado (2026-11-14):** **5.1 hecho y subido** (sin abrir la app): `hud.rs` en `dockview-ui`, ajuste `hud` guardado, acción `ToggleHud`, tecla `H`, textos en ES/EN, niveles de latencia con pruebas. Lo que está arriba a la izquierda (estadísticas, avisos, marca de grabación) baja bajo la fila mientras está visible. Falta 5.2 (salud del pipeline) y 5.3 (barra flotante), y la revisión con la app real.
 
+## 5.6. Parte 5.3 — La barra flotante (el «controlador») — diseño
+
+**Maqueta:** barra centrada abajo, con **Guardar clip** (relleno de marca, con su atajo), **Grabar** (punto rojo, atajo y pistas), **Captura ▾**, volumen con medidor y sincronía, **ocultar HUD** y **pantalla completa**.
+
+**Hoy:** una píldora con estado y resolución, volumen, sincronía, un botón de repetición, guardar, grabar y cuatro botones que abren el panel de Estudio (fuentes, escenas, ajustes, panel) y pantalla completa. Se oculta sola a los 3 s sin movimiento.
+
+**Adaptación (mantiene la ocultación automática, el volumen con rueda y arrastre y los tooltips):**
+- **Se quitan** lo que ahora está en otro sitio: el *estado y la resolución* (en la fila de tarjetas), los botones de *fuentes, escenas, ajustes y panel* (en las pestañas y la barra lateral) y el de *repetición* (su estado está en la tarjeta de replay y sus opciones en el panel).
+- **Guardar clip:** botón principal, relleno del verde de marca, con icono, texto y el atajo en un chip; apagado (gris) si la repetición está apagada.
+- **Grabar:** punto rojo (cuadrado mientras graba), el texto «Grabar» o el tiempo grabado, y el atajo.
+- **Captura:** nuevo botón que hace un pantallazo con el modo elegido (el menú desplegable de modos ⏳).
+- **Volumen** (icono, deslizador, porcentaje) y **sincronía** (− +0 ms +) como hoy.
+- **Micrófono:** botón nuevo que enciende y apaga el micrófono (rojo mientras está abierto; antes era un icono suelto en el botón de repetición) — la maqueta lo tiene en el mezclador, que aún no existe.
+- **Ocultar HUD** (ojo) y **pantalla completa** (botón relleno).
+- Pistas de grabación («3 Pistas») y medidor de volumen ⏳.
+- **Ventana estrecha:** primero se quita la sincronía; luego los chips de atajo.
+
 ## 6. Decisiones
 
 **Tomadas (2026-11-14):**

@@ -247,6 +247,8 @@ pub enum Action {
     ToggleStream,
     /// Show or hide the row of readouts over the picture.
     ToggleHud,
+    /// Take a screenshot in the mode chosen in the settings.
+    Capture,
     /// Go to a tab of the navigation row.
     GoTo(crate::navigation::NavTab),
     /// The server address the stream goes to.
