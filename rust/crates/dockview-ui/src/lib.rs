@@ -86,6 +86,9 @@ pub struct Ui {
     clip: Option<ClipRect>,
     /// The width [`Ui::logical_size`] reports, when less than the window's.
     width_limit: Option<f32>,
+    /// Room kept free at the top (the title bar): everything drawn is pushed
+    /// down by it and [`Ui::logical_size`] is that much shorter.
+    inset_top: f32,
 }
 
 impl Ui {
@@ -99,6 +102,7 @@ impl Ui {
             offset: (0.0, 0.0),
             clip: None,
             width_limit: None,
+            inset_top: 0.0,
         }
     }
 
@@ -112,6 +116,7 @@ impl Ui {
         self.offset = (0.0, 0.0);
         self.clip = None;
         self.width_limit = None;
+        self.inset_top = 0.0;
     }
 
     /// Cuts off everything drawn from now on outside `area` (in the same
@@ -120,7 +125,10 @@ impl Ui {
     pub fn set_clip(&mut self, area: Option<Rect>) {
         let s = self.scale;
         self.clip = area.map(|r| {
-            let (x, y) = ((r.x + self.offset.0) * s, (r.y + self.offset.1) * s);
+            let (x, y) = (
+                (r.x + self.offset.0) * s,
+                (r.y + self.offset.1 + self.inset_top) * s,
+            );
             [x, y, x + r.w * s, y + r.h * s]
         });
     }
@@ -131,6 +139,13 @@ impl Ui {
     /// to the whole window. Drawing itself is not clipped.
     pub fn limit_width(&mut self, width: Option<f32>) {
         self.width_limit = width;
+    }
+
+    /// Keeps `height` logical pixels free at the top (for the title bar): what
+    /// is drawn from now on starts below it and anchors to the part of the
+    /// window that is left. `0.0` goes back to the whole window.
+    pub fn set_inset_top(&mut self, height: f32) {
+        self.inset_top = height.max(0.0);
     }
 
     /// Translates everything drawn from now on, in logical pixels.
@@ -152,7 +167,7 @@ impl Ui {
         let width = self.viewport.0 as f32 / self.scale;
         (
             self.width_limit.map_or(width, |limit| limit.min(width)),
-            self.viewport.1 as f32 / self.scale,
+            (self.viewport.1 as f32 / self.scale - self.inset_top).max(0.0),
         )
     }
 
@@ -225,7 +240,10 @@ impl Ui {
     fn sdf_quad(&mut self, r: Rect, radius: f32, blur: f32, margin: f32, color: Color) {
         let s = self.scale;
         let (w, h) = (r.w * s, r.h * s);
-        let (x, y) = ((r.x + self.offset.0) * s, (r.y + self.offset.1) * s);
+        let (x, y) = (
+            (r.x + self.offset.0) * s,
+            (r.y + self.offset.1 + self.inset_top) * s,
+        );
         let pad = margin * s.max(1.0) + 1.0;
         let (half_w, half_h) = (w / 2.0, h / 2.0);
         let shape = [
@@ -315,7 +333,7 @@ impl Ui {
         // Snap the origin to whole pixels so glyph edges stay crisp.
         let (ox, oy) = (
             ((x + self.offset.0) * scale).round(),
-            ((y + self.offset.1) * scale).round(),
+            ((y + self.offset.1 + self.inset_top) * scale).round(),
         );
         let atlas = ATLAS_SIZE as f32;
         let rgba = self.tint(color);
@@ -533,6 +551,33 @@ mod tests {
         ui.begin((1280, 720), 1.0);
         ui.rect(Rect::new(10.0, 10.0, 20.0, 20.0), 2.0, Theme::dark().text);
         assert_eq!(ui.vertices()[0].pos, plain);
+    }
+
+    #[test]
+    fn the_top_inset_pushes_drawing_down_and_shortens_the_window() {
+        let mut ui = ui();
+        ui.rect(Rect::new(10.0, 10.0, 20.0, 20.0), 2.0, Theme::dark().text);
+        let plain = ui.vertices()[0].pos;
+        ui.begin((1280, 720), 1.0);
+        let height = ui.logical_size().1;
+        ui.set_inset_top(34.0);
+        assert_eq!(ui.logical_size().1, height - 34.0);
+        ui.rect(Rect::new(10.0, 10.0, 20.0, 20.0), 2.0, Theme::dark().text);
+        let moved = ui.vertices()[0].pos;
+        assert_eq!((moved[0] - plain[0], moved[1] - plain[1]), (0.0, 34.0));
+        // A new frame starts without it.
+        ui.begin((1280, 720), 1.0);
+        assert_eq!(ui.logical_size().1, height);
+    }
+
+    #[test]
+    fn the_top_inset_scales_and_moves_the_clip_too() {
+        let mut ui = ui();
+        ui.begin((2560, 1440), 2.0);
+        ui.set_inset_top(34.0);
+        assert_eq!(ui.logical_size().1, 720.0 - 34.0);
+        ui.set_clip(Some(Rect::new(0.0, 0.0, 10.0, 10.0)));
+        assert_eq!(ui.clip, Some([0.0, 68.0, 20.0, 88.0]));
     }
 
     #[test]
