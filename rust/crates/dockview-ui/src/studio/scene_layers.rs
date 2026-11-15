@@ -13,13 +13,13 @@ use crate::text::Weight;
 use crate::{Rect, TextStyle, Ui};
 
 /// Size of the small icon buttons inside a layer's row.
-const ICON_BUTTON: f32 = 26.0;
+pub(super) const ICON_BUTTON: f32 = 26.0;
 pub(super) const TAG: TextStyle = TextStyle::new(11.5, Weight::Medium);
-const ICON_EYE: char = '\u{e0ba}';
-const ICON_EYE_OFF: char = '\u{e0bb}';
-const ICON_CLOSE: char = '\u{e1b2}';
-const ICON_UP: char = '\u{e070}';
-const ICON_DOWN: char = '\u{e06d}';
+pub(super) const ICON_EYE: char = '\u{e0ba}';
+pub(super) const ICON_EYE_OFF: char = '\u{e0bb}';
+pub(super) const ICON_CLOSE: char = '\u{e1b2}';
+pub(super) const ICON_UP: char = '\u{e070}';
+pub(super) const ICON_DOWN: char = '\u{e06d}';
 
 impl StudioPanel {
     /// A layer of the scene in use: an eye that shows or hides it, its name

@@ -437,6 +437,7 @@ fn the_texts_come_in_the_language_of_the_model() {
 }
 
 mod content;
+mod side;
 
 #[test]
 fn a_section_opened_from_the_pill_is_shown_once_the_panel_is_on_screen() {

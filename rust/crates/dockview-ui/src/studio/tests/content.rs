@@ -522,6 +522,7 @@ fn scene(action: SceneAction) -> Action {
 
 fn layer(name: &str, visible: bool) -> LayerView {
     LayerView {
+        kind: Default::default(),
         name: name.into(),
         visible,
         rect: dockview_domain::scene::NormRect::FULL,

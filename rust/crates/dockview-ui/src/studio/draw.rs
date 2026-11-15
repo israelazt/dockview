@@ -84,7 +84,7 @@ impl StudioPanel {
                 ui.panel(card, RADIUS_CARD, t.surface_solid, t.border, 1.0);
                 let line_h = ui.measure("Ag", SECTION).1;
                 ui.text(
-                    tr(m.lang, row.section.title()),
+                    tr(m.lang, row.section.title_in(self.scope)),
                     header.x + PAD,
                     header.y + (HEADER_H - line_h) / 2.0,
                     SECTION,

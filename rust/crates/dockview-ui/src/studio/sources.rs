@@ -15,7 +15,17 @@ const PAD_TOP: f32 = 4.0;
 const PAD_BOTTOM: f32 = 14.0;
 
 /// How tall the body is: three titled lists, as long as what there is to list.
+#[cfg(test)]
 pub fn body_height(m: &Model) -> f32 {
+    body_height_in(m, false)
+}
+
+/// The same; in the cards of the left column, with a scene in use the card
+/// holds its layers instead.
+pub fn body_height_in(m: &Model, cards: bool) -> f32 {
+    if cards && m.scenes.active.is_some() {
+        return super::layers_card::body_height(m);
+    }
     let group = |count: usize, limit: usize| LABEL_H + list_height(count, limit);
     PAD_TOP
         + group(m.video_devices.len(), MAX_DEVICES)
@@ -29,6 +39,10 @@ impl StudioPanel {
     /// Draws the body of the Sources section with its top-left corner at the
     /// corner of `body`.
     pub(super) fn draw_sources(&mut self, ui: &mut crate::Ui, m: &Model, body: Rect) {
+        if self.scope.cards() && m.scenes.active.is_some() {
+            self.draw_layers_card(ui, m, body);
+            return;
+        }
         let t = &m.theme;
         let lang = m.lang;
         let (x, w) = (body.x + PAD, body.w - PAD * 2.0);

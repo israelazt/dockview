@@ -167,6 +167,7 @@ strings! {
     StudioStopRecording => "Stop recording", "Detener grabación";
     StudioSources => "Sources", "Fuentes";
     StudioScenes => "Scenes", "Escenas";
+    StudioLayersSources => "Layers & sources", "Capas y fuentes";
     StudioAudio => "Audio", "Audio";
     StudioRecording => "Recording", "Grabación";
     StudioSettings => "Settings", "Ajustes";

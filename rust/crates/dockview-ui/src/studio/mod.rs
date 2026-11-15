@@ -18,6 +18,7 @@ mod inputs;
 mod interact;
 mod recording;
 mod route;
+mod layers_card;
 mod scene_layers;
 mod scene_list;
 mod scenes;

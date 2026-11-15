@@ -93,6 +93,15 @@ impl StudioSection {
         }
     }
 
+    /// The words on its header in a panel with this `scope` (in the cards of
+    /// the left column the sources are the layers and the sources).
+    pub fn title_in(self, scope: Scope) -> Key {
+        match self {
+            Self::Sources if scope.cards() => Key::StudioLayersSources,
+            _ => self.title(),
+        }
+    }
+
     /// The words on its header.
     pub fn title(self) -> Key {
         match self {
@@ -124,7 +133,7 @@ impl StudioSection {
     ) -> f32 {
         match self {
             Self::Settings => super::settings::body_height(),
-            Self::Sources => super::sources::body_height(m),
+            Self::Sources => super::sources::body_height_in(m, scope.cards()),
             Self::Audio => super::audio::body_height(m),
             Self::Scenes => super::scenes::body_height_in(m, scope.cards()),
             Self::Recording => super::recording::body_height(ui, m, width),

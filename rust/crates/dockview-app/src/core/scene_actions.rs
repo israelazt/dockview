@@ -12,7 +12,7 @@ use dockview_domain::scene::{clean_scene_name, NormRect, Scene, SourceRef, MAX_S
 
 use dockview_domain::i18n;
 use dockview_domain::i18n::LangModeExt;
-use dockview_domain::view::{LayerView, SceneAction, ScenesView};
+use dockview_domain::view::{LayerKind, LayerView, SceneAction, ScenesView};
 
 use super::Core;
 use crate::scenes_service::Overlay;
@@ -61,6 +61,11 @@ impl Core {
                     .iter()
                     .map(|l| LayerView {
                         name: self.source_label(&l.source, lang),
+                        kind: match l.source {
+                            SourceRef::Capture { .. } => LayerKind::Capture,
+                            SourceRef::Monitor { .. } => LayerKind::Monitor,
+                            SourceRef::Window { .. } => LayerKind::Window,
+                        },
                         visible: l.visible,
                         rect: l.rect,
                     })

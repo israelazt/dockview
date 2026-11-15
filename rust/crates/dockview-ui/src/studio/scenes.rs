@@ -46,17 +46,23 @@ pub fn body_height_in(m: &Model, cards: bool) -> f32 {
     if s.active.is_some() {
         height += GAP;
         height += ROW_H * 3.0; // edit the layers, rename and delete this scene
-        height += GAP + LABEL_H + s.layers.len() as f32 * ROW_H;
-        if s.can_add {
-            let group = |n: usize| LABEL_H + list_height(n, MAX_ADD);
-            height += GAP
-                + LABEL_H
-                + group(m.video_devices.len())
-                + group(m.sources.monitors.len())
-                + group(m.sources.windows.len());
+        if !cards {
+            height += GAP + LABEL_H + s.layers.len() as f32 * ROW_H;
+            if s.can_add {
+                height += GAP + add_height(m);
+            }
         }
     }
     height + PAD_BOTTOM
+}
+
+/// How tall the lists of what can be added are, caption included.
+pub(super) fn add_height(m: &Model) -> f32 {
+    let group = |n: usize| LABEL_H + list_height(n, MAX_ADD);
+    LABEL_H
+        + group(m.video_devices.len())
+        + group(m.sources.monitors.len())
+        + group(m.sources.windows.len())
 }
 
 impl StudioPanel {
@@ -97,17 +103,26 @@ impl StudioPanel {
         y += self.rename_row(ui, t, lang, (active, name), (x, y, w));
         y += self.delete_row(ui, t, lang, active, (x, y, w));
 
+        if self.scope.cards() {
+            return; // the layers have a card of their own
+        }
         y += GAP;
         y += self.caption(ui, t, tr(lang, Key::SceneLayers), x, y);
         for i in 0..s.layers.len() {
             self.layer_row(ui, m, i, (x, y, w));
             y += ROW_H;
         }
-        if !s.can_add {
-            return;
+        if s.can_add {
+            y += GAP;
+            self.draw_add(ui, m, (x, y, w));
         }
+    }
 
-        y += GAP;
+    /// The lists of what can be added to the scene: a caption and the capture
+    /// cards, the screens and the windows. Returns their height.
+    pub(super) fn draw_add(&mut self, ui: &mut Ui, m: &Model, (x, mut y, w): (f32, f32, f32)) -> f32 {
+        let (t, lang) = (&m.theme, m.lang);
+        let top = y;
         y += self.caption(ui, t, tr(lang, Key::SceneAddSource), x, y);
         y += self.caption(ui, t, tr(lang, Key::SourceCapture), x, y);
         let add_card = |i| Action::Scene(SceneAction::AddCapture(i));
@@ -139,7 +154,7 @@ impl StudioPanel {
         );
         y += self.caption(ui, t, tr(lang, Key::SourceApp), x, y);
         let add_window = |i| Action::Scene(SceneAction::AddWindow(i));
-        self.list(
+        y += self.list(
             ui,
             t,
             lang,
@@ -151,6 +166,7 @@ impl StudioPanel {
             y,
             w,
         );
+        y - top
     }
 
     /// The switch of the layer editor over the picture: lit while it is on.

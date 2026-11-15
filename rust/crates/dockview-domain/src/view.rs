@@ -300,10 +300,20 @@ pub enum SceneAction {
     Undo,
 }
 
+/// What kind of source a layer shows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum LayerKind {
+    #[default]
+    Capture,
+    Monitor,
+    Window,
+}
+
 /// One layer as the popover shows it.
 #[derive(Debug, Clone, PartialEq)]
 pub struct LayerView {
     pub name: String,
+    pub kind: LayerKind,
     pub visible: bool,
     pub rect: NormRect,
 }
