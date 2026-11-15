@@ -107,14 +107,14 @@ Orden pensado para que cada parte deje la app usable y verificable (capturas pí
 ## 5. Parte 1 — Barra de título (diseño)
 
 ### Lo que muestra la maqueta
-Una franja de unos 34 px (la de `skeleton.png`; las pantallas de ejemplo la dibujan algo más alta) en la parte superior: a la izquierda el **logo**, **LUMINIFEX STUDIO** en mayúsculas con espaciado entre letras y una **etiqueta** redondeada `v0.4.2 · D3D11 / Vulkan`; a la derecha **minimizar, maximizar/restaurar y cerrar**, de línea fina y sin fondo (cerrar se pondrá rojo al pasar el ratón, como en Windows). Sin texto de título aparte.
+Una franja de unos 34 px (la de `skeleton.png`; las pantallas de ejemplo la dibujan algo más alta) en la parte superior: a la izquierda el **logo**, **LUMINIFEX** en mayúsculas con espaciado entre letras (el esqueleto dice «LUMINIFEX STUDIO»; el autor eligió «LUMINIFEX») y una **etiqueta** redondeada `v0.4.2 · D3D11 / Vulkan`; a la derecha **minimizar, maximizar/restaurar y cerrar**, de línea fina y sin fondo (cerrar se pondrá rojo al pasar el ratón, como en Windows). Sin texto de título aparte.
 
 ### Cómo es hoy
 La ventana usa la **barra nativa de Windows** (`Window::default_attributes().with_title(…)`, `shell/events.rs`). El plan de interfaz (`UI_PLAN.md`, riesgo 3) ya dejaba los botones propios «para después». Todo lo demás se dibuja con nuestro propio renderizador sobre Direct3D 11 (sin imágenes: formas SDF, texto con atlas de glifos e iconos Lucide como fuente).
 
 ### Qué se hace
-1. **Marco de la ventana (Windows).** Se quita la barra nativa **pero se conserva el marco de Windows** (sombra, esquinas redondeadas de Windows 11, bordes de redimensionado y el **menú de ajuste de ventanas al pasar el ratón por maximizar**). Se logra extendiendo el área de cliente sobre la barra y respondiendo a los mensajes de la ventana (`WM_NCCALCSIZE`, `WM_NCHITTEST`) desde `crates/dockview/src/os/windows.rs`. Alternativa descartada: ventana sin decoraciones (`with_decorations(false)`) con arrastre y redimensionado a mano; es más sencilla pero pierde el ajuste de ventanas y la sombra nativa.
-2. **Portabilidad.** Todo lo de Windows queda detrás de `os/` (regla de `ARCHITECTURE.md`). El dominio solo conoce un **modelo de la barra** (alto, zonas: arrastre, logo, etiqueta, botones; estado maximizada / pantalla completa) y una función pura que dice **qué hay bajo un punto**. `os/other.rs` usará la ventana sin decoraciones y las funciones de arrastre de `winit` (`drag_window`, `drag_resize_window`).
+1. **Marco de la ventana: sin decoraciones (decidido 2026-11-14).** Se quita la barra nativa con `with_decorations(false)` y la ventana es **toda propia**, igual en Windows y en Linux. Se conserva lo que `winit` da sin esfuerzo: sombra (`with_undecorated_shadow(true)` en Windows) y esquinas redondeadas de Windows 11 (`DwmSetWindowAttribute`, desde `os/windows.rs`). Lo que se hace a mano: **arrastrar** (`drag_window`), **redimensionar** desde una banda de unos 6 px en los cuatro lados y las esquinas (`drag_resize_window`, con el cursor de cada zona), el **menú del sistema** con clic derecho en la barra (`show_window_menu`), minimizar, maximizar/restaurar y cerrar. **Se pierde** el menú de ajuste de ventanas de Windows 11 al pasar por maximizar (el ajuste con `Win + flechas` y arrastrar a los bordes de la pantalla siguen funcionando con ventanas sin decoraciones; se comprueba). Alternativa descartada: conservar el marco de Windows con `WM_NCCALCSIZE` / `WM_NCHITTEST`, más fiel pero mucho más delicada.
+2. **Portabilidad.** Como la ventana es la misma en todas las plataformas, casi todo es portátil: el dominio tiene el **modelo de la ventana** (alto de la barra, zonas de arrastre / logo / etiqueta / botones, banda de redimensionado, estado maximizada / pantalla completa) y funciones puras que dicen **qué hay bajo un punto** y **qué cursor corresponde**. Solo las esquinas redondeadas y la sombra viven en `os/` (Windows; Linux las hace el compositor).
 3. **Dibujo.** Un componente nuevo en `dockview-ui` (`titlebar`) construye la barra a partir del modelo: logo, nombre, etiqueta y tres botones con estados (reposo, hover, pulsado; cerrar en rojo). Respeta tema claro/oscuro, español/inglés, `--scale` y los ajustes de animación del sistema.
 4. **Comportamiento.** Arrastrar desde la zona libre mueve la ventana; **doble clic** maximiza/restaura; clic derecho abre el menú del sistema; botón cerrar mantiene el comportamiento actual (bandeja si está activada); en **pantalla completa la barra se oculta** y el vídeo vuelve a ocupar todo; al maximizar se compensa el borde invisible de Windows.
 5. **La etiqueta.** `v{versión del crate} · D3D11` con datos reales (versión desde `Cargo.toml`, no escrita a mano). «Vulkan» ✂ hasta que el renderizador de Linux lo haga cierto (Fase 5): la etiqueta dirá el renderizador que de verdad se usa.
@@ -125,25 +125,29 @@ La ventana usa la **barra nativa de Windows** (`Window::default_attributes().wit
 - **T-1.2** Textos y la constante de nombre/versión (i18n ES/EN; la etiqueta con datos reales).
 - **T-1.3** Dibujo de la barra en `dockview-ui` (sin conectar): logo provisional, nombre, etiqueta, tres botones, hover y pulsado.
 - **T-1.4** Acciones: `WindowAction` (minimizar, maximizar/restaurar, cerrar, arrastrar) y su ruteo del puntero en el shell; en el dominio y en `app` con pruebas.
-- **T-1.5** Marco de Windows: quitar la barra nativa conservando sombra, esquinas, bordes y ajuste de ventanas (`os/windows.rs`); `os/other.rs` equivalente.
-- **T-1.6** Doble clic, menú del sistema, pantalla completa (se oculta), ventana maximizada (compensación del borde) y arrastre.
+- **T-1.5** Quitar la barra nativa: `with_decorations(false)`, sombra y esquinas redondeadas (`os/windows.rs`), y la banda de redimensionado con su cursor.
+- **T-1.6** Doble clic, menú del sistema, pantalla completa (se oculta), ventana maximizada (sin banda de redimensionado) y arrastre; comprobar `Win + flechas` y el ajuste a los bordes de la pantalla.
 - **T-1.7** Capturas oscuro/claro × ES/EN × escala 1/2 × normal/maximizada; los textos caben; latencia sin cambios (medida con el patrón de prueba).
-- **Pausa de revisión** con la app real: arrastrar, redimensionar por los cuatro bordes y esquinas, maximizar con el menú de Windows 11, minimizar a la barra de tareas, cerrar con y sin bandeja, varias pantallas y escalas distintas.
+- **Pausa de revisión** con la app real: arrastrar, redimensionar por los cuatro bordes y esquinas, maximizar y restaurar, `Win + flechas`, minimizar a la barra de tareas, cerrar con y sin bandeja, varias pantallas y escalas distintas.
 
 ### Riesgos
-- **Marco propio en Windows:** es la parte delicada (mensajes `WM_NCCALCSIZE` y `WM_NCHITTEST`, bordes con escalas distintas, ventana en varios monitores). Se aísla en `os/windows.rs` y se prueba con la app real.
+- **Ventana sin decoraciones:** el redimensionado y el arrastre a mano deben sentirse como los nativos (bandas con escalas distintas, varios monitores, maximizar sin dejar huecos). Se prueba con la app real; lo de Windows se aísla en `os/windows.rs`.
+- **Ajuste de ventanas de Windows 11:** el menú al pasar por maximizar no estará; si se echa en falta se puede añadir más adelante como mejora aislada en `os/windows.rs`.
 - **Captura de pantalla de la propia ventana** (`exclude_from_capture`) y **superposiciones** no deben verse afectadas; se comprueba.
 - **Latencia:** la barra son pocas formas; se mide igualmente (E-1 del modo Estudio).
 
-## 6. Decisiones abiertas
+## 6. Decisiones
 
-0. **Nombre en la barra:** «LUMINIFEX STUDIO» (esqueleto) o «LUMINIFEX» (pantallas de ejemplo). ¿«Studio» es parte del nombre del producto o solo del modo?
-1. **Logo (necesario para la parte 1).** ¿Existe ya? ¿En qué formato (SVG recomendado; PNG si no hay otro)? Si aún no existe, la parte 1 usa uno **provisional** dibujado con formas y se cambia sin tocar nada más. Hace falta también el icono del ejecutable (`.ico`) y de la bandeja para la parte R.
-2. **Marco de la ventana:** conservar el marco de Windows (recomendado, ver §5) o ventana sin decoraciones totalmente propia.
-3. **Parte R, datos del usuario:** migrar `%APPDATA%\Dockview\` a `%APPDATA%\Luminifex\` en el primer arranque sin borrar lo viejo (recomendado); la carpeta de clips (`Vídeos\Dockview`) y el prefijo de los nombres de archivo.
-4. **Parte R, alcance:** solo el proyecto Rust, o también el programa original en C# de la raíz (que ya no se desarrolla).
-5. **Parte R, fuera del código:** el repositorio de GitHub y la carpeta local los renombra el autor.
-6. **Tamaño mínimo de ventana** y comportamiento por debajo de él (parte 0).
+**Tomadas (2026-11-14):**
+- **Nombre en la barra: «LUMINIFEX»** (sin «Studio»; el esqueleto decía «LUMINIFEX STUDIO», se sigue la otra opción). «Studio» queda para el modo.
+- **Logo: provisional** dibujado con formas en la parte 1; se sustituye cuando llegue el definitivo (idealmente SVG; el icono `.ico` del ejecutable y de la bandeja hacen falta para la parte R).
+- **Marco de la ventana: sin decoraciones**, todo propio (ver §5).
+
+**Abiertas:**
+1. **Parte R, datos del usuario:** migrar `%APPDATA%\Dockview\` a `%APPDATA%\Luminifex\` en el primer arranque sin borrar lo viejo (recomendado); la carpeta de clips (`Vídeos\Dockview`) y el prefijo de los nombres de archivo.
+2. **Parte R, alcance:** solo el proyecto Rust, o también el programa original en C# de la raíz (que ya no se desarrolla).
+3. **Parte R, fuera del código:** el repositorio de GitHub y la carpeta local los renombra el autor.
+4. **Tamaño mínimo de ventana** y comportamiento por debajo de él (parte 0).
 
 ## 7. Reglas de trabajo
 
