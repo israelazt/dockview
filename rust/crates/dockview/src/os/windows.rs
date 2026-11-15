@@ -17,7 +17,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
     WDA_NONE,
 };
 use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
-use winit::window::Window;
+use winit::window::{Window, WindowAttributes};
 
 use super::NativeWindow;
 
@@ -41,6 +41,41 @@ pub fn create_presenter(window: &Window) -> Result<Box<dyn Presenter>, PresentEr
     let size = window.inner_size();
     D3dPresenter::new(hwnd_of(native), size.width, size.height)
         .map(|p| Box::new(p) as Box<dyn Presenter>)
+}
+
+/// What the window is made like: no system title bar (the program draws its
+/// own), but the shadow Windows gives a window with a frame.
+pub fn style_window(attributes: WindowAttributes) -> WindowAttributes {
+    use winit::platform::windows::WindowAttributesExtWindows;
+    attributes
+        .with_decorations(false)
+        .with_undecorated_shadow(true)
+}
+
+/// Rounds the corners of the window as Windows 11 does for every window.
+pub fn round_corners(window: &Window) {
+    use windows::Win32::Graphics::Dwm::{
+        DwmSetWindowAttribute, DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_ROUND,
+    };
+    let Some(native) = native_window(window) else {
+        return;
+    };
+    let preference = DWMWCP_ROUND;
+    // SAFETY: the pointer refers to a live value of the size the attribute
+    // expects; older Windows versions just do not know the attribute.
+    unsafe {
+        let _ = DwmSetWindowAttribute(
+            hwnd_of(native),
+            DWMWA_WINDOW_CORNER_PREFERENCE,
+            (&preference as *const _) as *const c_void,
+            std::mem::size_of_val(&preference) as u32,
+        );
+    }
+}
+
+/// The name of the graphics API the window draws with, for the title bar.
+pub fn renderer_name() -> &'static str {
+    "D3D11"
 }
 
 /// Whether Windows allows UI animations ("Show animations in Windows").

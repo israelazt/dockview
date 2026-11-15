@@ -120,6 +120,9 @@ La ventana usa la **barra nativa de Windows** (`Window::default_attributes().wit
 5. **La etiqueta.** `v{versión del crate} · D3D11` con datos reales (versión desde `Cargo.toml`, no escrita a mano). «Vulkan» ✂ hasta que el renderizador de Linux lo haga cierto (Fase 5): la etiqueta dirá el renderizador que de verdad se usa.
 6. **El nombre y el logo.** Hasta la parte R, el nombre visible sale de **una sola constante** (`APP_NAME`) para que el cambio sea una línea; la parte 1 la deja ya en «Luminifex». El **logo** se dibuja de la forma que permita nuestro renderizador (ver pregunta abierta).
 
+### Estado (2026-11-14)
+Hecho y subido, **sin abrir la app** (el autor está jugando; todo se verificó con pruebas puras y `DOCKVIEW_NO_HARDWARE=1`): T-1.1 a T-1.6 en código (modelo de la ventana, textos y marca, dibujo de la barra, reglas del puntero, ventana sin decoraciones con sombra y esquinas, y el contenido colocado bajo la barra). **Falta la comprobación visual y táctil con la app real** (ver «Pausa de revisión») y T-1.7 (capturas). Las capturas de `ui-previews/` quedan obsoletas: todas llevan ahora la barra, hay que regenerar la línea base.
+
 ### Tareas (cada una, un commit + push)
 - **T-1.1** Modelo de la barra y su prueba de zonas (dominio, puro): tamaños, zonas, qué hay bajo un punto, estados.
 - **T-1.2** Textos y la constante de nombre/versión (i18n ES/EN; la etiqueta con datos reales).

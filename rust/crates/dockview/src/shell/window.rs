@@ -1,22 +1,65 @@
 //! The window: drawing a frame, the cursor and screenshots.
 
+use dockview_domain::layout::Rect as PhysicalRect;
 use dockview_domain::presenter::Screenshot;
 use dockview_domain::render_plan::{render_plan, video_frame_due};
 use dockview_domain::view::RecState;
+use dockview_domain::window_chrome::Zone;
 use dockview_ui::input::Pointer;
 use dockview_ui::studio::route_pointer;
+use dockview_ui::titlebar::TitleBarState;
+use winit::event::ElementState;
+use winit::event_loop::ActiveEventLoop;
 use winit::window::CursorIcon;
 
 use super::*;
 
 impl Shell {
+    /// The left mouse button: the window's frame takes the presses that start on
+    /// it (and the release that ends them); everything else is for the content.
+    pub(super) fn left_button(&mut self, event_loop: &ActiveEventLoop, state: ElementState) {
+        let chrome = self.chrome();
+        let pos = self.cursor_phys;
+        let command = match state {
+            ElementState::Pressed => {
+                let now_ms = self.started.elapsed().as_millis() as u64;
+                let command = pos.and_then(|p| self.chrome_input.press(&chrome, p, now_ms));
+                let on_frame = pos.is_some_and(|(x, y)| chrome.zone_at(x, y) != Zone::Content);
+                if on_frame {
+                    self.chrome_held = true;
+                } else {
+                    self.pointer.press();
+                }
+                command
+            }
+            ElementState::Released => {
+                let command = self.chrome_input.release(&chrome, pos);
+                if std::mem::take(&mut self.chrome_held) {
+                    // The content never saw the press, so it does not see the release.
+                } else {
+                    self.pointer.release();
+                }
+                command
+            }
+        };
+        if let Some(command) = command {
+            self.run_window_command(event_loop, command);
+        }
+        self.needs_redraw = true;
+    }
+
     /// Pointer shape and visibility follow what the controls are doing.
     pub(super) fn update_cursor(&mut self) {
         let Some(window) = &self.window else {
             return;
         };
         let pointer = self.controls.wants_pointer() || self.studio.wants_pointer();
+        let frame = self
+            .cursor_phys
+            .map(|(x, y)| self.chrome().zone_at(x, y).cursor())
+            .map_or(CursorIcon::Default, super::cursor::chrome_cursor);
         let icon = match self.scene_editor.hover() {
+            _ if frame != CursorIcon::Default => frame,
             Some(handle) if !pointer => {
                 super::cursor::cursor_for(handle, self.scene_editor.is_dragging())
             }
@@ -76,7 +119,14 @@ impl Shell {
         let now = Instant::now();
         let dt = now.duration_since(self.last_frame).as_secs_f32().min(0.1);
         self.last_frame = now;
-        let pointer = self.pointer;
+        let chrome = self.chrome();
+        let bar_px = chrome.bar_height();
+        let bar_state = TitleBarState {
+            hover: self.chrome_input.hover(),
+            pressed: self.chrome_input.pressed(),
+            maximized: chrome.maximized,
+        };
+        let pointer = self.content_pointer(&chrome);
         let scale = self.ui_scale;
         // The Studio panel opens (and in full screen, goes at once) and takes
         // its room; the pointer belongs to the video or to the panel.
@@ -86,7 +136,12 @@ impl Shell {
             let size = w.inner_size();
             (size.width, size.height)
         });
-        let place = studio::place(window_size, scale, self.studio.openness());
+        // Below the title bar: the content has the rest of the window.
+        let content_size = (
+            window_size.0,
+            (window_size.1 as f32 - bar_px).max(1.0) as u32,
+        );
+        let place = studio::place(content_size, scale, self.studio.openness());
         let (video_pointer, panel_pointer) = route_pointer(&pointer, place.panel);
         // The first seconds include start-up work; wait for steady numbers.
         let settled = !self.core.cli().show_stats || self.core.measurement_windows() >= 3;
@@ -101,7 +156,12 @@ impl Shell {
         // show the freshest one.
         presenter.wait_for_slot(100);
         // The video fits the room the panel leaves (all of it when closed).
-        presenter.set_video_area(place.panel.map(|_| place.video));
+        // With the bar, the video always has an area of its own, under it.
+        let area = (bar_px > 0.0 || place.panel.is_some()).then_some(PhysicalRect {
+            y: place.video.y + bar_px,
+            ..place.video
+        });
+        presenter.set_video_area(area);
         let mut arrived = None;
         let mut graphics_lost = false;
         let slot = Arc::clone(self.core.output_slot());
@@ -129,6 +189,7 @@ impl Shell {
         {
             {
                 ui.begin(presenter.size(), scale);
+                ui.set_inset_top(bar_px / scale.max(0.1));
                 // What floats over the video anchors to the video's room.
                 // The layer editor sits on the picture, under the controls; what
                 // the controls (the pill) use is not the editor's.
@@ -177,6 +238,17 @@ impl Shell {
                     &panel_pointer,
                     dt,
                 );
+                // The window's own title bar, over everything.
+                ui.set_inset_top(0.0);
+                if bar_px > 0.0 {
+                    dockview_ui::titlebar::draw(
+                        ui,
+                        &model.theme,
+                        model.lang,
+                        &bar_state,
+                        &dockview_domain::brand::version_label(crate::os::renderer_name()),
+                    );
+                }
             }
         }
         match presenter.present(&ui.draw_list(), capture) {

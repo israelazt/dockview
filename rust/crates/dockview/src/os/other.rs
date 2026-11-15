@@ -6,7 +6,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use dockview_domain::i18n::Lang;
 use dockview_domain::presenter::{PresentError, Presenter};
 use dockview_domain::snap::SnapJob;
-use winit::window::Window;
+use winit::window::{Window, WindowAttributes};
 
 use super::NativeWindow;
 
@@ -18,6 +18,16 @@ pub fn native_window(_: &Window) -> Option<NativeWindow> {
 
 pub fn create_presenter(_: &Window) -> Result<Box<dyn Presenter>, PresentError> {
     Err(PresentError::new(UNSUPPORTED))
+}
+
+pub fn style_window(attributes: WindowAttributes) -> WindowAttributes {
+    attributes.with_decorations(false)
+}
+
+pub fn round_corners(_: &Window) {}
+
+pub fn renderer_name() -> &'static str {
+    ""
 }
 
 pub fn system_animations_enabled() -> bool {

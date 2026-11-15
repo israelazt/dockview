@@ -17,11 +17,13 @@ impl ApplicationHandler for Shell {
             return;
         }
         let title = if self.core.cli().ui_preview {
-            "Dockview — UI preview"
+            format!("{} — UI preview", dockview_domain::brand::APP_NAME)
         } else {
-            "Dockview"
+            dockview_domain::brand::APP_NAME.to_string()
         };
-        let mut attributes = Window::default_attributes().with_title(title);
+        // The window has no system title bar: the program draws its own.
+        let mut attributes =
+            crate::os::style_window(Window::default_attributes().with_title(title));
         attributes = match self.core.cli().scale {
             Some(scale) => attributes.with_inner_size(PhysicalSize::new(
                 (1280.0 * scale).round(),
@@ -40,6 +42,7 @@ impl ApplicationHandler for Shell {
         };
 
         dockview_domain::log_info!("window created");
+        crate::os::round_corners(&window);
         match crate::os::create_presenter(&window) {
             Ok(mut presenter) => {
                 presenter.set_filter(filter_for(self.core.render_preset()));
@@ -76,15 +79,7 @@ impl ApplicationHandler for Shell {
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
         match event {
-            WindowEvent::CloseRequested => {
-                self.core.save_settings();
-                if self.core.keeps_in_tray() {
-                    // The icon in the tray brings it back; the hotkey keeps working.
-                    self.hide_window();
-                } else {
-                    event_loop.exit();
-                }
-            }
+            WindowEvent::CloseRequested => self.request_close(event_loop),
             WindowEvent::Resized(size) => {
                 self.needs_redraw = true;
                 if let Some(presenter) = self.presenter.as_mut() {
@@ -97,6 +92,9 @@ impl ApplicationHandler for Shell {
             WindowEvent::CursorMoved { position, .. } => {
                 let scale = f64::from(self.ui_scale);
                 self.pointer.pos = Some(((position.x / scale) as f32, (position.y / scale) as f32));
+                self.cursor_phys = Some((position.x as f32, position.y as f32));
+                let chrome = self.chrome();
+                self.chrome_input.moved(&chrome, self.cursor_phys);
                 self.needs_redraw = true;
             }
             WindowEvent::ModifiersChanged(modifiers) => {
@@ -109,18 +107,27 @@ impl ApplicationHandler for Shell {
             }
             WindowEvent::CursorLeft { .. } => {
                 self.pointer.pos = None;
+                self.cursor_phys = None;
+                self.chrome_input.cancel();
                 self.needs_redraw = true;
             }
             WindowEvent::MouseInput {
                 state,
                 button: MouseButton::Left,
                 ..
+            } => self.left_button(event_loop, state),
+            WindowEvent::MouseInput {
+                state: ElementState::Pressed,
+                button: MouseButton::Right,
+                ..
             } => {
-                match state {
-                    ElementState::Pressed => self.pointer.press(),
-                    ElementState::Released => self.pointer.release(),
+                let chrome = self.chrome();
+                let command = self
+                    .cursor_phys
+                    .and_then(|pos| self.chrome_input.press_right(&chrome, pos));
+                if let Some(command) = command {
+                    self.run_window_command(event_loop, command);
                 }
-                self.needs_redraw = true;
             }
             WindowEvent::MouseWheel { delta, .. } => {
                 self.pointer.wheel += match delta {

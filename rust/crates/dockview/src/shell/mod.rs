@@ -19,8 +19,10 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use dockview_app::Core;
+use dockview_domain::chrome_input::{ChromeInput, WindowCommand};
 use dockview_domain::i18n;
 use dockview_domain::presenter::Presenter;
+use dockview_domain::window_chrome::{Chrome, Zone};
 use dockview_ui::controls::Controls;
 use dockview_ui::input::Pointer;
 use dockview_ui::scene_editor::SceneEditor;
@@ -79,6 +81,15 @@ pub struct Shell {
     /// The side panel of the Studio mode.
     studio: StudioPanel,
     toasts: ToastHost,
+    /// What the pointer is doing to the window's own frame (its buttons, its
+    /// edges and its bar).
+    chrome_input: ChromeInput,
+    /// Where the pointer is, in physical pixels (the frame works in those).
+    cursor_phys: Option<(f32, f32)>,
+    /// The press that is going on began on the frame, so the content never saw it.
+    chrome_held: bool,
+    /// When the shell started: the clock the double click is measured on.
+    started: Instant,
 }
 
 impl Shell {
@@ -119,6 +130,83 @@ impl Shell {
             stats_panel: StatsPanel::new(),
             studio,
             toasts: ToastHost::new(),
+            chrome_input: ChromeInput::default(),
+            cursor_phys: None,
+            chrome_held: false,
+            started: Instant::now(),
+        }
+    }
+
+    /// The window's own frame as it is now (physical pixels).
+    pub(super) fn chrome(&self) -> Chrome {
+        let (size, maximized) = self.window.as_ref().map_or(((1, 1), false), |w| {
+            let size = w.inner_size();
+            ((size.width, size.height), w.is_maximized())
+        });
+        Chrome {
+            size,
+            scale: self.ui_scale,
+            maximized,
+            fullscreen: self.core.fullscreen(),
+        }
+    }
+
+    /// Carries out what the frame's buttons, bar or edges asked of the window.
+    pub(super) fn run_window_command(
+        &mut self,
+        event_loop: &winit::event_loop::ActiveEventLoop,
+        command: WindowCommand,
+    ) {
+        let Some(window) = &self.window else {
+            return;
+        };
+        match command {
+            WindowCommand::Minimize => window.set_minimized(true),
+            WindowCommand::ToggleMaximize => window.set_maximized(!window.is_maximized()),
+            WindowCommand::Close => self.request_close(event_loop),
+            WindowCommand::Drag => {
+                let _ = window.drag_window();
+            }
+            WindowCommand::Resize(edge) => {
+                let _ = window.drag_resize_window(cursor::resize_direction(edge));
+            }
+            WindowCommand::Menu => {
+                if let Some((x, y)) = self.cursor_phys {
+                    window.show_window_menu(winit::dpi::PhysicalPosition::new(
+                        f64::from(x),
+                        f64::from(y),
+                    ));
+                }
+            }
+        }
+        self.needs_redraw = true;
+    }
+
+    /// The window was asked to close: to the tray, or the end of the program.
+    pub(super) fn request_close(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
+        self.core.save_settings();
+        if self.core.keeps_in_tray() {
+            // The icon in the tray brings it back; the hotkey keeps working.
+            self.hide_window();
+        } else {
+            event_loop.exit();
+        }
+    }
+
+    /// The pointer as the content sees it: below the title bar, and gone while
+    /// it is over the frame (the bar, its buttons or a resize edge).
+    pub(super) fn content_pointer(&self, chrome: &Chrome) -> Pointer {
+        let over_frame = self
+            .cursor_phys
+            .is_some_and(|(x, y)| chrome.zone_at(x, y) != Zone::Content);
+        let bar = chrome.bar_height() / self.ui_scale.max(0.1);
+        Pointer {
+            pos: if over_frame || self.chrome_held {
+                None
+            } else {
+                self.pointer.pos.map(|(x, y)| (x, y - bar))
+            },
+            ..self.pointer
         }
     }
 
