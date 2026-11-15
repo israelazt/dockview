@@ -185,6 +185,9 @@ strings! {
     SceneLayers => "Layers", "Capas";
     SceneAddSource => "Add a source", "Añadir una fuente";
     SceneBaseTag => "base", "base";
+    SceneLayerOne => "layer", "capa";
+    SceneLayerMany => "layers", "capas";
+    ScenePlainNote => "Direct source", "Fuente directa";
     SceneDefaultName => "Scene {n}", "Escena {n}";
     TipScenes => "Scenes: arrange several sources in one picture", "Escenas: combina varias fuentes en una sola imagen";
     TipSceneDelete => "Delete this scene", "Borrar esta escena";

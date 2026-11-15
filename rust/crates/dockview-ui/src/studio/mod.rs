@@ -19,6 +19,7 @@ mod interact;
 mod recording;
 mod route;
 mod scene_layers;
+mod scene_list;
 mod scenes;
 mod scroll;
 mod sections;
@@ -298,7 +299,7 @@ impl StudioPanel {
         let mut heights = [0.0; 6];
         for (i, section) in StudioSection::ALL.into_iter().enumerate() {
             if self.scope.includes(section) && (self.is_open(section) || self.amount[i] > 0.0) {
-                heights[i] = section.body_height(ui, m, stats, full_width);
+                heights[i] = section.body_height_in(self.scope, ui, m, stats, full_width);
             }
         }
         let (rows, content_h) = stack(self.scope, &self.amount, &heights);

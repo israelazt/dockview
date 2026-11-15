@@ -5,8 +5,9 @@ use dockview_domain::design::RADIUS_CARD;
 use dockview_domain::i18n::{tr, Key};
 use dockview_domain::stats::Stats;
 use dockview_domain::theme::Theme;
-use dockview_domain::view::Model;
+use dockview_domain::view::{Action, Model, SceneAction};
 
+use super::scenes::ICON_PLUS;
 use super::sections::{SectionRow, StudioSection, HEADER_H};
 use super::{
     intersect, PanelHit, StudioPanel, BUTTON, ICON_CHEVRON_DOWN, ICON_CHEVRON_RIGHT, ICON_CLOSE,
@@ -89,6 +90,26 @@ impl StudioPanel {
                     SECTION,
                     t.text,
                 );
+                if row.section == StudioSection::Scenes {
+                    // The button that makes a scene, at the right of the title.
+                    let size = BUTTON - 6.0;
+                    let plus = Rect::new(
+                        header.x + header.w - PAD - size + 6.0,
+                        header.y + (HEADER_H - size) / 2.0,
+                        size,
+                        size,
+                    );
+                    let before = std::mem::replace(&mut self.clip, list);
+                    self.icon_item(
+                        ui,
+                        t,
+                        plus,
+                        ICON_PLUS,
+                        16.0,
+                        Action::Scene(SceneAction::New),
+                    );
+                    self.clip = before;
+                }
                 self.draw_section_body(ui, m, stats, row, header, list);
                 continue;
             }

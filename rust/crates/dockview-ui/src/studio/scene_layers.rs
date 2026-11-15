@@ -121,7 +121,7 @@ impl StudioPanel {
     }
 
     /// A small square button with an icon that asks for `action`.
-    fn icon_item(
+    pub(super) fn icon_item(
         &mut self,
         ui: &mut Ui,
         t: &Theme,

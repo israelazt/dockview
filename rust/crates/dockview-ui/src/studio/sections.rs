@@ -109,11 +109,24 @@ impl StudioSection {
     /// lists, such as how many devices there are, and on how the text of the
     /// statistics wraps in a panel `width` wide).
     pub fn body_height(self, ui: &mut Ui, m: &Model, stats: &Stats, width: f32) -> f32 {
+        self.body_height_in(Scope::Full, ui, m, stats, width)
+    }
+
+    /// The same, in a panel with this `scope` (the scenes have a "+" in the
+    /// header of their card instead of a row of their own).
+    pub fn body_height_in(
+        self,
+        scope: Scope,
+        ui: &mut Ui,
+        m: &Model,
+        stats: &Stats,
+        width: f32,
+    ) -> f32 {
         match self {
             Self::Settings => super::settings::body_height(),
             Self::Sources => super::sources::body_height(m),
             Self::Audio => super::audio::body_height(m),
-            Self::Scenes => super::scenes::body_height(m),
+            Self::Scenes => super::scenes::body_height_in(m, scope.cards()),
             Self::Recording => super::recording::body_height(ui, m, width),
             Self::Stats => super::stats::body_height(ui, m, stats, width),
         }

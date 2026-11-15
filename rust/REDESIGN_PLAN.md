@@ -242,7 +242,7 @@ Las partes 7 a 9 (escenas y capas, lienzo y transiciones, emisión) rellenan esa
 
 **Etapas** (cada una deja la app usable):
 1. **7.1 · Tarjetas sueltas (hecha, 2026-11-15).** En la columna izquierda cada sección pasa a ser su propia tarjeta (redondeada, con aire entre ellas), siempre abierta (sin plegar ni chevron), con la cabecera como título. Un solo desplazamiento para la columna.
-2. **7.2 · Filas de escena.** Punto de escena activa, nombre, subtítulo con el número de capas y chip del atajo; «+» en la cabecera; renombrar y borrar salen de la lista a la fila activa.
+2. **7.2 · Filas de escena (hecha, 2026-11-15).** Filas de 52 px con punto de escena activa, nombre, subtítulo (número de capas; «Fuente directa» para la fuente simple, dato nuevo `layer_counts` en el modelo) y chip del atajo; «+» en la cabecera de la tarjeta (en el panel de ventana estrecha sigue la fila «Nueva escena»). **Aplazado:** renombrar y borrar siguen como filas bajo la lista (para ponerlos en la fila activa hay que dar a la altura de la sección acceso al estado de edición); se retoma con la 7.3.
 3. **7.3 · Capas y fuentes.** Las capas salen de Escenas a su propia tarjeta: icono del tipo de fuente, nombre, subtítulo (tipo y formato reales), ojo, subir/bajar; añadir fuente desde el «+»; pie con el número de capas. Sin escena, la tarjeta es la lista de fuentes de hoy.
 4. **7.4 · Candado y arrastrar.** Candado por capa (dato nuevo en `SceneLayer`, guardado con la escena, bloquea el editor del lienzo) y reordenar arrastrando el asa en vez de con flechas.
 

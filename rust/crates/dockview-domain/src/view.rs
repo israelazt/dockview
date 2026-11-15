@@ -312,6 +312,8 @@ pub struct LayerView {
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ScenesView {
     pub names: Vec<String>,
+    /// How many layers each scene has, in the order of `names`.
+    pub layer_counts: Vec<usize>,
     pub active: Option<usize>,
     /// The first one is the base.
     pub layers: Vec<LayerView>,

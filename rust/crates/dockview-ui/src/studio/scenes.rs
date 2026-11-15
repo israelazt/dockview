@@ -7,7 +7,7 @@ use dockview_domain::i18n::{tr, Key, Lang};
 use dockview_domain::theme::{Color, Theme};
 use dockview_domain::view::{Action, Model, SceneAction};
 
-use super::scene_layers::TAG;
+use super::scene_list::{self, SCENE_ROW_H};
 use super::widgets::{list_height, GAP, LABEL_H, ROW_H};
 use super::{intersect, PanelHit, StudioPanel, PAD};
 use crate::fit::fit_text;
@@ -15,7 +15,7 @@ use crate::text::Weight;
 use crate::{Rect, TextStyle, Ui};
 
 /// Scenes listed before the rest are cut off (the plain source is one more).
-const MAX_SCENES: usize = 8;
+pub(super) const MAX_SCENES: usize = 8;
 /// Most cards, screens or windows listed to add.
 const MAX_ADD: usize = 5;
 const PAD_TOP: f32 = 4.0;
@@ -23,29 +23,28 @@ const PAD_BOTTOM: f32 = 14.0;
 
 pub(super) const ROW_TEXT: TextStyle = TextStyle::new(13.0, Weight::Regular);
 
-const ICON_PLUS: char = '\u{e13d}';
+pub(super) const ICON_PLUS: char = '\u{e13d}';
 const ICON_TRASH: char = '\u{e18d}';
 const ICON_PENCIL: char = '\u{e1f9}';
 const ICON_MOVE: char = '\u{e121}';
 
-/// The scenes as a list: the plain source first, then each scene.
-fn scene_names(m: &Model) -> Vec<String> {
-    let mut names = vec![tr(m.lang, Key::ScenePlain).to_owned()];
-    names.extend(m.scenes.names.iter().cloned());
-    names
-}
-
-/// What choosing row `i` of that list asks for.
-fn activate(i: usize) -> Action {
-    Action::Scene(SceneAction::Activate(i.checked_sub(1)))
-}
-
 /// How tall the body is: the list, the buttons and, with a scene in use, its
 /// layers and the sources that can be added.
+#[cfg(test)]
 pub fn body_height(m: &Model) -> f32 {
+    body_height_in(m, false)
+}
+
+/// The same; in a card of its own (`cards`) the button that makes a scene is
+/// in the header and takes no row.
+pub fn body_height_in(m: &Model, cards: bool) -> f32 {
     let s = &m.scenes;
-    let mut height = PAD_TOP + list_height(1 + s.names.len(), MAX_SCENES + 1) + GAP + ROW_H;
+    let mut height = PAD_TOP + scene_list::row_count(m) as f32 * SCENE_ROW_H;
+    if !cards {
+        height += GAP + ROW_H;
+    }
     if s.active.is_some() {
+        height += GAP;
         height += ROW_H * 3.0; // edit the layers, rename and delete this scene
         height += GAP + LABEL_H + s.layers.len() as f32 * ROW_H;
         if s.can_add {
@@ -70,28 +69,18 @@ impl StudioPanel {
         let mut y = body.y + PAD_TOP;
         let s = &m.scenes;
 
-        let selected = Some(s.active.map_or(0, |i| i + 1));
-        self.hotkey_hints(ui, t, s.names.len(), (x, y, w));
-        y += self.list(
-            ui,
-            t,
-            lang,
-            &scene_names(m),
-            selected,
-            MAX_SCENES + 1,
-            &activate,
-            x,
-            y,
-            w,
-        ) + GAP;
-        y += self.action_row(
-            ui,
-            t,
-            ICON_PLUS,
-            tr(lang, Key::SceneNew),
-            Action::Scene(SceneAction::New),
-            (x, y, w),
-        );
+        y += self.scene_rows(ui, m, (x, y, w));
+        if !self.scope.cards() {
+            y += GAP;
+            y += self.action_row(
+                ui,
+                t,
+                ICON_PLUS,
+                tr(lang, Key::SceneNew),
+                Action::Scene(SceneAction::New),
+                (x, y, w),
+            );
+        }
         let Some(active) = s.active else {
             self.confirm_delete = None;
             return;
@@ -102,6 +91,7 @@ impl StudioPanel {
         if self.editing.as_ref().is_some_and(|(i, _)| *i != active) {
             self.editing = None;
         }
+        y += GAP;
         y += self.edit_row(ui, t, lang, s.editing, (x, y, w));
         let name = s.names.get(active).map_or("", String::as_str);
         y += self.rename_row(ui, t, lang, (active, name), (x, y, w));
@@ -161,22 +151,6 @@ impl StudioPanel {
             y,
             w,
         );
-    }
-
-    /// The global hotkey of each row of the list, at its right: Ctrl+Alt+F12 for
-    /// the plain source, Ctrl+Alt+F1 to F9 for the scenes (the first nine).
-    fn hotkey_hints(&self, ui: &mut Ui, t: &Theme, scenes: usize, (x, y, w): (f32, f32, f32)) {
-        let line_h = ui.measure("Ag", TAG).1;
-        for row in 0..=scenes.min(MAX_SCENES).min(9) {
-            let label = if row == 0 {
-                "F12".to_owned()
-            } else {
-                format!("F{row}")
-            };
-            let text_w = ui.measure(&label, TAG).0;
-            let top = y + row as f32 * ROW_H + (ROW_H - line_h) / 2.0;
-            ui.text(&label, x + w - 36.0 - text_w, top, TAG, t.text_dim);
-        }
     }
 
     /// The switch of the layer editor over the picture: lit while it is on.
