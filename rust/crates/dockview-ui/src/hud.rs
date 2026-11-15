@@ -4,17 +4,20 @@
 //! pipeline health.
 
 use dockview_domain::design::RADIUS_CONTROL;
-use dockview_domain::hud::{format_of, latency_tier, LatencyTier};
-use dockview_domain::i18n::{tr, Key, Lang};
+use dockview_domain::i18n::Lang;
 use dockview_domain::stats::Stats;
-use dockview_domain::theme::{Color, Theme};
-use dockview_domain::view::{Action, CurrentSource, Model, ReplayState, StatusKind};
+use dockview_domain::theme::Theme;
+use dockview_domain::view::{Action, Model};
 
+#[cfg(test)]
+use super::hud_cards::source_name;
+use super::hud_cards::{cards, Card, Piece};
 use super::input::Pointer;
 use super::text::Weight;
 use super::{Rect, TextStyle, Ui};
 
 const ICON_HEALTH: char = '\u{e038}';
+const ICON_CHEVRON: char = '\u{e06d}';
 
 const MARGIN: f32 = 16.0;
 const TOP: f32 = 12.0;
@@ -35,146 +38,6 @@ const SLIDE: f32 = 6.0;
 const VALUE: TextStyle = TextStyle::new(14.0, Weight::SemiBold);
 const LABEL: TextStyle = TextStyle::new(11.0, Weight::Medium);
 const MAX_NAME_W: f32 = 210.0;
-
-/// One piece of a card, left to right.
-#[derive(Debug, Clone, PartialEq)]
-enum Piece {
-    Dot(Color),
-    /// Two lines: a value on top and a small label under it.
-    Stack(String, String, Color),
-    /// A single line, centred.
-    Line(String, Color),
-    Divider,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-struct Card {
-    pieces: Vec<Piece>,
-}
-
-/// The name of what is being shown.
-fn source_name(m: &Model) -> String {
-    let pick = |list: &[String], i: Option<usize>| i.and_then(|i| list.get(i).cloned());
-    match m.sources.current {
-        CurrentSource::Capture => pick(&m.video_devices, m.video_selected),
-        CurrentSource::Monitor(i) => pick(&m.sources.monitors, Some(i)),
-        CurrentSource::Window(i) => pick(&m.sources.windows, i),
-    }
-    .unwrap_or_else(|| "—".into())
-}
-
-fn status_color(t: &Theme, status: StatusKind) -> Color {
-    match status {
-        StatusKind::Live => t.brand,
-        StatusKind::Connecting => t.warn,
-        StatusKind::Problem => t.error,
-        StatusKind::Idle => t.text_dim,
-    }
-}
-
-fn tier_color(t: &Theme, tier: LatencyTier) -> Color {
-    match tier {
-        LatencyTier::UltraLow | LatencyTier::Low => t.brand,
-        LatencyTier::Medium => t.warn,
-        LatencyTier::High => t.error,
-    }
-}
-
-/// The cards in the order they are given room (the last ones go first).
-fn cards(m: &Model, stats: &Stats) -> Vec<Card> {
-    let t = &m.theme;
-    let lang = m.lang;
-    let mut out = Vec::new();
-
-    // Where the picture comes from.
-    let mut detail = m.resolution.clone();
-    if let Some(format) = stats.device_mode.as_deref().and_then(format_of) {
-        if !detail.is_empty() {
-            detail.push_str(" · ");
-        }
-        detail.push_str(format);
-    }
-    out.push(Card {
-        pieces: vec![
-            Piece::Dot(status_color(t, m.status)),
-            Piece::Stack(source_name(m), detail, t.text),
-        ],
-    });
-
-    // How long it takes.
-    let (value, color, tag) = match stats.latency_ms.filter(|_| stats.measured) {
-        Some(ms) => {
-            let tier = latency_tier(ms);
-            (
-                format!("{ms:.1} ms"),
-                tier_color(t, tier),
-                Some(tr(lang, tier.label()).to_string()),
-            )
-        }
-        None => ("…".to_string(), t.text_dim, None),
-    };
-    let mut latency = vec![Piece::Stack(
-        value,
-        tr(lang, Key::HudLatency).to_string(),
-        t.text,
-    )];
-    if let Some(tag) = tag {
-        latency.push(Piece::Line(tag, color));
-    }
-    out.push(Card { pieces: latency });
-
-    // What it costs.
-    let measured = stats.measured;
-    let or_dots = |s: String| if measured { s } else { "…".to_string() };
-    let cpu = if stats.cpu_core_percent < 10.0 {
-        format!("{:.1}%", stats.cpu_core_percent)
-    } else {
-        format!("{:.0}%", stats.cpu_core_percent)
-    };
-    let mut perf = vec![
-        Piece::Stack(
-            or_dots(format!("{:.0} fps", stats.shown_fps)),
-            tr(lang, Key::Shown).to_string(),
-            t.text,
-        ),
-        Piece::Divider,
-        Piece::Stack(
-            format!("{}", m.nav.drops),
-            tr(lang, Key::HudDrops).to_string(),
-            if m.nav.drops > 0 { t.warn } else { t.text },
-        ),
-        Piece::Divider,
-        Piece::Stack(format!("{:.0} MB", stats.memory_mb), "RAM".into(), t.text),
-        Piece::Divider,
-        Piece::Stack(or_dots(cpu), "CPU".into(), t.text),
-    ];
-    if let Some(ms) = stats.gpu_ms {
-        perf.push(Piece::Divider);
-        perf.push(Piece::Stack(format!("{ms:.2} ms"), "GPU".into(), t.text));
-    }
-    out.push(Card { pieces: perf });
-
-    // Whether the replay is armed.
-    let (key, dot) = match m.replay.state {
-        ReplayState::Recording => (Key::HudReplayArmed, t.brand),
-        ReplayState::Starting => (Key::HudReplayStarting, t.warn),
-        ReplayState::Off => (Key::HudReplayOff, t.text_dim),
-        ReplayState::Unavailable => (Key::HudReplayNone, t.error),
-    };
-    let mut replay = vec![
-        Piece::Dot(dot),
-        Piece::Stack(
-            tr(lang, key).to_string(),
-            format!("{}s · {}", m.replay.keep_seconds, m.replay.hotkey),
-            t.text,
-        ),
-    ];
-    if m.replay.hotkey.is_empty() {
-        replay[1] = Piece::Line(tr(lang, key).to_string(), t.text);
-    }
-    out.push(Card { pieces: replay });
-    out
-}
 
 /// `text` cut to `max` pixels with an ellipsis.
 fn ellipsize(ui: &mut Ui, text: &str, style: TextStyle, max: f32) -> String {
@@ -214,6 +77,11 @@ pub struct Hud {
     progress: f32,
     hover: bool,
     pressed: bool,
+    /// Where the source card was drawn last, and what the pointer did on it.
+    source: Option<Rect>,
+    source_hover: bool,
+    source_pressed: bool,
+    source_clicked: bool,
 }
 
 impl Hud {
@@ -225,9 +93,19 @@ impl Hud {
         std::mem::take(&mut self.actions)
     }
 
-    /// Whether the pointer is over the health button.
+    /// Whether the pointer is over the health button or the source card.
     pub fn wants_pointer(&self) -> bool {
-        self.hover && self.progress > 0.0
+        (self.hover || self.source_hover) && self.progress > 0.0
+    }
+
+    /// Where the source card is, when the row is shown (the list opens under it).
+    pub fn source_card(&self) -> Option<Rect> {
+        self.source.filter(|_| self.progress > 0.0)
+    }
+
+    /// Whether the source card was clicked since the last call.
+    pub fn take_source_click(&mut self) -> bool {
+        std::mem::take(&mut self.source_clicked)
     }
 
     /// Whether the row is moving (so the window keeps drawing frames).
@@ -263,6 +141,9 @@ impl Hud {
         if self.progress <= 0.0 {
             self.hover = false;
             self.pressed = false;
+            self.source = None;
+            self.source_hover = false;
+            self.source_pressed = false;
             return 0.0;
         }
         let eased = 1.0 - (1.0 - self.progress).powi(3);
@@ -291,10 +172,31 @@ impl Hud {
         let room = button.x - GAP - MARGIN;
         let shown = how_many_fit(&widths, room).max(1);
         let mut x = MARGIN;
-        for (card, w) in all.iter().zip(&widths).take(shown) {
+        self.source = None;
+        for (i, (card, w)) in all.iter().zip(&widths).take(shown).enumerate() {
             let w = w.min((room - x + MARGIN).max(40.0));
-            draw_card(ui, theme, card, Rect::new(x, TOP, w, CARD_H));
+            let rect = Rect::new(x, TOP, w, CARD_H);
+            draw_card(ui, theme, card, rect);
+            if i == 0 {
+                // The first card is the source: it opens the list of sources.
+                self.source = Some(rect);
+                self.source_hover = pointer.pos.is_some_and(|(px, py)| rect.contains(px, py));
+                if self.source_hover {
+                    ui.rect(rect, RADIUS_CONTROL + 2.0, theme.hover);
+                }
+            }
             x += w + GAP;
+        }
+        if show {
+            if pointer.just_pressed {
+                self.source_pressed = self.source_hover;
+            }
+            if pointer.just_released {
+                if self.source_pressed && self.source_hover {
+                    self.source_clicked = true;
+                }
+                self.source_pressed = false;
+            }
         }
         self.draw_button(ui, theme, button, model.stats_open);
         ui.set_offset(0.0, 0.0);
@@ -329,6 +231,7 @@ fn piece_width(ui: &mut Ui, p: &Piece) -> f32 {
         }
         Piece::Line(text, _) => ui.measure(text, LABEL).0 + 16.0,
         Piece::Divider => 1.0 + DIVIDER_GAP * 2.0,
+        Piece::Chevron => 8.0 + 14.0,
     }
 }
 
@@ -351,7 +254,7 @@ fn card_width(ui: &mut Ui, card: &Card, _lang: Lang) -> f32 {
                 first_text = false;
             }
             Piece::Divider => first_text = true,
-            Piece::Dot(_) => {}
+            Piece::Dot(_) | Piece::Chevron => {}
         }
         width += piece_width(ui, piece);
     }
@@ -401,6 +304,10 @@ fn draw_card(ui: &mut Ui, theme: &Theme, card: &Card, r: Rect) {
                 ui.text(text, chip.x + 8.0, chip.y + 4.0, LABEL, *color);
                 x += chip.w;
             }
+            Piece::Chevron => {
+                ui.icon(ICON_CHEVRON, x + 8.0 + 7.0, mid, 14.0, theme.text_dim);
+                x += 8.0 + 14.0;
+            }
             Piece::Divider => {
                 x += DIVIDER_GAP;
                 ui.rect(Rect::new(x, mid - 10.0, 1.0, 20.0), 0.0, theme.chrome_line);
@@ -415,6 +322,7 @@ fn draw_card(ui: &mut Ui, theme: &Theme, card: &Card, r: Rect) {
 mod tests {
     use super::*;
     use crate::test_model::model;
+    use dockview_domain::view::{CurrentSource, ReplayState};
 
     fn measured() -> Stats {
         Stats {
@@ -611,5 +519,51 @@ mod tests {
             &Pointer::default(),
             true,
         );
+    }
+
+    #[test]
+    fn the_source_card_opens_the_list_when_clicked() {
+        let m = model();
+        let mut hud = Hud::new();
+        assert!(hud.source_card().is_none(), "nothing before it is drawn");
+        frame(&mut hud, &m, &measured(), 1280, &Pointer::default(), true);
+        let card = hud.source_card().expect("the first card");
+        assert_eq!((card.x, card.y), (MARGIN, TOP));
+        let mut p = Pointer {
+            pos: Some(card.center()),
+            ..Pointer::default()
+        };
+        frame(&mut hud, &m, &measured(), 1280, &p, true);
+        assert!(hud.wants_pointer(), "the hand cursor over the card");
+        p.press();
+        frame(&mut hud, &m, &measured(), 1280, &p, true);
+        p.end_frame();
+        p.release();
+        frame(&mut hud, &m, &measured(), 1280, &p, true);
+        assert!(hud.take_source_click());
+        assert!(!hud.take_source_click(), "once");
+        // A click on the second card is not the source card's.
+        let other = Pointer {
+            pos: Some((card.x + card.w + GAP + 30.0, TOP + 10.0)),
+            ..Pointer::default()
+        };
+        let mut p = other;
+        frame(&mut hud, &m, &measured(), 1280, &p, true);
+        p.press();
+        frame(&mut hud, &m, &measured(), 1280, &p, true);
+        p.end_frame();
+        p.release();
+        frame(&mut hud, &m, &measured(), 1280, &p, true);
+        assert!(!hud.take_source_click());
+    }
+
+    #[test]
+    fn the_source_card_is_gone_while_the_row_is_hidden() {
+        let m = model();
+        let mut hud = Hud::new();
+        frame(&mut hud, &m, &measured(), 1280, &Pointer::default(), true);
+        assert!(hud.source_card().is_some());
+        frame(&mut hud, &m, &measured(), 1280, &Pointer::default(), false);
+        assert!(hud.source_card().is_none());
     }
 }

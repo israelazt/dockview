@@ -145,7 +145,16 @@ impl ApplicationHandler for Shell {
                 self.ui_scale = self.core.cli().scale.unwrap_or(scale_factor as f32);
             }
             WindowEvent::KeyboardInput { event, .. } if event.state == ElementState::Pressed => {
-                if self.studio.is_editing() {
+                if self.source_picker.is_open()
+                    && matches!(
+                        event.logical_key,
+                        winit::keyboard::Key::Named(winit::keyboard::NamedKey::Escape)
+                    )
+                {
+                    // Escape closes the list of sources first.
+                    self.source_picker.close();
+                    self.needs_redraw = true;
+                } else if self.studio.is_editing() {
                     // A name is being typed: the keys are for the field and not
                     // for the shortcuts (F, Tab, the arrows...).
                     let text = event.text.as_deref();
@@ -174,8 +183,9 @@ impl ApplicationHandler for Shell {
             self.recreate_graphics();
         }
         self.refresh_host_info();
-        let lists_shown =
-            self.studio.shows(StudioSection::Sources) || self.studio.shows(StudioSection::Scenes);
+        let lists_shown = self.studio.shows(StudioSection::Sources)
+            || self.studio.shows(StudioSection::Scenes)
+            || self.source_picker.is_open();
         self.core.tick(lists_shown);
         self.show_events();
         self.apply_host_requests();

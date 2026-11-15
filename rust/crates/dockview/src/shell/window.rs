@@ -4,88 +4,13 @@ use dockview_domain::layout::Rect as PhysicalRect;
 use dockview_domain::presenter::Screenshot;
 use dockview_domain::render_plan::{render_plan, video_frame_due};
 use dockview_domain::view::RecState;
-use dockview_domain::window_chrome::Zone;
 use dockview_ui::input::Pointer;
 use dockview_ui::studio::route_pointer;
 use dockview_ui::titlebar::TitleBarState;
-use winit::event::ElementState;
-use winit::event_loop::ActiveEventLoop;
-use winit::window::CursorIcon;
 
 use super::*;
 
 impl Shell {
-    /// The left mouse button: the window's frame takes the presses that start on
-    /// it (and the release that ends them); everything else is for the content.
-    pub(super) fn left_button(&mut self, event_loop: &ActiveEventLoop, state: ElementState) {
-        let chrome = self.chrome();
-        let pos = self.cursor_phys;
-        let command = match state {
-            ElementState::Pressed => {
-                let now_ms = self.started.elapsed().as_millis() as u64;
-                let command = pos.and_then(|p| self.chrome_input.press(&chrome, p, now_ms));
-                // The navigation row is the interface's own, like the content.
-                let on_frame = pos.is_some_and(|(x, y)| {
-                    !matches!(chrome.zone_at(x, y), Zone::Content | Zone::Nav | Zone::Rail)
-                });
-                if on_frame {
-                    self.chrome_held = true;
-                } else {
-                    self.pointer.press();
-                }
-                command
-            }
-            ElementState::Released => {
-                let command = self.chrome_input.release(&chrome, pos);
-                if std::mem::take(&mut self.chrome_held) {
-                    // The content never saw the press, so it does not see the release.
-                } else {
-                    self.pointer.release();
-                }
-                command
-            }
-        };
-        if let Some(command) = command {
-            self.run_window_command(event_loop, command);
-        }
-        self.needs_redraw = true;
-    }
-
-    /// Pointer shape and visibility follow what the controls are doing.
-    pub(super) fn update_cursor(&mut self) {
-        let Some(window) = &self.window else {
-            return;
-        };
-        let pointer = self.controls.wants_pointer()
-            || self.studio.wants_pointer()
-            || self.navbar.wants_pointer()
-            || self.hud.wants_pointer()
-            || self.stats_panel.wants_pointer()
-            || self.rail.wants_pointer();
-        let frame = self
-            .cursor_phys
-            .map(|(x, y)| self.chrome().zone_at(x, y).cursor())
-            .map_or(CursorIcon::Default, super::cursor::chrome_cursor);
-        let icon = match self.scene_editor.hover() {
-            _ if frame != CursorIcon::Default => frame,
-            Some(handle) if !pointer => {
-                super::cursor::cursor_for(handle, self.scene_editor.is_dragging())
-            }
-            _ if pointer => CursorIcon::Pointer,
-            _ => CursorIcon::Default,
-        };
-        if icon != self.cursor_icon {
-            self.cursor_icon = icon;
-            window.set_cursor(icon);
-        }
-        // While watching full screen, an idle cursor gets out of the way.
-        let hidden = self.core.fullscreen() && !self.controls.is_visible();
-        if hidden != self.cursor_hidden {
-            self.cursor_hidden = hidden;
-            window.set_cursor_visible(!hidden);
-        }
-    }
-
     /// Builds the renderer and the interface renderer again after the graphics
     /// device was lost (a driver update or reset). If it cannot be done yet, the
     /// idle loop tries again.
@@ -214,6 +139,7 @@ impl Shell {
         let (scene_editor, edit_mods) = (&mut self.scene_editor, &self.edit_mods);
         let studio = &mut self.studio;
         let hud = &mut self.hud;
+        let source_picker = &mut self.source_picker;
         // The readouts show in the viewer: no panel, not in full screen.
         let hud_show = model.hud && !model.studio && !model.fullscreen;
         let navbar = &mut self.navbar;
@@ -243,7 +169,12 @@ impl Shell {
                 // What floats over the video anchors to the video's room.
                 // The layer editor sits on the picture, under the controls; what
                 // the controls (the pill) use is not the editor's.
-                let editor_pointer = if controls.over_controls() {
+                let over_list = source_picker.covers(
+                    video_pointer
+                        .pos
+                        .map(|(x, y)| (x - place.video_logical.x, y - place.video_logical.y)),
+                );
+                let editor_pointer = if controls.over_controls() || over_list {
                     Pointer {
                         pos: None,
                         wheel: 0.0,
@@ -267,8 +198,23 @@ impl Shell {
                 ui.set_inset_left(rail_l + vl.x);
                 ui.set_inset_top(top_l + vl.y);
                 ui.limit_width(Some(place.video_width));
-                controls.frame(ui, &model, &float_pointer, dt);
+                // Under the list the bar must not take the pointer either.
+                let bar_pointer = if source_picker.covers(float_pointer.pos) {
+                    Pointer {
+                        pos: None,
+                        ..float_pointer
+                    }
+                } else {
+                    float_pointer
+                };
+                controls.frame(ui, &model, &bar_pointer, dt);
                 let hud_h = hud.frame(ui, &model, stats, &float_pointer, hud_show, dt, animations);
+                if hud.take_source_click() {
+                    source_picker.toggle();
+                }
+                if !hud_show {
+                    source_picker.close();
+                }
                 // What anchors to the top sits under the readouts.
                 ui.set_inset_top(top_l + vl.y + hud_h);
                 stats_panel.frame(
@@ -291,6 +237,9 @@ impl Shell {
                     );
                 }
                 toasts.frame(ui, &model.theme, dt, animations);
+                // The list of sources, over the rest of what floats.
+                ui.set_inset_top(top_l + vl.y);
+                source_picker.frame(ui, &model, &float_pointer, hud.source_card());
                 ui.set_inset_top(top_l);
                 ui.set_inset_left(rail_l);
                 // The panel, on top, in the room it took.
@@ -353,6 +302,7 @@ impl Shell {
         for action in actions
             .into_iter()
             .chain(self.hud.take_actions())
+            .chain(self.source_picker.take_actions())
             .chain(self.stats_panel.take_actions())
             .chain(self.navbar.take_actions())
             .chain(self.rail.take_actions())

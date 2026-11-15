@@ -236,6 +236,8 @@ Hecho y subido, **sin abrir la app** (el autor está jugando; todo se verificó 
 3. **6.3 · Columna derecha y franja de estado.** El panel conserva Audio, Grabación, Ajustes y Estadísticas; arriba, la franja con escena activa, FPS y latencia.
 Las partes 7 a 9 (escenas y capas, lienzo y transiciones, emisión) rellenan esas columnas.
 
+**Cambiar la fuente en el Visor (2026-11-14):** al quitar de la barra el botón de fuentes, la tarjeta de **fuente** de la fila de datos pasa a ser clicable (con una flecha): abre una **lista bajo ella** con las capturadoras, las pantallas y las ventanas, con la actual marcada; elegir una cambia la fuente y cierra la lista; se cierra con `Esc`, con un clic fuera o con la tarjeta; se desplaza con la rueda si es larga, y mientras está abierta se refrescan las listas de pantallas y ventanas. Solo existe mientras la fila de datos está visible.
+
 ## 6. Decisiones
 
 **Tomadas (2026-11-14):**
