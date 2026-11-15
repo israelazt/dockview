@@ -113,52 +113,10 @@ mod tests {
 
     use super::*;
     use crate::output::{StreamConfig, StreamOutput};
-    use crate::testing::FakeServer;
+    use crate::testing::{bridge, serve_tcp as serve, FakeServer};
     use dockview_domain::broadcast::StreamState;
     use dockview_domain::encoded::EncodedFrame;
     use std::time::Instant;
-
-    /// Wires a stream to a fake RTMP server until either side closes.
-    fn bridge<S: Read + Write>(mut socket: S, server: &FakeServer) {
-        let mut link = server.transport();
-        let mut buf = [0u8; 8192];
-        loop {
-            match socket.read(&mut buf) {
-                Ok(0) => return,
-                Ok(n) => {
-                    if link.send(&buf[..n]).is_err() {
-                        return;
-                    }
-                }
-                Err(e)
-                    if matches!(
-                        e.kind(),
-                        io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut
-                    ) => {}
-                Err(_) => return,
-            }
-            while let Ok(n) = link.recv(&mut buf) {
-                if n == 0 || socket.write_all(&buf[..n]).is_err() || socket.flush().is_err() {
-                    return;
-                }
-            }
-        }
-    }
-
-    /// A local server: every socket is wired to a fake RTMP server.
-    fn serve(server: FakeServer) -> u16 {
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-        let port = listener.local_addr().unwrap().port();
-        thread::spawn(move || {
-            if let Ok((socket, _)) = listener.accept() {
-                socket
-                    .set_read_timeout(Some(Duration::from_millis(2)))
-                    .unwrap();
-                bridge(socket, &server);
-            }
-        });
-        port
-    }
 
     /// A client that trusts a fresh self-signed certificate for `localhost`,
     /// and the server configuration that holds it.

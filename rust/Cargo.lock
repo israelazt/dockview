@@ -369,6 +369,7 @@ name = "dockview-platform"
 version = "0.1.0"
 dependencies = [
  "dockview-domain",
+ "dockview-stream",
  "serde",
  "serde_json",
  "wasapi",

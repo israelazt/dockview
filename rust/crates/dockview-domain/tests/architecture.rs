@@ -51,7 +51,13 @@ fn each_crate_depends_only_on_what_the_layers_allow() {
         ),
         (
             "dockview-platform",
-            &["dockview-domain", "serde", "serde_json", "windows"],
+            &[
+                "dockview-domain",
+                "dockview-stream",
+                "serde",
+                "serde_json",
+                "windows",
+            ],
         ),
         ("dockview-ui", &["dockview-domain", "cosmic-text"]),
         ("dockview-app", &["dockview-domain"]),

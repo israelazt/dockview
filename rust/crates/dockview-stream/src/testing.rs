@@ -2,8 +2,11 @@
 //! a publisher, records what it sends, and can be told to misbehave.
 
 use std::collections::VecDeque;
-use std::io;
+use std::io::{self, Read, Write};
+use std::net::TcpListener;
 use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::Duration;
 
 use crate::rtmp::amf::{self, Value};
 use crate::rtmp::chunk::{ChunkReader, ChunkWriter, Message};
@@ -233,4 +236,45 @@ impl State {
         ];
         self.say(20, 5, amf::encode_all(&status));
     }
+}
+
+/// Wires a stream (a socket, or a socket inside TLS) to `server` until either
+/// side closes. The stream's reads must time out shortly instead of blocking.
+pub fn bridge<S: Read + Write>(mut socket: S, server: &FakeServer) {
+    let mut link = server.transport();
+    let mut buf = [0u8; 8192];
+    loop {
+        match socket.read(&mut buf) {
+            Ok(0) => return,
+            Ok(n) => {
+                if link.send(&buf[..n]).is_err() {
+                    return;
+                }
+            }
+            Err(e)
+                if matches!(
+                    e.kind(),
+                    io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut
+                ) => {}
+            Err(_) => return,
+        }
+        while let Ok(n) = link.recv(&mut buf) {
+            if n == 0 || socket.write_all(&buf[..n]).is_err() || socket.flush().is_err() {
+                return;
+            }
+        }
+    }
+}
+
+/// A local TCP server for one connection, backed by `server`. Returns its port.
+pub fn serve_tcp(server: FakeServer) -> u16 {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("a free local port");
+    let port = listener.local_addr().expect("a bound listener").port();
+    thread::spawn(move || {
+        if let Ok((socket, _)) = listener.accept() {
+            let _ = socket.set_read_timeout(Some(Duration::from_millis(2)));
+            bridge(socket, &server);
+        }
+    });
+    port
 }

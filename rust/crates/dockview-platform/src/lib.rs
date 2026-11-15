@@ -25,6 +25,8 @@ pub mod hotkey;
 #[cfg(windows)]
 pub mod imagefile;
 #[cfg(windows)]
+pub mod live_stream;
+#[cfg(windows)]
 pub mod log_file;
 #[cfg(windows)]
 pub mod mf;
