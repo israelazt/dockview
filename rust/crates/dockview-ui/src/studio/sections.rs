@@ -165,11 +165,7 @@ impl SectionRow {
 /// `StudioSection::ALL[i]`, so the folding can be animated, and `heights[i]`
 /// is how tall its body is when open. Only the sections `scope` lists are
 /// stacked. Returns the rows and the height of the whole list.
-pub fn stack(
-    scope: Scope,
-    expanded: &[f32; 6],
-    heights: &[f32; 6],
-) -> (Vec<SectionRow>, f32) {
+pub fn stack(scope: Scope, expanded: &[f32; 6], heights: &[f32; 6]) -> (Vec<SectionRow>, f32) {
     let mut rows = Vec::with_capacity(StudioSection::ALL.len());
     let mut top = 0.0;
     // The cards of the left column list the scenes first.
@@ -236,10 +232,9 @@ mod tests {
         assert_eq!(rows.len(), 2);
         assert_eq!(height, HEADER_H * 2.0 + Scope::Side.gap());
         let (rows, _) = stack(Scope::Main, &[0.0; 6], &[BODY_H; 6]);
-        assert!(rows.iter().all(|r| !matches!(
-            r.section,
-            StudioSection::Sources | StudioSection::Scenes
-        )));
+        assert!(rows
+            .iter()
+            .all(|r| !matches!(r.section, StudioSection::Sources | StudioSection::Scenes)));
         assert_eq!(rows[0].top, 0.0);
     }
 

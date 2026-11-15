@@ -115,6 +115,37 @@ fn a_dragged_layer_is_placed_saved_and_kept_inside_the_picture() {
 }
 
 #[test]
+fn a_locked_layer_is_saved_locked_and_cannot_be_placed_but_can_still_be_moved_in_the_order() {
+    let mut rig = rig_editing();
+    rig.core.apply(Action::Scene(SceneAction::ToggleLock(1)));
+    let saved = rig.saved_soon().expect("the lock is saved");
+    assert!(saved.scenes[0].layers[1].locked);
+    assert!(!saved.scenes[0].layers[2].locked);
+    assert!(
+        rig.core.model().scenes.layers[1].locked,
+        "the list shows it"
+    );
+    let before = saved.scenes[0].layers[1].rect;
+    rig.core.apply(Action::Scene(SceneAction::SetLayerRect(
+        1,
+        [1000, 2000, 3000, 2500],
+    )));
+    assert_eq!(
+        rig.saved_soon().unwrap().scenes[0].layers[1].rect,
+        before,
+        "a locked layer does not move"
+    );
+    assert_eq!(rig.core.model().scenes.layers[1].rect, before);
+    // Its place in the order is not its place in the picture.
+    rig.core.apply(Action::Scene(SceneAction::MoveLayer(1, 1)));
+    assert!(rig.core.model().scenes.layers[2].locked);
+    // And it unlocks.
+    rig.core.apply(Action::Scene(SceneAction::ToggleLock(2)));
+    assert!(!rig.core.model().scenes.layers[2].locked);
+    rig.core.apply(Action::Scene(SceneAction::ToggleLock(9)));
+}
+
+#[test]
 fn layers_move_up_and_down_but_the_base_stays_at_the_bottom() {
     let mut rig = rig_editing();
     let names = |rig: &Rig| {

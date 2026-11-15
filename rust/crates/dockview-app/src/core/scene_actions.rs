@@ -67,6 +67,7 @@ impl Core {
                             SourceRef::Window { .. } => LayerKind::Window,
                         },
                         visible: l.visible,
+                        locked: l.locked,
                         rect: l.rect,
                     })
                     .collect()
@@ -79,7 +80,12 @@ impl Core {
                 .iter()
                 .map(|s| s.name.clone())
                 .collect(),
-            layer_counts: self.settings.scenes.iter().map(|s| s.layers.len()).collect(),
+            layer_counts: self
+                .settings
+                .scenes
+                .iter()
+                .map(|s| s.layers.len())
+                .collect(),
             active,
             can_add: active.is_some() && layers.len() < MAX_SCENE_LAYERS,
             selected: self.view.layer_selected.filter(|i| *i < layers.len()),
@@ -97,6 +103,7 @@ impl Core {
             SceneAction::New => self.new_scene(),
             SceneAction::Delete(index) => self.delete_scene(index),
             SceneAction::ToggleLayer(index) => self.toggle_layer(index),
+            SceneAction::ToggleLock(index) => self.toggle_lock(index),
             SceneAction::RemoveLayer(index) => self.remove_layer(index),
             SceneAction::SetLayerRect(index, units) => self.set_layer_rect(index, units),
             SceneAction::MoveLayer(index, delta) => self.move_layer(index, delta),
@@ -204,6 +211,16 @@ impl Core {
         self.sync_compositor();
     }
 
+    /// Locks or unlocks a layer of the scene in use.
+    fn toggle_lock(&mut self, index: usize) {
+        if let Some(layer) = self
+            .active_scene_mut()
+            .and_then(|scene| scene.layers.get_mut(index))
+        {
+            layer.locked = !layer.locked;
+        }
+    }
+
     /// The positions the undo list remembers no longer mean what they did (a
     /// layer or scene was removed or moved in the order).
     pub(super) fn forget_layer_edits(&mut self) {
@@ -291,7 +308,7 @@ impl Core {
         else {
             return;
         };
-        if layer.rect == rect {
+        if layer.rect == rect || layer.locked {
             return;
         }
         self.commit_pending_edit(index);

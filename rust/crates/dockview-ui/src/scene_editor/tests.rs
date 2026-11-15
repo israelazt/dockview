@@ -19,6 +19,7 @@ struct Rig {
 fn layer(name: &str, visible: bool, rect: NormRect) -> LayerView {
     LayerView {
         kind: Default::default(),
+        locked: false,
         name: name.into(),
         visible,
         rect,

@@ -67,7 +67,11 @@ impl StudioPanel {
             }
             ui.rect(row, 10.0, t.hover.with_alpha(t.hover.a * hover));
             let cy = top + SCENE_ROW_H / 2.0;
-            let dot = if on { t.brand } else { t.text_dim.with_alpha(0.35) };
+            let dot = if on {
+                t.brand
+            } else {
+                t.text_dim.with_alpha(0.35)
+            };
             ui.rect(Rect::new(x + 11.0, cy - 3.5, 7.0, 7.0), 3.5, dot);
             // The key, in a chip at the right, takes its room first.
             let mut right = x + w - 8.0;
@@ -82,7 +86,13 @@ impl StudioPanel {
             let text_x = x + 28.0;
             let label = fit_text(ui, &name(m, i), ROW_TEXT, (right - text_x).max(0.0));
             let color = if on { t.text } else { t.text_dim };
-            ui.text(&label, text_x, cy - (name_h + note_h + 1.0) / 2.0, ROW_TEXT, color);
+            ui.text(
+                &label,
+                text_x,
+                cy - (name_h + note_h + 1.0) / 2.0,
+                ROW_TEXT,
+                color,
+            );
             let note = fit_text(ui, &subtitle(m, i), NOTE, (right - text_x).max(0.0));
             ui.text(
                 &note,
@@ -120,9 +130,18 @@ mod tests {
         m.scenes.names = vec!["A".into(), "B".into(), "C".into()];
         m.scenes.layer_counts = vec![1, 3];
         assert_eq!(subtitle(&m, 0), tr(m.lang, Key::ScenePlainNote));
-        assert_eq!(subtitle(&m, 1), format!("1 {}", tr(m.lang, Key::SceneLayerOne)));
-        assert_eq!(subtitle(&m, 2), format!("3 {}", tr(m.lang, Key::SceneLayerMany)));
-        assert!(subtitle(&m, 3).starts_with("0 "), "a count that is missing is none");
+        assert_eq!(
+            subtitle(&m, 1),
+            format!("1 {}", tr(m.lang, Key::SceneLayerOne))
+        );
+        assert_eq!(
+            subtitle(&m, 2),
+            format!("3 {}", tr(m.lang, Key::SceneLayerMany))
+        );
+        assert!(
+            subtitle(&m, 3).starts_with("0 "),
+            "a count that is missing is none"
+        );
     }
 
     #[test]

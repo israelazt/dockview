@@ -90,6 +90,10 @@ pub struct SceneLayer {
     pub fit: Fit,
     #[serde(default = "yes")]
     pub visible: bool,
+    /// Locked layers cannot be picked or moved over the picture (they can
+    /// still be hidden, reordered and removed).
+    #[serde(default)]
+    pub locked: bool,
 }
 
 fn yes() -> bool {
@@ -103,6 +107,7 @@ impl SceneLayer {
             rect,
             fit: Fit::Contain,
             visible: true,
+            locked: false,
         }
     }
 }
@@ -196,6 +201,18 @@ impl Scene {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_layer_saved_before_locking_existed_loads_unlocked() {
+        let old = r#"{"source":{"kind":"window","title":"A"},"rect":{"x":0,"y":0,"w":1,"h":1}}"#;
+        let layer: SceneLayer = serde_json::from_str(old).unwrap();
+        assert!(!layer.locked && layer.visible);
+        let mut locked = layer.clone();
+        locked.locked = true;
+        let back: SceneLayer =
+            serde_json::from_str(&serde_json::to_string(&locked).unwrap()).unwrap();
+        assert!(back.locked);
+    }
 
     #[test]
     fn a_hotkey_slot_picks_the_plain_source_a_scene_or_nothing() {

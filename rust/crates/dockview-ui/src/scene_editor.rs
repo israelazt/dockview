@@ -161,7 +161,8 @@ impl SceneEditor {
     /// A press on the picture: grab a handle of the chosen layer, or choose
     /// the layer under the pointer (and start moving it), or choose none.
     fn press(&mut self, m: &Model, picture: &Picture, selected: Option<usize>, (x, y): (f32, f32)) {
-        if let Some(i) = selected {
+        let locked = |i: usize| m.scenes.layers.get(i).is_some_and(|l| l.locked);
+        if let Some(i) = selected.filter(|i| !locked(*i)) {
             let rect = self.rect_of(m, i);
             if let Some(handle) = handle_at(picture, rect, x, y) {
                 self.hold(i, Drag::begin(handle, rect, picture, x, y), (x, y));
@@ -172,7 +173,7 @@ impl SceneEditor {
             .scenes
             .layers
             .iter()
-            .map(|l| (l.rect, l.visible))
+            .map(|l| (l.rect, l.visible && !l.locked))
             .collect();
         match pick_layer(picture, &rects, x, y) {
             Some(i) => {

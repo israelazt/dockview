@@ -27,6 +27,24 @@ impl StudioPanel {
                 self.drag_slider(i, x);
             }
         }
+        // A layer held by its grip follows the pointer; where it lands is
+        // decided when it is let go.
+        if let (Some(PanelHit::Grip(layer)), Some((_, y)), Some((top, rows))) =
+            (self.pressed, pointer.pos, self.layer_rows)
+        {
+            if pointer.down {
+                self.reorder = Some((
+                    layer,
+                    super::layers_card::reorder_target(y, top, rows, layer),
+                ));
+            }
+        }
+        if !pointer.down {
+            if let Some((layer, target)) = self.reorder.take() {
+                self.actions
+                    .extend(super::layers_card::reorder_actions(layer, target));
+            }
+        }
         if pointer.just_released {
             if let (Some(pressed), Some(hovered)) = (self.pressed, self.hovered) {
                 if pressed == hovered {
@@ -61,7 +79,7 @@ impl StudioPanel {
     fn activate(&mut self, hit: PanelHit) {
         match hit {
             PanelHit::Close => self.actions.push(Action::ToggleStudio),
-            PanelHit::Slider(_) => {}
+            PanelHit::Slider(_) | PanelHit::Grip(_) => {}
             PanelHit::AskDelete => self.confirm_delete = self.ask_delete_of,
             PanelHit::CancelDelete => self.confirm_delete = None,
             PanelHit::Rename => {

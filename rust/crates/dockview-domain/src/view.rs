@@ -278,6 +278,9 @@ pub enum SceneAction {
     Delete(usize),
     /// Show or hide a layer of the active scene.
     ToggleLayer(usize),
+    /// Lock or unlock a layer of the active scene (a locked one cannot be
+    /// picked or moved over the picture).
+    ToggleLock(usize),
     RemoveLayer(usize),
     /// Add the capture card, monitor or window at this position of its list.
     AddCapture(usize),
@@ -315,6 +318,8 @@ pub struct LayerView {
     pub name: String,
     pub kind: LayerKind,
     pub visible: bool,
+    /// Locked: the editor over the picture leaves it alone.
+    pub locked: bool,
     pub rect: NormRect,
 }
 

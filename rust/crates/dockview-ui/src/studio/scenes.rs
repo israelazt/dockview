@@ -120,7 +120,12 @@ impl StudioPanel {
 
     /// The lists of what can be added to the scene: a caption and the capture
     /// cards, the screens and the windows. Returns their height.
-    pub(super) fn draw_add(&mut self, ui: &mut Ui, m: &Model, (x, mut y, w): (f32, f32, f32)) -> f32 {
+    pub(super) fn draw_add(
+        &mut self,
+        ui: &mut Ui,
+        m: &Model,
+        (x, mut y, w): (f32, f32, f32),
+    ) -> f32 {
         let (t, lang) = (&m.theme, m.lang);
         let top = y;
         y += self.caption(ui, t, tr(lang, Key::SceneAddSource), x, y);

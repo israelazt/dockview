@@ -16,9 +16,9 @@ mod draw;
 mod edit;
 mod inputs;
 mod interact;
+mod layers_card;
 mod recording;
 mod route;
-mod layers_card;
 mod scene_layers;
 mod scene_list;
 mod scenes;
@@ -76,6 +76,8 @@ enum PanelHit {
     Item(usize),
     /// A slider inside a section: its position among this frame's sliders.
     Slider(usize),
+    /// The grip of a layer's row: dragging it reorders the layers.
+    Grip(usize),
     /// The button that asks whether to delete the scene in use.
     AskDelete,
     /// The answer "no" to that question.
@@ -110,6 +112,11 @@ pub struct StudioPanel {
     next_sliders: Vec<inputs::SliderInfo>,
     /// The part of the list on show, which cuts what is drawn and clicked.
     clip: Rect,
+    /// Where the rows of the layers start (top, on screen) and how many there
+    /// are, in the last frame: what a drag over them is measured against.
+    layer_rows: Option<(f32, usize)>,
+    /// The layer being dragged by its grip and the place it would land at.
+    reorder: Option<(usize, usize)>,
     /// Where the indicator of each segmented control is, by name.
     slide: HashMap<&'static str, f32>,
     hovered: Option<PanelHit>,
@@ -152,6 +159,8 @@ impl StudioPanel {
             sliders: Vec::new(),
             next_sliders: Vec::new(),
             clip: Rect::new(0.0, 0.0, 0.0, 0.0),
+            layer_rows: None,
+            reorder: None,
             slide: HashMap::new(),
             hovered: None,
             pressed: None,
@@ -283,6 +292,7 @@ impl StudioPanel {
         self.area = area;
         let Some(visible) = area else {
             self.editing = None;
+            self.reorder = None;
             self.typed.clear();
             self.hits.clear();
             self.hovered = None;
