@@ -206,7 +206,8 @@ impl ApplicationHandler for Shell {
         let animating = self.controls.is_visible()
             || self.toasts.is_visible()
             || self.core.rec_is_on()
-            || self.studio.is_animating();
+            || self.studio.is_animating()
+            || self.hud_moving;
         if new_frame || animating || std::mem::take(&mut self.needs_redraw) {
             if let Some(window) = &self.window {
                 window.request_redraw();

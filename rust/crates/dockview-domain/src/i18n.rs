@@ -221,6 +221,17 @@ strings! {
     StripSaveClip => "Save clip", "Guardar clip";
     StripRecord => "Record", "Grabar";
     StripScenes => "Scenes", "Escenas";
+    HudLatency => "LATENCY", "LATENCIA";
+    HudUltraLow => "ULTRA LOW", "ULTRA BAJA";
+    HudLow => "LOW", "BAJA";
+    HudMedium => "MEDIUM", "MEDIA";
+    HudHigh => "HIGH", "ALTA";
+    HudReplayArmed => "REPLAY ARMED", "REPLAY ARMADO";
+    HudReplayStarting => "REPLAY STARTING", "REPLAY INICIANDO";
+    HudReplayOff => "REPLAY OFF", "REPLAY APAGADO";
+    HudReplayNone => "NO REPLAY", "SIN REPLAY";
+    HudHealth => "Pipeline health", "Salud del pipeline";
+    HudDrops => "drops", "pérdidas";
     RailLog => "Open the log", "Abrir el registro";
     WindowMinimize => "Minimize", "Minimizar";
     WindowMaximize => "Maximize", "Maximizar";

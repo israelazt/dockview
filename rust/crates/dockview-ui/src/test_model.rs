@@ -34,5 +34,6 @@ pub(crate) fn model() -> Model {
         scenes: ScenesView::default(),
         stream: StreamView::default(),
         nav: NavView::default(),
+        hud: true,
     }
 }

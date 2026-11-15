@@ -143,6 +143,7 @@ impl Core {
             scenes: self.scenes_view(self.lang_mode().resolve(self.view.system_lang)),
             stream: self.stream_view(),
             nav: self.nav_view(),
+            hud: self.settings.hud,
         }
     }
 
@@ -195,6 +196,7 @@ impl Core {
                 self.go_to(tab);
                 return;
             }
+            Action::ToggleHud => self.settings.hud = !self.settings.hud,
             Action::ToggleStream => {
                 self.toggle_stream();
                 return;
@@ -358,6 +360,10 @@ impl Core {
             KeyCommand::SyncLater => self.change_offset(OFFSET_STEP_MS),
             KeyCommand::CyclePreset => self.cycle_preset(),
             KeyCommand::ToggleStats => self.view.stats_open = !self.view.stats_open,
+            KeyCommand::ToggleHud => {
+                self.settings.hud = !self.settings.hud;
+                self.settings_changed();
+            }
             KeyCommand::NextVideo => {
                 let next = next_index(self.sources.video_index, self.sources.video_devices.len());
                 self.select_video(next);

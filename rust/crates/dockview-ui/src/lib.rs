@@ -4,6 +4,7 @@
 mod clip;
 pub mod controls;
 mod fit;
+pub mod hud;
 pub mod input;
 pub mod motion;
 pub mod navbar;

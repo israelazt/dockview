@@ -190,6 +190,19 @@ Hecho y subido, **sin abrir la app** (el autor está jugando; todo se verificó 
 
 **Estado (2026-11-14):** T-4.1 a T-4.3 hechas y subidas, sin abrir la app. **Con esto el esqueleto está completo** (barra de título, fila de navegación, barra lateral, franja de atajos); falta tu revisión con la app real y regenerar la línea base de capturas (T-1.7).
 
+## 5.5. Parte 5 — Visor directo (diseño)
+
+**Qué muestra la maqueta** (`visor-directo.png`): el vídeo ocupa todo; encima, una **fila de píldoras** arriba (dispositivo y modo; latencia con etiqueta «ULTRA LOW»; FPS, pérdidas, RAM, CPU, GPU; replay armado con su atajo; un botón de pulso); un **panel flotante «Salud del pipeline»** a la derecha (diagnóstico en lenguaje llano, datos de capturadora, audio y color, y dos interruptores); abajo una **barra flotante** (Guardar clip, Grabar con las pistas, Captura desplegable, volumen con medidor y sincronía, ocultar HUD, pantalla completa).
+
+**Cómo es hoy:** una píldora flotante abajo (estado, volumen, sincronía y botones) y un panel de estadísticas arriba a la izquierda (tecla `I`). Los datos ya existen.
+
+**Adaptación (revisable), en tres pasos, cada uno con su pausa:**
+1. **5.1 · Fila de píldoras (HUD).** Cuatro tarjetas compactas arriba, solo en Visor directo y no en pantalla completa: *fuente* (punto de estado, nombre del dispositivo, monitor o ventana, y `1080p · 60 fps`), *latencia* (milisegundos reales de la app y su nivel: **ULTRA LOW** < 3 ms, **LOW** < 8 ms, **MEDIUM** < 20 ms, **HIGH** por encima), *rendimiento* (FPS mostrados, imágenes perdidas, RAM, CPU, y la **GPU en milisegundos por imagen**: lo que medimos; la maqueta pone un porcentaje que no tenemos) y *replay* (armado / iniciando / apagado / no disponible, segundos y atajo). Un botón de pulso a la derecha abre la salud. Si no caben, desaparecen de derecha a izquierda. El HUD se enciende y apaga con la tecla **`H`** y se guarda en los ajustes; en la barra de abajo tendrá su botón (paso 5.3). *No* se usa `Tab` como en la maqueta: ya es el panel de Estudio.
+2. **5.2 · Salud del pipeline.** El panel de estadísticas actual pasa a ser la tarjeta flotante de la derecha, con el mismo diagnóstico en lenguaje llano y los datos de la capturadora y el audio. Los dos interruptores de la maqueta (filtro bicúbico, compensador de VSync) **no se dibujan**: no existen como ajustes (el filtro lo da el preajuste de calidad).
+3. **5.3 · Barra flotante.** La píldora actual se rediseña con la forma de la maqueta (Guardar clip con su atajo y relleno de marca, Grabar con el estado, volumen, sincronía, botón de HUD, pantalla completa) sin perder lo que hace hoy ni su ocultación automática. **Captura desplegable** y **medidor de volumen en la barra** ⏳ salvo que se pidan.
+
+**Estado (2026-11-14):** **5.1 hecho y subido** (sin abrir la app): `hud.rs` en `dockview-ui`, ajuste `hud` guardado, acción `ToggleHud`, tecla `H`, textos en ES/EN, niveles de latencia con pruebas. Lo que está arriba a la izquierda (estadísticas, avisos, marca de grabación) baja bajo la fila mientras está visible. Falta 5.2 (salud del pipeline) y 5.3 (barra flotante), y la revisión con la app real.
+
 ## 6. Decisiones
 
 **Tomadas (2026-11-14):**

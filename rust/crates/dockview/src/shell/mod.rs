@@ -24,6 +24,7 @@ use dockview_domain::i18n;
 use dockview_domain::presenter::Presenter;
 use dockview_domain::window_chrome::{Chrome, Zone};
 use dockview_ui::controls::Controls;
+use dockview_ui::hud::Hud;
 use dockview_ui::input::Pointer;
 use dockview_ui::navbar::NavBar;
 use dockview_ui::rail::Rail;
@@ -89,6 +90,10 @@ pub struct Shell {
     rail: Rail,
     /// The shortcuts above the content.
     strip: ShortcutStrip,
+    /// The readouts over the picture in the viewer.
+    hud: Hud,
+    /// The readouts are fading in or out (so frames keep being drawn).
+    hud_moving: bool,
     toasts: ToastHost,
     /// What the pointer is doing to the window's own frame (its buttons, its
     /// edges and its bar).
@@ -141,6 +146,8 @@ impl Shell {
             navbar: NavBar::new(),
             rail: Rail::new(),
             strip: ShortcutStrip::new(),
+            hud: Hud::new(),
+            hud_moving: false,
             toasts: ToastHost::new(),
             chrome_input: ChromeInput::default(),
             cursor_phys: None,

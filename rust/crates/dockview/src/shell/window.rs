@@ -59,6 +59,7 @@ impl Shell {
         let pointer = self.controls.wants_pointer()
             || self.studio.wants_pointer()
             || self.navbar.wants_pointer()
+            || self.hud.wants_pointer()
             || self.rail.wants_pointer();
         let frame = self
             .cursor_phys
@@ -210,6 +211,9 @@ impl Shell {
         let (ui, controls) = (&mut self.ui, &mut self.controls);
         let (scene_editor, edit_mods) = (&mut self.scene_editor, &self.edit_mods);
         let studio = &mut self.studio;
+        let hud = &mut self.hud;
+        // The readouts show in the viewer: no panel, not in full screen.
+        let hud_show = model.hud && !model.studio && !model.fullscreen;
         let navbar = &mut self.navbar;
         let rail = &mut self.rail;
         let strip = &mut self.strip;
@@ -240,6 +244,9 @@ impl Shell {
                 scene_editor.frame(ui, &model, area, &editor_pointer, *edit_mods);
                 ui.limit_width(Some(place.video_width));
                 controls.frame(ui, &model, &video_pointer, dt);
+                let hud_h = hud.frame(ui, &model, stats, &video_pointer, hud_show, dt, animations);
+                // What anchors to the top sits under the readouts.
+                ui.set_inset_top((content_top_px / scale.max(0.1)) + hud_h);
                 stats_panel.frame(
                     ui,
                     &model.theme,
@@ -259,6 +266,7 @@ impl Shell {
                     );
                 }
                 toasts.frame(ui, &model.theme, dt, animations);
+                ui.set_inset_top(content_top_px / scale.max(0.1));
                 // The panel, on top, in the room it took.
                 ui.limit_width(None);
                 studio.frame(
@@ -328,6 +336,7 @@ impl Shell {
                 .note_latency(arrived.elapsed().as_secs_f64() * 1000.0);
         }
 
+        self.hud_moving = self.hud.is_animating(hud_show);
         self.pointer.end_frame();
         let actions = self.controls.take_actions();
         if let Some(section) = self
@@ -341,6 +350,7 @@ impl Shell {
         let editor = self.scene_editor.take_actions();
         for action in actions
             .into_iter()
+            .chain(self.hud.take_actions())
             .chain(self.navbar.take_actions())
             .chain(self.rail.take_actions())
             .chain(self.studio.take_actions())

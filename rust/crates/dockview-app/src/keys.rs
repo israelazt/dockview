@@ -18,6 +18,8 @@ pub enum KeyCommand {
     Undo,
     CyclePreset,
     ToggleStats,
+    /// Shows or hides the row of readouts over the picture.
+    ToggleHud,
     NextVideo,
     NextAudio,
 }

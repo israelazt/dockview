@@ -243,6 +243,8 @@ pub struct AppSettings {
     pub was_fullscreen: bool,
     /// Whether the Studio side panel was open.
     pub studio_open: bool,
+    /// Whether the row of readouts shows over the picture in the viewer.
+    pub hud: bool,
     /// Render quality preset.
     pub render_preset: RenderPreset,
     /// Interface theme preference.
@@ -293,6 +295,7 @@ impl Default for AppSettings {
             volume: 1.0,
             was_fullscreen: false,
             studio_open: false,
+            hud: true,
             render_preset: RenderPreset::default(),
             theme: ThemeMode::default(),
             language: LangMode::default(),
@@ -469,6 +472,7 @@ mod tests {
             volume: 0.75,
             was_fullscreen: true,
             studio_open: true,
+            hud: false,
             render_preset: RenderPreset::Quality,
             theme: ThemeMode::Light,
             language: LangMode::Es,

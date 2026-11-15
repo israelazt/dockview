@@ -204,6 +204,8 @@ pub struct Model {
     pub scenes: ScenesView,
     pub stream: StreamView,
     pub nav: NavView,
+    /// The row of readouts over the picture is on.
+    pub hud: bool,
 }
 
 impl Model {
@@ -243,6 +245,8 @@ pub enum Action {
     ToggleReplay,
     /// Go live, or end the stream.
     ToggleStream,
+    /// Show or hide the row of readouts over the picture.
+    ToggleHud,
     /// Go to a tab of the navigation row.
     GoTo(crate::navigation::NavTab),
     /// The server address the stream goes to.
@@ -351,6 +355,7 @@ mod tests {
             scenes: ScenesView::default(),
             stream: StreamView::default(),
             nav: NavView::default(),
+            hud: true,
         }
     }
 

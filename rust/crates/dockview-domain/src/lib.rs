@@ -21,6 +21,7 @@ pub mod events;
 pub mod frame;
 pub mod geometry;
 pub mod hotkey;
+pub mod hud;
 pub mod i18n;
 pub mod image;
 pub mod layer_edit;
