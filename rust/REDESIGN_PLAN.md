@@ -65,21 +65,32 @@ Cada elemento de la maqueta se clasifica así:
 | «Salud del pipeline» (panel flotante con diagnóstico y dos filtros) | ✅ | Es el panel de estadísticas y el diagnóstico en lenguaje llano |
 | Barra flotante inferior (Guardar clip, Grabar, Captura, volumen, ocultar HUD, pantalla completa) | ✅ | Es la píldora actual, rediseñada |
 
-## 3. Sistema de diseño (parte 0, antes de dibujar nada nuevo)
+## 3. Sistema de diseño (parte 0 — hecha)
 
-Valores muestreados de la maqueta (aproximados, se fijan con tests de contraste como los actuales):
+**Estado (2026-11-14):** hecha y subida, sin abrir la app. Los valores viven en `dockview-domain` (`theme.rs` para los colores, `design.rs` para las medidas) con pruebas.
 
-| Token | Valor aprox. | Uso |
+**Los grises (oscuro), una sola familia neutra construida sobre `#202020`** (el color de las tarjetas de la maqueta, que el autor eligió como base):
+
+| Escalón | Valor | Uso |
 |---|---|---|
-| Fondo de la ventana | `#141414` | hueco entre tarjetas |
-| Superficie (tarjeta) | `#181818` – `#202020` | paneles, barra lateral |
-| Superficie elevada / seleccionada | `#282828` | fila activa, píldoras |
-| Acento principal | `#00F2AA` (relleno de botones `#00C288`) | emisión, interruptores en «on», escena activa |
-| Acento secundario | `#00D6E4` | transición, acción de «al aire» |
-| Texto | blanco roto; secundario gris medio | |
-| Radios | grandes (≈ 16–24 px en tarjetas, píldora completa en botones) | |
+| G0 | `#0F0F0F` | detrás de todo |
+| G1 | `#141414` | el marco de la ventana: barra de título, fila, barra lateral |
+| G2 | `#1A1A1A` | píldoras y chips sobre el marco |
+| **G3** | **`#202020`** | **tarjetas y paneles (base de la familia)**; es también la superficie del panel de Estudio y de la píldora |
+| G4 | `#282828` | fila seleccionada o elevada |
+| G5 | `#303030` | pulsada |
 
-A decidir en la parte 0: tema claro equivalente (hoy hay claro y oscuro y se mantienen), tipografía (la maqueta usa una sans geométrica con números tabulares; **Inter** ya está y se conserva salvo que el autor pida otra), iconos (Lucide ya está; la maqueta usa iconos de línea del mismo estilo), movimiento y tamaños mínimos (la maqueta mide 1600 px de ancho; la ventana por defecto es 1280 × 720, así que hay que definir cómo **se comprime** el diseño: tamaño mínimo de ventana y qué se oculta primero).
+Las líneas y bordes son **blanco al 8–10 %** (no un gris fijo), así sirven sobre cualquier escalón. Una prueba comprueba que todos los grises son neutros (sin tinte azulado) y suben de claridad.
+
+**Acento = el verde de la marca** (`#00E0A4`): es el acento del tema oscuro y rellena la pestaña activa. En el tema claro el acento es un verde más oscuro (`#008F66`, para que se lea sobre blanco) y el relleno de marca `#00C98F` lleva texto oscuro. El azul `#00AAFF` anterior desaparece (deslizadores, marcas de selección y demás pasan al verde).
+
+**Tema claro:** se mantiene, con el marco `#EDEDED`, píldoras `#F7F7F7`, superficie blanca y las mismas líneas (negro al 8–9 %).
+
+**Medidas (`design.rs`):** radios de tarjeta 16, control 10 y chip 8 (las píldoras son redondas del todo); **tamaño mínimo de ventana 960 × 540** (con el marco y el panel de Estudio abiertos aún quedan ≥ 480 × 360 para la imagen; una prueba lo comprueba).
+
+**Tipografía e iconos:** se conservan **Inter** y **Lucide**, que ya están y combinan con la maqueta.
+
+**Pendiente de la parte 0** (con la app real): ajustar a ojo los valores si algún gris no convence, y regenerar la línea base de capturas.
 
 ## 4. Las partes
 
@@ -190,7 +201,7 @@ Hecho y subido, **sin abrir la app** (el autor está jugando; todo se verificó 
 1. **Parte R, datos del usuario:** migrar `%APPDATA%\Dockview\` a `%APPDATA%\Luminifex\` en el primer arranque sin borrar lo viejo (recomendado); la carpeta de clips (`Vídeos\Dockview`) y el prefijo de los nombres de archivo.
 2. **Parte R, alcance:** solo el proyecto Rust, o también el programa original en C# de la raíz (que ya no se desarrolla).
 3. **Parte R, fuera del código:** el repositorio de GitHub y la carpeta local los renombra el autor.
-4. **Tamaño mínimo de ventana** y comportamiento por debajo de él (parte 0).
+4. ~~Tamaño mínimo de ventana~~ **decidido en la parte 0: 960 × 540.**
 
 ## 7. Reglas de trabajo
 

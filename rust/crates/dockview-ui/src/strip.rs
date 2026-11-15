@@ -4,6 +4,7 @@
 //! to the left of it).
 
 use dockview_domain::brand::{APP_NAME, VERSION};
+use dockview_domain::design::RADIUS_CHIP;
 use dockview_domain::i18n::{tr, Key, Lang};
 use dockview_domain::theme::Theme;
 use dockview_domain::view::{Model, StatusKind};
@@ -97,7 +98,7 @@ impl ShortcutStrip {
             (width - SIDE * 2.0).max(0.0),
             BAR_H,
         );
-        ui.panel(bar, 8.0, theme.chip, theme.chip_line, 1.0);
+        ui.panel(bar, RADIUS_CHIP, theme.chip, theme.chip_line, 1.0);
         let mid = bar.y + bar.h / 2.0;
 
         // The version, on the right, when it fits beside the label.

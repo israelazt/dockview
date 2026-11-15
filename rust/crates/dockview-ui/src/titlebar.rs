@@ -3,6 +3,7 @@
 //! the zones of `dockview_domain::window_chrome` and the shell.
 
 use dockview_domain::brand::title_text;
+use dockview_domain::design::RADIUS_CHIP;
 use dockview_domain::i18n::{tr, Key, Lang};
 use dockview_domain::theme::{Color, Theme};
 use dockview_domain::window_chrome::{WindowButton, BUTTON_WIDTH, TITLE_BAR_HEIGHT};
@@ -89,7 +90,7 @@ fn draw_tracked(ui: &mut Ui, text: &str, x: f32, mid: f32, color: Color) -> f32 
 fn draw_chip(ui: &mut Ui, theme: &Theme, text: &str, x: f32, mid: f32) {
     let (w, h) = ui.measure(text, CHIP_STYLE);
     let r = Rect::new(x, mid - CHIP_HEIGHT / 2.0, w + CHIP_PAD * 2.0, CHIP_HEIGHT);
-    ui.panel(r, 8.0, theme.chip, theme.chip_line, 1.0);
+    ui.panel(r, RADIUS_CHIP, theme.chip, theme.chip_line, 1.0);
     ui.text(
         text,
         r.x + CHIP_PAD,

@@ -22,8 +22,10 @@ impl ApplicationHandler for Shell {
             dockview_domain::brand::APP_NAME.to_string()
         };
         // The window has no system title bar: the program draws its own.
+        let (min_w, min_h) = dockview_domain::design::MIN_WINDOW;
         let mut attributes =
-            crate::os::style_window(Window::default_attributes().with_title(title));
+            crate::os::style_window(Window::default_attributes().with_title(title))
+                .with_min_inner_size(LogicalSize::new(f64::from(min_w), f64::from(min_h)));
         attributes = match self.core.cli().scale {
             Some(scale) => attributes.with_inner_size(PhysicalSize::new(
                 (1280.0 * scale).round(),

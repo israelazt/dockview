@@ -2,6 +2,7 @@
 //! to the log. It draws in its own coordinates (the shell leaves room above it)
 //! and turns clicks into actions.
 
+use dockview_domain::design::{RADIUS_CHIP, RADIUS_CONTROL};
 use dockview_domain::i18n::{tr, Key};
 use dockview_domain::navigation::NavTab;
 use dockview_domain::theme::Theme;
@@ -187,7 +188,7 @@ impl Rail {
         if on {
             ui.panel(
                 r,
-                10.0,
+                RADIUS_CONTROL,
                 theme.brand.with_alpha(0.12),
                 theme.brand.with_alpha(0.35),
                 1.0,
@@ -195,7 +196,7 @@ impl Rail {
             // The mark on the left edge of the rail.
             ui.rect(Rect::new(0.0, r.y + 7.0, 3.0, r.h - 14.0), 1.5, theme.brand);
         } else if hovered {
-            ui.rect(r, 10.0, theme.hover);
+            ui.rect(r, RADIUS_CONTROL, theme.hover);
         }
         let color = if on {
             theme.brand
@@ -218,8 +219,8 @@ fn draw_tip(ui: &mut Ui, theme: &Theme, text: &str, anchor: Rect) {
         w + 20.0,
         h + 12.0,
     );
-    ui.shadow(r, 8.0, 12.0, theme.shadow);
-    ui.panel(r, 8.0, theme.surface_solid, theme.border, 1.0);
+    ui.shadow(r, RADIUS_CHIP, 12.0, theme.shadow);
+    ui.panel(r, RADIUS_CHIP, theme.surface_solid, theme.border, 1.0);
     ui.text(text, r.x + 10.0, r.y + 6.0, TIP_STYLE, theme.text);
 }
 
