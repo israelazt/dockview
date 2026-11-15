@@ -155,6 +155,8 @@ Hecho y subido, **sin abrir la app** (el autor está jugando; todo se verificó 
 
 **Estructura:** el contenido ahora empieza bajo *barra + fila*. El modelo de la ventana (`window_chrome`) gana una zona `Nav` (el puntero ni llega al contenido ni a la barra), la interfaz dibuja la fila con el mismo `inset` de la parte 1, y el estado sale de un `NavView` en el modelo de vista.
 
+**Estado (2026-11-14):** T-2.1 a T-2.4 hechas y subidas, sin abrir la app (pruebas puras y `DOCKVIEW_NO_HARDWARE=1`). Falta la comprobación visual y táctil con la app real. Cambios respecto al diseño: el botón de cuenta no se dibuja; la pestaña que se recuerda es la última elegida; el estado `Unknown` del codificador no se muestra mientras Windows aún no ha respondido.
+
 **Tareas:** T-2.1 dominio (zona `Nav`, pestañas, `NavView`, textos); T-2.2 dibujo y puntero de la fila (`dockview-ui`, con pruebas de reparto en ventanas estrechas); T-2.3 `Core` y la plataforma (qué codificador hay, pérdidas, red, acciones de pestaña); T-2.4 cableado en el shell (inset, puntero, estado de la pestaña). Pausa de revisión con la app real al cerrar.
 
 ## 6. Decisiones

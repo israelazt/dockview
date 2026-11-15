@@ -25,6 +25,7 @@ use dockview_domain::presenter::Presenter;
 use dockview_domain::window_chrome::{Chrome, Zone};
 use dockview_ui::controls::Controls;
 use dockview_ui::input::Pointer;
+use dockview_ui::navbar::NavBar;
 use dockview_ui::scene_editor::SceneEditor;
 use dockview_ui::stats::StatsPanel;
 use dockview_ui::studio::{StudioPanel, StudioSection};
@@ -80,6 +81,8 @@ pub struct Shell {
     stats_panel: StatsPanel,
     /// The side panel of the Studio mode.
     studio: StudioPanel,
+    /// The tabs and the status under the title bar.
+    navbar: NavBar,
     toasts: ToastHost,
     /// What the pointer is doing to the window's own frame (its buttons, its
     /// edges and its bar).
@@ -129,6 +132,7 @@ impl Shell {
             animations,
             stats_panel: StatsPanel::new(),
             studio,
+            navbar: NavBar::new(),
             toasts: ToastHost::new(),
             chrome_input: ChromeInput::default(),
             cursor_phys: None,
@@ -193,13 +197,30 @@ impl Shell {
         }
     }
 
+    /// The pointer as the navigation row sees it: relative to the row, and only
+    /// while it is over the row.
+    pub(super) fn nav_pointer(&self, chrome: &Chrome) -> Pointer {
+        let over_nav = self
+            .cursor_phys
+            .is_some_and(|(x, y)| chrome.zone_at(x, y) == Zone::Nav);
+        let bar = chrome.bar_height() / self.ui_scale.max(0.1);
+        Pointer {
+            pos: if over_nav && !self.chrome_held {
+                self.pointer.pos.map(|(x, y)| (x, y - bar))
+            } else {
+                None
+            },
+            ..self.pointer
+        }
+    }
+
     /// The pointer as the content sees it: below the title bar, and gone while
     /// it is over the frame (the bar, its buttons or a resize edge).
     pub(super) fn content_pointer(&self, chrome: &Chrome) -> Pointer {
         let over_frame = self
             .cursor_phys
             .is_some_and(|(x, y)| chrome.zone_at(x, y) != Zone::Content);
-        let bar = chrome.bar_height() / self.ui_scale.max(0.1);
+        let bar = (chrome.bar_height() + chrome.nav_height()) / self.ui_scale.max(0.1);
         Pointer {
             pos: if over_frame || self.chrome_held {
                 None

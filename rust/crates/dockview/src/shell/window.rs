@@ -24,7 +24,10 @@ impl Shell {
             ElementState::Pressed => {
                 let now_ms = self.started.elapsed().as_millis() as u64;
                 let command = pos.and_then(|p| self.chrome_input.press(&chrome, p, now_ms));
-                let on_frame = pos.is_some_and(|(x, y)| chrome.zone_at(x, y) != Zone::Content);
+                // The navigation row is the interface's own, like the content.
+                let on_frame = pos.is_some_and(|(x, y)| {
+                    !matches!(chrome.zone_at(x, y), Zone::Content | Zone::Nav)
+                });
                 if on_frame {
                     self.chrome_held = true;
                 } else {
@@ -53,7 +56,9 @@ impl Shell {
         let Some(window) = &self.window else {
             return;
         };
-        let pointer = self.controls.wants_pointer() || self.studio.wants_pointer();
+        let pointer = self.controls.wants_pointer()
+            || self.studio.wants_pointer()
+            || self.navbar.wants_pointer();
         let frame = self
             .cursor_phys
             .map(|(x, y)| self.chrome().zone_at(x, y).cursor())
@@ -127,6 +132,7 @@ impl Shell {
             maximized: chrome.maximized,
         };
         let pointer = self.content_pointer(&chrome);
+        let nav_pointer = self.nav_pointer(&chrome);
         let scale = self.ui_scale;
         // The Studio panel opens (and in full screen, goes at once) and takes
         // its room; the pointer belongs to the video or to the panel.
@@ -136,10 +142,12 @@ impl Shell {
             let size = w.inner_size();
             (size.width, size.height)
         });
-        // Below the title bar: the content has the rest of the window.
+        // Below the title bar and the navigation row: the content has the rest
+        // of the window.
+        let top_px = bar_px + chrome.nav_height();
         let content_size = (
             window_size.0,
-            (window_size.1 as f32 - bar_px).max(1.0) as u32,
+            (window_size.1 as f32 - top_px).max(1.0) as u32,
         );
         let place = studio::place(content_size, scale, self.studio.openness());
         let (video_pointer, panel_pointer) = route_pointer(&pointer, place.panel);
@@ -157,8 +165,8 @@ impl Shell {
         presenter.wait_for_slot(100);
         // The video fits the room the panel leaves (all of it when closed).
         // With the bar, the video always has an area of its own, under it.
-        let area = (bar_px > 0.0 || place.panel.is_some()).then_some(PhysicalRect {
-            y: place.video.y + bar_px,
+        let area = (top_px > 0.0 || place.panel.is_some()).then_some(PhysicalRect {
+            y: place.video.y + top_px,
             ..place.video
         });
         presenter.set_video_area(area);
@@ -182,6 +190,7 @@ impl Shell {
         let (ui, controls) = (&mut self.ui, &mut self.controls);
         let (scene_editor, edit_mods) = (&mut self.scene_editor, &self.edit_mods);
         let studio = &mut self.studio;
+        let navbar = &mut self.navbar;
         let stats_panel = &mut self.stats_panel;
         let (stats, stats_open) = (self.core.stats(), self.core.stats_open());
         let animations = self.animations;
@@ -189,7 +198,7 @@ impl Shell {
         {
             {
                 ui.begin(presenter.size(), scale);
-                ui.set_inset_top(bar_px / scale.max(0.1));
+                ui.set_inset_top(top_px / scale.max(0.1));
                 // What floats over the video anchors to the video's room.
                 // The layer editor sits on the picture, under the controls; what
                 // the controls (the pill) use is not the editor's.
@@ -238,6 +247,11 @@ impl Shell {
                     &panel_pointer,
                     dt,
                 );
+                // The tabs and the status, under the title bar.
+                if bar_px > 0.0 {
+                    ui.set_inset_top(bar_px / scale.max(0.1));
+                    navbar.frame(ui, &model, &nav_pointer);
+                }
                 // The window's own title bar, over everything.
                 ui.set_inset_top(0.0);
                 if bar_px > 0.0 {
@@ -270,12 +284,17 @@ impl Shell {
 
         self.pointer.end_frame();
         let actions = self.controls.take_actions();
-        if let Some(section) = self.controls.take_studio_request() {
+        if let Some(section) = self
+            .controls
+            .take_studio_request()
+            .or_else(|| self.navbar.take_studio_request())
+        {
             self.studio.open_section(section);
         }
         let editor = self.scene_editor.take_actions();
         for action in actions
             .into_iter()
+            .chain(self.navbar.take_actions())
             .chain(self.studio.take_actions())
             .chain(editor)
         {
