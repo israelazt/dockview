@@ -99,6 +99,9 @@ pub struct Chrome {
     pub maximized: bool,
     /// Full screen shows only the content: no bar and no resize edges.
     pub fullscreen: bool,
+    /// The Studio panel is open: only then is there an icon rail (the viewer
+    /// gives all its width to the picture).
+    pub panel_open: bool,
 }
 
 impl Chrome {
@@ -146,7 +149,7 @@ impl Chrome {
 
     /// Width of the icon rail in physical pixels (0 in full screen).
     pub fn rail_width(&self) -> f32 {
-        if self.fullscreen {
+        if self.fullscreen || !self.panel_open {
             0.0
         } else {
             self.px(RAIL_WIDTH)
@@ -156,7 +159,7 @@ impl Chrome {
     /// The icon rail, on the left under the row, or `None` in full screen.
     pub fn rail(&self) -> Option<Rect> {
         let top = self.bar_height() + self.nav_height();
-        (!self.fullscreen).then(|| Rect {
+        (!self.fullscreen && self.panel_open).then(|| Rect {
             x: 0.0,
             y: top,
             w: self.rail_width(),
@@ -270,6 +273,7 @@ mod tests {
             scale: 1.0,
             maximized: false,
             fullscreen: false,
+            panel_open: true,
         }
     }
 
@@ -327,6 +331,21 @@ mod tests {
         assert_eq!(c.zone_at(600.0, 78.0), Zone::Content);
         assert_eq!(c.content().y, 34.0 + NAV_HEIGHT);
         assert_eq!(c.content().h, 720.0 - 34.0 - NAV_HEIGHT);
+    }
+
+    #[test]
+    fn without_the_panel_there_is_no_rail_and_the_content_has_the_width() {
+        let c = Chrome {
+            panel_open: false,
+            ..chrome()
+        };
+        assert!(c.rail().is_none());
+        assert_eq!(c.rail_width(), 0.0);
+        assert_eq!(c.zone_at(20.0, 300.0), Zone::Content);
+        assert_eq!(c.content().x, 0.0);
+        assert_eq!(c.content().w, 1280.0);
+        // The bar and the row do not depend on it.
+        assert_eq!(c.zone_at(600.0, 40.0), Zone::Nav);
     }
 
     #[test]

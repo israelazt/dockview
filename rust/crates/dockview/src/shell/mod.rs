@@ -156,6 +156,7 @@ impl Shell {
             scale: self.ui_scale,
             maximized,
             fullscreen: self.core.fullscreen(),
+            panel_open: self.core.studio_panel_open(),
         }
     }
 

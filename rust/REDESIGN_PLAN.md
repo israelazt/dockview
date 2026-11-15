@@ -165,6 +165,8 @@ Hecho y subido, **sin abrir la app** (el autor está jugando; todo se verificó 
 
 **Adaptación (revisable):** ancho 52 px. Los cuatro iconos de arriba son **atajos a secciones del panel de Estudio**: cámara → *Fuentes*, mezclador → *Audio* (volumen, sincronía y micrófono; el mezclador de verdad ⏳), pulso → *Estadísticas*, capas → *Escenas*. Pulsarlos abre el panel (pestaña Estudio) en esa sección. El activo es el primero de ellos cuya sección está desplegada (ninguno con el panel cerrado). **Terminal** abre el archivo de registro en el explorador. **Ayuda** no se dibuja (no hay contenido que mostrar; igual que el botón de cuenta). Al dejar el puntero 0,45 s sobre un icono aparece su nombre a la derecha.
 
+**Cuándo se ve (decidido 2026-11-14):** solo con el panel de Estudio abierto (Estudio, Grabaciones y Ajustes). En Visor directo no hay barra y el vídeo recupera sus 52 px; en Visor los atajos a secciones ya los dan los botones de la píldora. Con el panel cerrado o en pantalla completa no se dibuja.
+
 **Estructura:** el modelo de la ventana gana la zona `Rail` y el contenido empieza a su derecha (`Ui::set_inset_left`); con pantalla completa la barra desaparece junto con el resto del marco.
 
 **Estado (2026-11-14):** T-3.1 a T-3.3 hechas y subidas, sin abrir la app. Falta la comprobación visual con la app real.
