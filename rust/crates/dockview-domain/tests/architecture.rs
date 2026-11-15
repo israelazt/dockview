@@ -45,7 +45,10 @@ fn each_crate_depends_only_on_what_the_layers_allow() {
     // domain <- platform, ui, app <- the binary.
     let allowed: [(&str, &[&str]); 6] = [
         ("dockview-domain", &["serde", "serde_json"]),
-        ("dockview-stream", &["dockview-domain"]),
+        (
+            "dockview-stream",
+            &["dockview-domain", "rustls", "webpki-roots"],
+        ),
         (
             "dockview-platform",
             &["dockview-domain", "serde", "serde_json", "windows"],

@@ -10,3 +10,8 @@ license.workspace = true
 # tested against a fake server. See rust/STREAMER_PLAN.md.
 [dependencies]
 dockview-domain = { path = "../dockview-domain" }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+webpki-roots = "1"
+
+[dev-dependencies]
+rcgen = { version = "0.13", default-features = false, features = ["ring", "pem"] }
