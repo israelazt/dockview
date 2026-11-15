@@ -55,6 +55,8 @@ pub struct PlaybackState {
     pub status: AudioStatus,
     /// Whether the recorder is being fed (`set_tap(Some(..))` was the last call).
     pub tapped: bool,
+    /// The queue the playback was given to feed (the last one).
+    pub tap: Option<Arc<AudioTap>>,
     pub alive: bool,
 }
 
@@ -179,7 +181,9 @@ impl AudioPlayback for Handle<PlaybackState> {
         self.0.lock().unwrap().offset_ms = offset_ms;
     }
     fn set_tap(&self, tap: Option<Arc<AudioTap>>) {
-        self.0.lock().unwrap().tapped = tap.is_some();
+        let mut state = self.0.lock().unwrap();
+        state.tapped = tap.is_some();
+        state.tap = tap;
     }
     fn buffered_ms(&self) -> u32 {
         50
@@ -265,6 +269,7 @@ impl SourceMachine for FakeSources {
             offset_ms,
             status: AudioStatus::Running,
             tapped: false,
+            tap: None,
             alive: true,
         }));
         self.0.lock().unwrap().playbacks.push(Arc::clone(&state));

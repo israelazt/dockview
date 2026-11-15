@@ -141,6 +141,7 @@ impl Core {
                 .sources
                 .view(self.lang_mode().resolve(self.view.system_lang)),
             scenes: self.scenes_view(self.lang_mode().resolve(self.view.system_lang)),
+            stream: self.stream_view(),
         }
     }
 
@@ -188,6 +189,17 @@ impl Core {
                 } else {
                     AppEvent::ReplayOff
                 });
+            }
+            Action::ToggleStream => {
+                self.toggle_stream();
+                return;
+            }
+            Action::SetStreamUrl(url) => {
+                self.settings.stream.url = url.trim().to_string();
+            }
+            Action::SetStreamKey(key) => {
+                self.set_stream_key(&key);
+                return; // the key is not part of the settings
             }
             Action::SelectMonitor(index) => {
                 if let Some(monitor) = self.sources.monitors.get(index) {

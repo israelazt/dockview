@@ -37,6 +37,9 @@ pub struct World {
     pub folder_ok: bool,
     pub shown: Vec<(Option<PathBuf>, PathBuf)>,
     pub buffers_started: u32,
+    /// The queues the buffer hands out (made on first use, then the same).
+    pub game_tap: Option<Arc<AudioTap>>,
+    pub mic_tap: Option<Arc<AudioTap>>,
 }
 
 pub type Shared = Arc<Mutex<World>>;
@@ -145,10 +148,20 @@ impl ReplayBuffer for FakeBuffer {
         self.0.lock().unwrap().outcomes.pop_front()
     }
     fn audio_tap(&self) -> Arc<AudioTap> {
-        Arc::new(AudioTap::new(4))
+        let mut world = self.0.lock().unwrap();
+        Arc::clone(
+            world
+                .game_tap
+                .get_or_insert_with(|| Arc::new(AudioTap::new(4))),
+        )
     }
     fn mic_tap(&self) -> Arc<AudioTap> {
-        Arc::new(AudioTap::new(4))
+        let mut world = self.0.lock().unwrap();
+        Arc::clone(
+            world
+                .mic_tap
+                .get_or_insert_with(|| Arc::new(AudioTap::new(4))),
+        )
     }
     fn clear_mic(&self) {
         self.0.lock().unwrap().mic_cleared += 1;

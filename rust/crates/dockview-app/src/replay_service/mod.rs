@@ -197,6 +197,11 @@ impl ReplayService {
         self.recorder.as_ref().map(|r| r.audio_tap())
     }
 
+    /// Where the microphone's sound goes to be recorded.
+    pub fn mic_tap(&self) -> Option<Arc<AudioTap>> {
+        self.recorder.as_ref().map(|r| r.mic_tap())
+    }
+
     pub fn set_keep_seconds(&self, seconds: f64) {
         if let Some(recorder) = &self.recorder {
             recorder.set_keep_seconds(seconds);

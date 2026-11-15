@@ -31,6 +31,9 @@ mod scene_transition;
 mod sources;
 mod startup;
 mod stats;
+mod stream;
+#[cfg(test)]
+mod stream_tests;
 #[cfg(test)]
 mod tests;
 
@@ -38,6 +41,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use dockview_domain::audio_status::AudioStatus;
+use dockview_domain::broadcast::{SecretStore, StreamMachine};
 use dockview_domain::device::{pick_microphone, AudioDevice, DeviceLists, VideoDevice};
 use dockview_domain::device_names;
 use dockview_domain::diagnostics::{diagnose, Finding, Snapshot, VideoState};
@@ -71,6 +75,7 @@ use crate::sources::{
     Reconnect, SourceKind, StartupScene,
 };
 use crate::sources_service::{Maintained, Source, SourcesService};
+use crate::stream_service::StreamService;
 use crate::telemetry::{Rates, Telemetry};
 
 /// How often the lists of monitors and windows are refreshed while shown.
@@ -99,6 +104,10 @@ pub struct Ports {
     pub capture_hotkeys: Box<dyn CaptureHotkeys>,
     /// The tray icon.
     pub tray: Box<dyn TrayHost>,
+    /// Going live.
+    pub stream: Box<dyn StreamMachine>,
+    /// Where the stream key is kept.
+    pub secrets: Box<dyn SecretStore>,
 }
 
 /// The state and the services of the application. The binary creates one,
@@ -124,6 +133,8 @@ pub struct Core {
     replay: ReplayService,
     /// The capture hotkey and the tray icon (see `resident_service`).
     resident: ResidentService,
+    /// Going live (see `stream_service`).
+    stream: StreamService,
     /// Installed RAM, which caps the replay length.
     total_ram: u64,
     /// What happened since the last tick, to be shown (see `toast_for`).

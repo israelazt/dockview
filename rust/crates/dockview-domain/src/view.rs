@@ -4,6 +4,7 @@
 
 use crate::settings::{LangMode, RecordingQuality, RenderPreset, SceneTransition, VideoModePref};
 
+use crate::broadcast::StreamState;
 use crate::i18n::Lang;
 use crate::scene::NormRect;
 use crate::theme::{Theme, ThemeMode};
@@ -156,6 +157,20 @@ impl ReplayView {
     }
 }
 
+/// What the stream controls display.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct StreamView {
+    pub state: StreamState,
+    /// Bitrate actually sent, in kilobits per second.
+    pub bitrate_kbps: u32,
+    pub dropped_frames: u64,
+    pub reconnects: u32,
+    /// A stream key is saved (the key itself never reaches the interface).
+    pub has_key: bool,
+    /// The server address chosen.
+    pub address: String,
+}
+
 /// Everything the controls display.
 #[derive(Debug, Clone)]
 pub struct Model {
@@ -186,6 +201,7 @@ pub struct Model {
     pub rec: RecView,
     pub sources: SourcesView,
     pub scenes: ScenesView,
+    pub stream: StreamView,
 }
 
 impl Model {
@@ -223,6 +239,12 @@ pub enum Action {
     /// open if it already was.
     OpenStudio,
     ToggleReplay,
+    /// Go live, or end the stream.
+    ToggleStream,
+    /// The server address the stream goes to.
+    SetStreamUrl(String),
+    /// The stream key, which is kept apart from the settings.
+    SetStreamKey(String),
     /// Move the clip length one step longer (+1) or shorter (-1).
     ReplayLength(i32),
     SaveReplay,
@@ -323,6 +345,7 @@ mod tests {
             rec: RecView::idle(),
             sources: SourcesView::default(),
             scenes: ScenesView::default(),
+            stream: StreamView::default(),
         }
     }
 

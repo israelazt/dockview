@@ -57,6 +57,22 @@ pub enum AppEvent {
     ScreenshotCopied,
     /// A screenshot could not be taken or saved.
     ScreenshotFailed,
+    /// The server accepted the stream: the user is live.
+    StreamLive,
+    /// The connection to the server dropped; it keeps trying.
+    StreamReconnecting,
+    /// The stream is back after a drop.
+    StreamBack,
+    /// The stream ended on its own (the server refused it or it gave up).
+    StreamFailed,
+    /// There is no stream key yet.
+    StreamNoKey,
+    /// The server address is missing or is not an rtmp:// or rtmps:// one.
+    StreamBadAddress,
+    /// The stream could not be started on this PC.
+    StreamStartFailed,
+    /// The stream ended because the user stopped it.
+    StreamStopped,
 }
 
 /// What to tell the user when a recording (or one of its files) ends, if

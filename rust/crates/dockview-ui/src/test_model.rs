@@ -31,5 +31,6 @@ pub(crate) fn model() -> Model {
         rec: RecView::idle(),
         sources: SourcesView::default(),
         scenes: ScenesView::default(),
+        stream: StreamView::default(),
     }
 }

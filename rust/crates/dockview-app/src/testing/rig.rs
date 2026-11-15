@@ -14,6 +14,7 @@ use dockview_domain::stats::Stats;
 use super::replay::{self, FakeMachine};
 use super::resident;
 use super::sources::{FakeSources, SharedSources};
+use super::stream::{self, FakeStream, SharedSecrets};
 use super::system::{FakeStats, FakeSystem, RecordingHost, SharedHost};
 use crate::cli::Cli;
 use crate::{Core, Ports};
@@ -61,6 +62,10 @@ pub struct Rig {
     /// How many times the settings were tried to be saved.
     pub save_attempts: Arc<AtomicUsize>,
     pub system: Arc<FakeSystem>,
+    /// What the fake stream was asked, and what it reports.
+    pub stream: stream::Shared,
+    /// The secrets (the stream key).
+    pub secrets: Arc<dockview_domain::broadcast::MemorySecrets>,
     /// The time the rig says it is, moved by [`Rig::advance`].
     pub now: Instant,
 }
@@ -132,6 +137,8 @@ impl RigBuilder {
         let store_fails = Arc::new(AtomicBool::new(false));
         let save_attempts = Arc::new(AtomicUsize::new(0));
         let system = Arc::new(FakeSystem::default());
+        let stream = stream::world();
+        let secrets = Arc::new(dockview_domain::broadcast::MemorySecrets::default());
         let ports = Ports {
             settings: Box::new(SharedStore {
                 store: Arc::clone(&store),
@@ -145,6 +152,8 @@ impl RigBuilder {
             host: Box::new(RecordingHost(Arc::clone(&host))),
             capture_hotkeys: Box::new(resident::FakeHotkeys(Arc::clone(&resident))),
             tray: Box::new(resident::FakeTrayHost(Arc::clone(&resident))),
+            stream: Box::new(FakeStream(Arc::clone(&stream))),
+            secrets: Box::new(SharedSecrets(Arc::clone(&secrets))),
         };
         let core = Core::new(
             Arc::new(FrameSlot::new()),
@@ -164,6 +173,8 @@ impl RigBuilder {
             store_fails,
             save_attempts,
             system,
+            stream,
+            secrets,
             now: Instant::now(),
         }
     }

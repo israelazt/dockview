@@ -33,6 +33,7 @@ impl Core {
         }
         self.update_stats(now);
         self.poll_replay();
+        self.poll_stream();
         self.maintain_resident();
         self.flush_settings(now);
     }

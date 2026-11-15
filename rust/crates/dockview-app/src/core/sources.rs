@@ -6,7 +6,7 @@ use super::*;
 impl Core {
     /// Points the recorder's game-sound input at the right place.
     pub(super) fn route_audio(&mut self) {
-        let tap = self.replay.audio_tap();
+        let tap = self.audio_destination();
         self.sources.route_audio(tap);
     }
 
@@ -107,7 +107,7 @@ impl Core {
             self.sources.audio_index = index; // only the choice changes
             return;
         }
-        let tap = self.replay.audio_tap();
+        let tap = self.audio_destination();
         let (volume, offset_ms) = (self.settings.volume, self.settings.audio_offset_ms);
         if let Some(id) = self.sources.play(index, volume, offset_ms, tap) {
             self.settings.last_audio_device_id = Some(id);

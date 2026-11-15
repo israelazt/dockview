@@ -85,6 +85,14 @@ pub fn toast_for(event: AppEvent) -> (Key, ToastKind) {
         AppEvent::ScreenshotSaved => (Key::ToastScreenshotSaved, ToastKind::Success),
         AppEvent::ScreenshotCopied => (Key::ToastScreenshotCopied, ToastKind::Success),
         AppEvent::ScreenshotFailed => (Key::ToastScreenshotFailed, ToastKind::Error),
+        AppEvent::StreamLive => (Key::ToastStreamLive, ToastKind::Success),
+        AppEvent::StreamReconnecting => (Key::ToastStreamReconnecting, ToastKind::Error),
+        AppEvent::StreamBack => (Key::ToastStreamBack, ToastKind::Success),
+        AppEvent::StreamFailed => (Key::ToastStreamFailed, ToastKind::Error),
+        AppEvent::StreamNoKey => (Key::ToastStreamNoKey, ToastKind::Info),
+        AppEvent::StreamBadAddress => (Key::ToastStreamBadAddress, ToastKind::Info),
+        AppEvent::StreamStartFailed => (Key::ToastStreamStartFailed, ToastKind::Error),
+        AppEvent::StreamStopped => (Key::ToastStreamStopped, ToastKind::Info),
     }
 }
 
@@ -139,6 +147,14 @@ mod tests {
             ScreenshotSaved,
             ScreenshotCopied,
             ScreenshotFailed,
+            StreamLive,
+            StreamReconnecting,
+            StreamBack,
+            StreamFailed,
+            StreamNoKey,
+            StreamBadAddress,
+            StreamStartFailed,
+            StreamStopped,
         ] {
             let (key, _) = toast_for(event);
             assert!(!i18n::tr(i18n::Lang::En, key).is_empty(), "{event:?}");

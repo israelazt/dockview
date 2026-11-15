@@ -11,8 +11,10 @@ use dockview_domain::frame::FrameSlot;
 use dockview_domain::ports::StatsSink;
 use dockview_domain::settings::{AppSettings, SettingsStore};
 use dockview_platform::capture_hotkey::PlatformCaptureHotkeys;
+use dockview_platform::live_stream::PlatformStream;
 use dockview_platform::perf::PlatformSystem;
 use dockview_platform::replay_machine::PlatformReplay;
+use dockview_platform::secrets::{secrets_dir, DpapiSecrets};
 use dockview_platform::settings_store::FileSettingsStore;
 use dockview_platform::source_machine::PlatformSources;
 use dockview_platform::stats_log::StatsLog;
@@ -93,6 +95,10 @@ pub fn run() {
         host: Box::new(ShellHost::new(Rc::clone(&host))),
         capture_hotkeys: Box::new(PlatformCaptureHotkeys),
         tray: Box::new(PlatformTrayHost),
+        stream: Box::new(PlatformStream),
+        secrets: Box::new(DpapiSecrets::new(
+            secrets_dir().unwrap_or_else(|| std::path::PathBuf::from("secrets")),
+        )),
     };
     let core = Core::new(slot, saved, ports, cli, detect_system_lang());
     dockview_domain::log_info!("application ready");

@@ -4,7 +4,8 @@
 use std::sync::{Arc, Mutex};
 
 use dockview_domain::broadcast::{
-    StreamHandle, StreamMachine, StreamRequest, StreamState, StreamStats,
+    MemorySecrets, SecretStore, StreamHandle, StreamMachine, StreamRequest, StreamState,
+    StreamStats,
 };
 use dockview_domain::frame::FrameSlot;
 use dockview_domain::pcm::AudioTap;
@@ -20,6 +21,9 @@ pub struct StreamWorld {
     pub error: Option<String>,
     /// Streams running now.
     pub alive: u32,
+    /// The queues the last stream hands out for sound.
+    pub audio: Option<Arc<AudioTap>>,
+    pub mic: Option<Arc<AudioTap>>,
 }
 
 pub type Shared = Arc<Mutex<StreamWorld>>;
@@ -50,10 +54,13 @@ impl StreamMachine for FakeStream {
         world.alive += 1;
         world.state = StreamState::Connecting;
         world.error = None;
+        let (audio, mic) = (Arc::new(AudioTap::new(4)), Arc::new(AudioTap::new(4)));
+        world.audio = Some(Arc::clone(&audio));
+        world.mic = Some(Arc::clone(&mic));
         Ok(Box::new(FakeHandle {
             world: Arc::clone(&self.0),
-            audio: Arc::new(AudioTap::new(4)),
-            mic: Arc::new(AudioTap::new(4)),
+            audio,
+            mic,
         }))
     }
 }
@@ -82,5 +89,22 @@ impl StreamHandle for FakeHandle {
 impl Drop for FakeHandle {
     fn drop(&mut self) {
         self.world.lock().unwrap().alive -= 1;
+    }
+}
+
+/// Secrets the test keeps a second handle to.
+pub struct SharedSecrets(pub Arc<MemorySecrets>);
+
+impl SecretStore for SharedSecrets {
+    fn get(&self, name: &str) -> Option<String> {
+        self.0.get(name)
+    }
+
+    fn set(&self, name: &str, value: &str) -> Result<(), String> {
+        self.0.set(name, value)
+    }
+
+    fn remove(&self, name: &str) {
+        self.0.remove(name);
     }
 }

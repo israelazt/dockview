@@ -195,6 +195,14 @@ strings! {
     ToastScreenshotCopied => "Screenshot copied", "Captura copiada";
     ToastScreenshotFailed => "Could not take the screenshot", "No se pudo hacer la captura";
     ToastScreenshotSavedCopied => "Saved and copied", "Guardada y copiada";
+    ToastStreamLive => "You are live", "Estás en directo";
+    ToastStreamReconnecting => "The connection dropped: trying to reconnect", "Se cortó la conexión: intentando reconectar";
+    ToastStreamBack => "Back live", "De vuelta en directo";
+    ToastStreamFailed => "The stream ended: the server refused it or the connection is lost", "La emisión terminó: el servidor la rechazó o se perdió la conexión";
+    ToastStreamNoKey => "Enter your stream key first", "Primero escribe tu clave de emisión";
+    ToastStreamBadAddress => "Enter the server address (rtmp:// or rtmps://)", "Escribe la dirección del servidor (rtmp:// o rtmps://)";
+    ToastStreamStartFailed => "The stream could not be started", "No se pudo iniciar la emisión";
+    ToastStreamStopped => "Stream ended", "Emisión terminada";
     TrayTip => "Dockview", "Dockview";
     TrayNewCapture => "New screenshot", "Nueva captura";
     TrayOpen => "Open Dockview", "Abrir Dockview";
