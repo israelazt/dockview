@@ -23,13 +23,20 @@ pub(super) const TOOLTIP_DELAY_SECS: f32 = 0.5;
 pub(super) const TOOLTIP_FADE_SECS: f32 = 0.12;
 pub(super) const TOOLTIP_MAX_WIDTH: f32 = 280.0;
 
-pub(super) const PILL_HEIGHT: f32 = 56.0;
-pub(super) const BOTTOM_MARGIN: f32 = 28.0;
-pub(super) const PAD_X: f32 = 22.0;
-pub(super) const GAP: f32 = 18.0;
+pub(super) const PILL_HEIGHT: f32 = 52.0;
+pub(super) const BOTTOM_MARGIN: f32 = 24.0;
+pub(super) const PAD_X: f32 = 10.0;
+/// Space between two buttons of the bar.
+pub(super) const GAP: f32 = 8.0;
+/// Space on each side of a divider.
+pub(super) const DIVIDER_PAD: f32 = 12.0;
+/// Size of the small round buttons (sync steps).
 pub(super) const BUTTON: f32 = 32.0;
+/// Height of the wide buttons (save, record, screenshot) and size of the
+/// round ones (microphone, readouts, full screen).
+pub(super) const ITEM_H: f32 = 36.0;
 pub(super) const ICON_SIZE: f32 = 17.0;
-pub(super) const SLIDER_WIDTH: f32 = 96.0;
+pub(super) const SLIDER_WIDTH: f32 = 84.0;
 
 // Lucide code points.
 pub(super) const ICON_VOLUME_MUTE: char = '\u{e1ac}';
@@ -37,17 +44,17 @@ pub(super) const ICON_VOLUME_LOW: char = '\u{e1aa}';
 pub(super) const ICON_VOLUME_HIGH: char = '\u{e1ab}';
 pub(super) const ICON_MINUS: char = '\u{e11c}';
 pub(super) const ICON_PLUS: char = '\u{e13d}';
-pub(super) const ICON_SETTINGS: char = '\u{e29a}';
 pub(super) const ICON_FULLSCREEN: char = '\u{e112}';
 pub(super) const ICON_EXIT_FULLSCREEN: char = '\u{e11a}';
-pub(super) const ICON_REPLAY: char = '\u{e1f5}';
 pub(super) const ICON_SAVE: char = '\u{e14d}';
-pub(super) const ICON_SOURCE: char = '\u{e11d}';
-pub(super) const ICON_SCENES: char = '\u{e52a}';
-/// The Studio button: a window with a side panel, shown opening or closing.
-pub(super) const ICON_STUDIO_OPEN: char = '\u{e434}';
-pub(super) const ICON_STUDIO_CLOSE: char = '\u{e432}';
+pub(super) const ICON_CAMERA: char = '\u{e064}';
+pub(super) const ICON_EYE: char = '\u{e0ba}';
+pub(super) const ICON_EYE_OFF: char = '\u{e0bb}';
 pub(super) const ICON_MIC: char = '\u{e118}';
+pub(super) const ICON_MIC_OFF: char = '\u{e119}';
 
-pub(super) const LABEL: TextStyle = TextStyle::new(13.0, Weight::Medium);
 pub(super) const BODY: TextStyle = TextStyle::new(13.0, Weight::Regular);
+/// The text of the wide buttons.
+pub(super) const BUTTON_TEXT: TextStyle = TextStyle::new(13.0, Weight::SemiBold);
+/// The hotkey chip inside a wide button.
+pub(super) const CHIP_TEXT: TextStyle = TextStyle::new(10.5, Weight::Medium);

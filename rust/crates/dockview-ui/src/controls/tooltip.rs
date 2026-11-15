@@ -74,9 +74,6 @@ impl Controls {
 pub(super) fn tooltip_for(hit: Hit, m: &Model) -> Option<String> {
     let r = &m.replay;
     let key = match hit {
-        Hit::Sources => Key::TipSources,
-        Hit::Scenes => Key::TipScenes,
-        Hit::Replay => Key::TipReplay,
         Hit::ReplaySave if r.is_on() => Key::TipSave,
         Hit::ReplaySave => Key::TipSaveOff,
         Hit::Record => match m.rec.state {
@@ -84,9 +81,11 @@ pub(super) fn tooltip_for(hit: Hit, m: &Model) -> Option<String> {
             RecState::Starting => Key::TipRecordCancel,
             RecState::Recording => Key::TipRecordStop,
         },
-        Hit::Settings => Key::TipSettings,
-        Hit::Studio if m.studio_visible() => Key::TipStudioClose,
-        Hit::Studio => Key::TipStudio,
+        Hit::Capture => Key::TipCapture,
+        Hit::Mic if m.mic.state == MicState::Live => Key::TipMicOff,
+        Hit::Mic => Key::TipMicOn,
+        Hit::Hud if m.hud => Key::TipHudHide,
+        Hit::Hud => Key::TipHudShow,
         Hit::Fullscreen if m.fullscreen => Key::TipExitFullscreen,
         Hit::Fullscreen => Key::TipFullscreen,
         Hit::Volume => Key::TipVolume,

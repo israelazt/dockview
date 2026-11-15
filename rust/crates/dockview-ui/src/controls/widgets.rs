@@ -84,8 +84,3 @@ impl Controls {
         ui.rect(Rect::new(knob_x - r, cy - r, r * 2.0, r * 2.0), r, t.text);
     }
 }
-
-pub(super) fn divider_at(ui: &mut Ui, theme: &Theme, x: f32, cy: f32) -> f32 {
-    ui.rect(Rect::new(x + GAP, cy - 10.0, 1.0, 20.0), 0.5, theme.track);
-    x + GAP * 2.0 + 1.0
-}

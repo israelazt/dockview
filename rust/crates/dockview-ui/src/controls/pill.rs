@@ -1,91 +1,97 @@
-//! The floating pill: status, volume, sync and the row of buttons.
+//! The floating bar: save a clip, record, take a screenshot, volume and sync,
+//! the microphone, the readouts and full screen.
 
+use super::buttons::{chip_width, record_label};
 use super::*;
 
-/// The widths the pill's parts need. They use the widest plausible value so
-/// the pill does not resize while numbers change.
-struct PillMetrics {
-    status_w: f32,
-    res_w: f32,
-    sync_label_w: f32,
+/// The widths the bar's parts need. They use the widest plausible value so the
+/// bar does not resize while numbers change.
+pub(super) struct BarMetrics {
+    pub(super) save_w: f32,
+    pub(super) record_w: f32,
+    pub(super) capture_w: f32,
     percent_w: f32,
     sync_value_w: f32,
-    /// The whole pill.
+    /// The whole bar.
     width: f32,
-    /// Whether the resolution text and the sync block are drawn. They are left
-    /// out, in that order, when the pill does not fit the room it has.
-    show_res: bool,
+    /// Whether the sync block is drawn. It is left out first when the bar does
+    /// not fit the room it has.
     show_sync: bool,
+    /// Whether the hotkeys are written in the buttons. They go second.
+    pub(super) show_chips: bool,
 }
 
 /// Where a group of controls sits vertically.
 #[derive(Clone, Copy)]
-struct Row {
-    /// Centre line of the pill.
-    cy: f32,
+pub(super) struct Row {
+    /// Centre line of the bar.
+    pub(super) cy: f32,
     /// Top of a line of text centred on it.
-    text_y: f32,
+    pub(super) text_y: f32,
 }
 
-fn pill_metrics(ui: &mut Ui, m: &Model, room: f32) -> PillMetrics {
+fn bar_metrics(ui: &mut Ui, m: &Model, room: f32) -> BarMetrics {
     let value = BODY.tabular();
-    let status_w = ui.measure(status_text(m), LABEL).0;
-    let res_w = ui
-        .measure(&m.resolution, value)
+    let hotkey_w = |ui: &mut Ui, text: &str| {
+        if text.is_empty() {
+            0.0
+        } else {
+            GAP + chip_width(ui, text)
+        }
+    };
+    let save_label = ui.measure(tr(m.lang, Key::BarSave), BUTTON_TEXT).0;
+    let record_text = ui
+        .measure(&record_label(m), BUTTON_TEXT)
         .0
-        .max(ui.measure("1080p · 60 fps", value).0);
-    let sync_label_w = ui.measure(tr(m.lang, Key::Sync), BODY).0;
+        .max(ui.measure(tr(m.lang, Key::BarRecord), BUTTON_TEXT).0)
+        .max(ui.measure("0:00:00", BUTTON_TEXT.tabular()).0);
+    let capture_label = ui.measure(tr(m.lang, Key::BarCapture), BUTTON_TEXT).0;
+    let save_chip = hotkey_w(ui, &m.replay.hotkey);
+    let record_chip = hotkey_w(ui, &m.replay.record_hotkey);
     let percent_w = ui.measure("100%", value).0;
     let sync_value_w = ui.measure("−300 ms", value).0;
 
-    let status_full = 8.0 + 8.0 + status_w + 12.0 + res_w;
-    let status_short = 8.0 + 8.0 + status_w;
-    let volume_block = ICON_SIZE + 10.0 + SLIDER_WIDTH + 10.0 + percent_w;
-    let sync_block = sync_label_w + 10.0 + BUTTON + sync_value_w + BUTTON;
-    let buttons_block = BUTTON * 5.0 + 16.0;
-    let divider = GAP * 2.0 + 1.0;
-    let replay_block = BUTTON * 3.0 + 8.0 + divider;
-    let width_of = |status: f32, with_sync: bool| {
-        PAD_X * 2.0
-            + status
-            + volume_block
-            + if with_sync { sync_block + divider } else { 0.0 }
-            + replay_block
-            + buttons_block
-            + divider * 3.0
+    let wide = |content: f32| 14.0 + content + 14.0;
+    let save = |chips: bool| {
+        wide(ICON_SIZE - 2.0 + 8.0 + save_label + if chips { save_chip } else { 0.0 })
     };
-    // Too wide for the room: drop the resolution, then the sync block.
-    let (show_res, show_sync) = if width_of(status_full, true) <= room {
+    let record =
+        |chips: bool| wide(12.0 + 8.0 + record_text + if chips { record_chip } else { 0.0 });
+    let capture_w = wide(ICON_SIZE - 2.0 + 8.0 + capture_label);
+    let volume = ICON_SIZE + 8.0 + SLIDER_WIDTH + 8.0 + percent_w;
+    let sync = BUTTON + sync_value_w + BUTTON;
+    let divider = DIVIDER_PAD * 2.0 + 1.0;
+    let round = ITEM_H * 3.0 + GAP * 2.0;
+    let width_of = |chips: bool, with_sync: bool| {
+        PAD_X * 2.0
+            + save(chips)
+            + GAP
+            + record(chips)
+            + GAP
+            + capture_w
+            + divider
+            + volume
+            + if with_sync { DIVIDER_PAD + sync } else { 0.0 }
+            + divider
+            + round
+    };
+    let (show_chips, show_sync) = if width_of(true, true) <= room {
         (true, true)
-    } else if width_of(status_short, true) <= room {
-        (false, true)
+    } else if width_of(true, false) <= room {
+        (true, false)
     } else {
         (false, false)
     };
-    let width = width_of(if show_res { status_full } else { status_short }, show_sync);
-    PillMetrics {
-        status_w,
-        res_w,
-        sync_label_w,
+    BarMetrics {
+        save_w: save(show_chips),
+        record_w: record(show_chips),
+        capture_w,
         percent_w,
         sync_value_w,
-        width,
-        show_res,
+        width: width_of(show_chips, show_sync),
         show_sync,
+        show_chips,
     }
-}
-
-/// The word next to the status dot.
-fn status_text(m: &Model) -> &'static str {
-    tr(
-        m.lang,
-        match m.status {
-            StatusKind::Live => Key::Live,
-            StatusKind::Connecting => Key::Connecting,
-            StatusKind::Problem => Key::Disconnected,
-            StatusKind::Idle => Key::NoDevice,
-        },
-    )
 }
 
 /// The volume icon for a level: muted, low or high.
@@ -99,11 +105,20 @@ fn volume_icon(volume: f32) -> char {
     }
 }
 
+fn divider_at(ui: &mut Ui, theme: &Theme, x: f32, cy: f32) -> f32 {
+    ui.rect(
+        Rect::new(x + DIVIDER_PAD, cy - 10.0, 1.0, 20.0),
+        0.5,
+        theme.track,
+    );
+    x + DIVIDER_PAD * 2.0 + 1.0
+}
+
 impl Controls {
     pub(super) fn draw_pill(&mut self, ui: &mut Ui, m: &Model) -> Rect {
         let t = &m.theme;
         let (screen_w, screen_h) = ui.logical_size();
-        let metrics = pill_metrics(ui, m, screen_w - 16.0);
+        let metrics = bar_metrics(ui, m, screen_w - 16.0);
 
         let pill = Rect::new(
             ((screen_w - metrics.width) / 2.0).round().max(8.0),
@@ -123,64 +138,25 @@ impl Controls {
             text_y: cy - line_h / 2.0,
         };
         let mut x = pill.x + PAD_X;
-        x = self.pill_status(ui, m, &metrics, row, x);
+        x = self.save_button(ui, m, &metrics, row, x) + GAP;
+        x = self.record_button(ui, m, &metrics, row, x) + GAP;
+        x = self.capture_button(ui, m, &metrics, row, x);
         x = divider_at(ui, t, x, cy);
         x = self.pill_volume(ui, m, &metrics, row, x);
-        x = divider_at(ui, t, x, cy);
         if metrics.show_sync {
+            x += DIVIDER_PAD;
             x = self.pill_sync(ui, m, &metrics, row, x);
-            x = divider_at(ui, t, x, cy);
         }
-        x = self.pill_replay(ui, m, row, x);
         x = divider_at(ui, t, x, cy);
-        self.pill_actions(ui, m, row, x);
+        self.pill_toggles(ui, m, row, x);
         pill
-    }
-
-    /// Status. While connecting, the dot pulses gently.
-    fn pill_status(
-        &mut self,
-        ui: &mut Ui,
-        m: &Model,
-        met: &PillMetrics,
-        row: Row,
-        mut x: f32,
-    ) -> f32 {
-        let t = &m.theme;
-        let dot = match m.status {
-            StatusKind::Live => t.live,
-            StatusKind::Connecting => t.warn,
-            StatusKind::Problem => t.error,
-            StatusKind::Idle => t.text_dim,
-        };
-        let pulse = if m.status == StatusKind::Connecting && self.animations {
-            0.55 + 0.45 * (0.5 + 0.5 * (self.time * TAU / PULSE_SECS).sin())
-        } else {
-            1.0
-        };
-        ui.rect(
-            Rect::new(x, row.cy - 4.0, 8.0, 8.0),
-            4.0,
-            dot.with_alpha(dot.a * pulse),
-        );
-        x += 16.0;
-        ui.text(status_text(m), x, row.text_y, LABEL, t.text);
-        x += met.status_w;
-        if !met.show_res {
-            return x;
-        }
-        x += 12.0;
-        if !m.resolution.is_empty() {
-            ui.text(&m.resolution, x, row.text_y, BODY.tabular(), t.text_dim);
-        }
-        x + met.res_w
     }
 
     fn pill_volume(
         &mut self,
         ui: &mut Ui,
         m: &Model,
-        met: &PillMetrics,
+        met: &BarMetrics,
         row: Row,
         mut x: f32,
     ) -> f32 {
@@ -192,26 +168,17 @@ impl Controls {
             ICON_SIZE,
             t.text,
         );
-        x += ICON_SIZE + 10.0;
+        x += ICON_SIZE + 8.0;
         self.draw_slider(ui, m, Rect::new(x, row.cy - 6.0, SLIDER_WIDTH, 12.0));
-        x += SLIDER_WIDTH + 10.0;
+        x += SLIDER_WIDTH + 8.0;
         let percent = format!("{:.0}%", m.volume * 100.0);
         ui.text(&percent, x, row.text_y, BODY.tabular(), t.text_dim);
         x + met.percent_w
     }
 
-    fn pill_sync(
-        &mut self,
-        ui: &mut Ui,
-        m: &Model,
-        met: &PillMetrics,
-        row: Row,
-        mut x: f32,
-    ) -> f32 {
+    fn pill_sync(&mut self, ui: &mut Ui, m: &Model, met: &BarMetrics, row: Row, mut x: f32) -> f32 {
         let t = &m.theme;
         let value = BODY.tabular();
-        ui.text(tr(m.lang, Key::Sync), x, row.text_y, BODY, t.text_dim);
-        x += met.sync_label_w + 10.0;
         self.icon_button(
             ui,
             m,
@@ -240,175 +207,50 @@ impl Controls {
         x + BUTTON
     }
 
-    /// Instant replay: its options, and "save the last N", and record.
-    fn pill_replay(&mut self, ui: &mut Ui, m: &Model, row: Row, mut x: f32) -> f32 {
+    /// The round buttons at the right: microphone, readouts, full screen.
+    fn pill_toggles(&mut self, ui: &mut Ui, m: &Model, row: Row, mut x: f32) {
         let t = &m.theme;
-        self.icon_button(
-            ui,
-            m,
-            Hit::Replay,
-            ICON_REPLAY,
-            x + BUTTON / 2.0,
-            row.cy,
-            ICON_SIZE,
-            false,
-        );
-        if m.replay.is_on() {
-            // A small red dot while the buffer is running.
-            let pulse = if m.replay.state == ReplayState::Starting && self.animations {
-                self.blink()
-            } else {
-                1.0
-            };
-            ui.rect(
-                Rect::new(x + BUTTON / 2.0 + 3.0, row.cy - 12.0, 9.0, 9.0),
-                4.5,
-                t.error.with_alpha(pulse),
-            );
-        }
-        if m.mic.state == MicState::Live {
-            // The microphone is open: a red microphone at the button's corner.
-            ui.icon(
-                ICON_MIC,
-                x + BUTTON / 2.0 + 10.0,
-                row.cy + 10.0,
-                11.0,
-                t.error,
-            );
-        }
-        x += BUTTON + 4.0;
-        self.save_button(ui, m, x + BUTTON / 2.0, row.cy);
-        x += BUTTON + 4.0;
-        self.record_button(ui, m, x + BUTTON / 2.0, row.cy);
-        x + BUTTON
-    }
-
-    /// The row of actions at the right: sources, scenes, settings, Studio, full
-    /// screen.
-    fn pill_actions(&mut self, ui: &mut Ui, m: &Model, row: Row, mut x: f32) {
-        self.icon_button(
-            ui,
-            m,
-            Hit::Sources,
-            ICON_SOURCE,
-            x + BUTTON / 2.0,
-            row.cy,
-            ICON_SIZE,
-            false,
-        );
-        x += BUTTON + 4.0;
-        self.icon_button(
-            ui,
-            m,
-            Hit::Scenes,
-            ICON_SCENES,
-            x + BUTTON / 2.0,
-            row.cy,
-            ICON_SIZE,
-            false,
-        );
-        x += BUTTON + 4.0;
-        self.icon_button(
-            ui,
-            m,
-            Hit::Settings,
-            ICON_SETTINGS,
-            x + BUTTON / 2.0,
-            row.cy,
-            ICON_SIZE,
-            false,
-        );
-        x += BUTTON + 4.0;
-        let studio_open = m.studio_visible();
-        let studio_icon = if studio_open {
-            ICON_STUDIO_CLOSE
-        } else {
-            ICON_STUDIO_OPEN
+        let round = |this: &mut Self, ui: &mut Ui, hit: Hit, x: f32, fill: Option<Color>| {
+            let rect = Rect::new(x, row.cy - ITEM_H / 2.0, ITEM_H, ITEM_H);
+            this.register(hit, rect);
+            if let Some(fill) = fill {
+                ui.rect(rect, ITEM_H / 2.0, fill);
+            }
+            this.wash(ui, m, hit, rect, ITEM_H / 2.0, 1.0);
+            rect.center()
         };
-        self.icon_button(
-            ui,
-            m,
-            Hit::Studio,
-            studio_icon,
-            x + BUTTON / 2.0,
-            row.cy,
-            ICON_SIZE,
-            studio_open,
-        );
-        x += BUTTON + 4.0;
-        let fullscreen_icon = if m.fullscreen {
+        // The microphone is red while it is open.
+        let live = m.mic.state == MicState::Live;
+        let fill = live.then(|| t.error.with_alpha(0.18));
+        let (cx, cy) = round(self, ui, Hit::Mic, x, fill);
+        let (icon, color) = if live {
+            (ICON_MIC, t.error)
+        } else {
+            (ICON_MIC_OFF, t.text_dim)
+        };
+        ui.icon(icon, cx, cy, ICON_SIZE, color);
+        x += ITEM_H + GAP;
+
+        let (cx, cy) = round(self, ui, Hit::Hud, x, None);
+        let (icon, color) = if m.hud {
+            (ICON_EYE, t.text)
+        } else {
+            (ICON_EYE_OFF, t.text_dim)
+        };
+        ui.icon(icon, cx, cy, ICON_SIZE, color);
+        x += ITEM_H + GAP;
+
+        let (cx, cy) = round(self, ui, Hit::Fullscreen, x, Some(t.segment_active));
+        let icon = if m.fullscreen {
             ICON_EXIT_FULLSCREEN
         } else {
             ICON_FULLSCREEN
         };
-        self.icon_button(
-            ui,
-            m,
-            Hit::Fullscreen,
-            fullscreen_icon,
-            x + BUTTON / 2.0,
-            row.cy,
-            ICON_SIZE,
-            false,
-        );
+        ui.icon(icon, cx, cy, ICON_SIZE, t.text);
     }
 
     /// A quick on-off pulse for something that is starting.
-    fn blink(&self) -> f32 {
+    pub(super) fn blink(&self) -> f32 {
         0.5 + 0.5 * (self.time * TAU / PULSE_SECS).sin().abs()
-    }
-
-    /// The pill's "save clip" button: dimmed while the buffer is off, and
-    /// pulsing while a clip is being written.
-    pub(super) fn save_button(&mut self, ui: &mut Ui, m: &Model, cx: f32, cy: f32) {
-        let t = &m.theme;
-        let rect = Rect::new(cx - BUTTON / 2.0, cy - BUTTON / 2.0, BUTTON, BUTTON);
-        self.register(Hit::ReplaySave, rect);
-        let (_, press) = self.wash(ui, m, Hit::ReplaySave, rect, BUTTON / 2.0, 1.0);
-        let color = if m.replay.is_on() { t.text } else { t.text_dim };
-        let pulse = if m.replay.saving && self.animations {
-            0.45 + 0.55 * (0.5 + 0.5 * (self.time * TAU / 0.8).sin())
-        } else {
-            1.0
-        };
-        ui.icon(
-            ICON_SAVE,
-            cx,
-            cy,
-            ICON_SIZE * (1.0 - 0.1 * press),
-            color.with_alpha(color.a * pulse),
-        );
-    }
-
-    /// The pill's record button: a red circle when idle, a red square while recording.
-    pub(super) fn record_button(&mut self, ui: &mut Ui, m: &Model, cx: f32, cy: f32) {
-        let t = &m.theme;
-        let rect = Rect::new(cx - BUTTON / 2.0, cy - BUTTON / 2.0, BUTTON, BUTTON);
-        self.register(Hit::Record, rect);
-        let (_, press) = self.wash(ui, m, Hit::Record, rect, BUTTON / 2.0, 1.0);
-        let scale = 1.0 - 0.1 * press;
-        match m.rec.state {
-            RecState::Idle => {
-                let size = 14.0 * scale;
-                ui.rect(
-                    Rect::new(cx - size / 2.0, cy - size / 2.0, size, size),
-                    size / 2.0,
-                    t.error,
-                );
-            }
-            RecState::Starting | RecState::Recording => {
-                let pulse = if m.rec.state == RecState::Starting && self.animations {
-                    self.blink()
-                } else {
-                    1.0
-                };
-                let size = 13.0 * scale;
-                ui.rect(
-                    Rect::new(cx - size / 2.0, cy - size / 2.0, size, size),
-                    3.0,
-                    t.error.with_alpha(pulse),
-                );
-            }
-        }
     }
 }

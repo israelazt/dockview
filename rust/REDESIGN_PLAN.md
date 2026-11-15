@@ -220,6 +220,8 @@ Hecho y subido, **sin abrir la app** (el autor está jugando; todo se verificó 
 - Pistas de grabación («3 Pistas») y medidor de volumen ⏳.
 - **Ventana estrecha:** primero se quita la sincronía; luego los chips de atajo.
 
+**Estado de 5.3 (2026-11-14):** hecho y subido, sin abrir la app. La barra tiene, de izquierda a derecha: **Guardar clip** (relleno de marca con el atajo; gris si la repetición está apagada), **Grabar** (punto o cuadrado rojo y, mientras graba, el tiempo; con su atajo), **Captura**, volumen, sincronía, **micrófono** (rojo mientras está abierto), **ocultar datos** (ojo) y **pantalla completa**. Sigue ocultándose sola a los 3 s y conserva el volumen con rueda y arrastre. Se quitaron el estado, la resolución y los botones de fuentes, escenas, ajustes, panel y repetición (ahora están en la fila de tarjetas, las pestañas y la barra lateral). Con ventana estrecha se quita primero la sincronía y después los atajos. Falta 5.2 (la tarjeta de salud) y la revisión con la app real.
+
 ## 6. Decisiones
 
 **Tomadas (2026-11-14):**

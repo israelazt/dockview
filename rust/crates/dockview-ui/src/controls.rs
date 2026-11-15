@@ -1,5 +1,5 @@
-//! The live controls: a floating pill over the video. Its buttons for sources,
-//! scenes, replay and settings open the Studio panel on their section.
+//! The live controls: a floating bar over the video with the buttons used
+//! while watching (clip, record, screenshot, volume, microphone, full screen).
 //!
 //! Immediate mode: every frame [`Controls::frame`] reads the pointer, decides
 //! what is hovered/pressed using the *previous* frame's hit rectangles,
@@ -10,6 +10,7 @@ use std::f32::consts::TAU;
 
 use dockview_domain::settings::MAX_AUDIO_OFFSET_MS;
 
+mod buttons;
 mod consts;
 mod interaction;
 mod math;
@@ -23,15 +24,13 @@ use consts::*;
 pub use consts::{IDLE_HIDE_SECS, SYNC_STEP_MS, WHEEL_VOLUME_STEP};
 use dockview_domain::view::*;
 use math::*;
-use widgets::*;
 
 use super::input::Pointer;
 use super::stats::wrap_text;
-use super::studio::StudioSection;
 use super::text::Weight;
 use super::{Rect, TextStyle, Ui};
 use dockview_domain::i18n::{tr, Key};
-use dockview_domain::theme::Theme;
+use dockview_domain::theme::{Color, Theme};
 
 /// Identifies an interactive (or occluding) region.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -40,21 +39,17 @@ pub(super) enum Hit {
     Volume,
     SyncMinus,
     SyncPlus,
-    /// Pill button that opens the Studio panel on its settings.
-    Settings,
     Fullscreen,
-    /// Pill button that opens the Studio panel on the sources.
-    Sources,
-    /// Pill button that opens the Studio panel on the scenes.
-    Scenes,
-    /// Pill button that opens or closes the Studio panel.
-    Studio,
-    /// Pill button that opens the Studio panel on the recording and replay.
-    Replay,
-    /// Pill button that saves the replay.
+    /// Bar button that saves the replay.
     ReplaySave,
-    /// Pill button that starts or stops a recording.
+    /// Bar button that starts or stops a recording.
     Record,
+    /// Bar button that takes a screenshot.
+    Capture,
+    /// Bar button that turns the microphone on or off.
+    Mic,
+    /// Bar button that shows or hides the readouts.
+    Hud,
 }
 
 impl Hit {
@@ -86,8 +81,6 @@ pub struct Controls {
     /// The control the pointer is resting on, and for how long (seconds).
     tip_hit: Option<Hit>,
     tip_time: f32,
-    /// The section of the panel the last click asked to show.
-    studio_request: Option<StudioSection>,
 }
 
 impl Controls {
@@ -111,7 +104,6 @@ impl Controls {
             amounts: HashMap::new(),
             tip_hit: None,
             tip_time: 0.0,
-            studio_request: None,
         }
     }
 
@@ -119,17 +111,6 @@ impl Controls {
     /// Windows "show animations" setting).
     pub fn set_animations(&mut self, on: bool) {
         self.animations = on;
-    }
-
-    /// The section of the Studio panel a click asked to show, once.
-    pub fn take_studio_request(&mut self) -> Option<StudioSection> {
-        self.studio_request.take()
-    }
-
-    /// Asks for the panel on `section`.
-    pub(super) fn open_in_panel(&mut self, section: StudioSection) {
-        self.studio_request = Some(section);
-        self.actions.push(Action::OpenStudio);
     }
 
     pub fn take_actions(&mut self) -> Vec<Action> {

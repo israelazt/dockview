@@ -43,26 +43,12 @@ impl Controls {
         let sync =
             |delta: i32| (model.sync_ms + delta).clamp(-MAX_AUDIO_OFFSET_MS, MAX_AUDIO_OFFSET_MS);
         let action = match hit {
-            Hit::Settings => {
-                self.open_in_panel(StudioSection::Settings);
-                return;
-            }
-            Hit::Replay => {
-                self.open_in_panel(StudioSection::Recording);
-                return;
-            }
-            Hit::Sources => {
-                self.open_in_panel(StudioSection::Sources);
-                return;
-            }
-            Hit::Scenes => {
-                self.open_in_panel(StudioSection::Scenes);
-                return;
-            }
             Hit::ReplaySave => Action::SaveReplay,
             Hit::Record => Action::ToggleRecord,
+            Hit::Capture => Action::Capture,
+            Hit::Mic => Action::ToggleMic,
+            Hit::Hud => Action::ToggleHud,
             Hit::Fullscreen => Action::ToggleFullscreen,
-            Hit::Studio => Action::ToggleStudio,
             Hit::SyncMinus => Action::SetSync(sync(-SYNC_STEP_MS)),
             Hit::SyncPlus => Action::SetSync(sync(SYNC_STEP_MS)),
             Hit::Pill | Hit::Volume => return,

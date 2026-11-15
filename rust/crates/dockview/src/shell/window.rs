@@ -340,9 +340,8 @@ impl Shell {
         self.pointer.end_frame();
         let actions = self.controls.take_actions();
         if let Some(section) = self
-            .controls
+            .navbar
             .take_studio_request()
-            .or_else(|| self.navbar.take_studio_request())
             .or_else(|| self.rail.take_studio_request())
         {
             self.studio.open_section(section);

@@ -1,5 +1,6 @@
 //! Tests of the live controls.
 
+use super::buttons::{clock, record_label};
 use super::tooltip::*;
 use super::*;
 use crate::motion::{ease_out_cubic, lerp_color, move_toward};
@@ -186,13 +187,11 @@ fn sync_buttons_step_by_ten_and_clamp() {
 #[test]
 fn every_control_has_a_tooltip_in_both_languages_with_nothing_left_to_fill_in() {
     let hits = [
-        Hit::Sources,
-        Hit::Scenes,
-        Hit::Studio,
-        Hit::Replay,
         Hit::ReplaySave,
         Hit::Record,
-        Hit::Settings,
+        Hit::Capture,
+        Hit::Mic,
+        Hit::Hud,
         Hit::Fullscreen,
         Hit::Volume,
         Hit::SyncMinus,
@@ -263,7 +262,7 @@ fn a_tooltip_appears_after_resting_on_a_button_and_not_before() {
 #[test]
 fn pressing_hides_the_tooltip_and_moving_away_resets_the_wait() {
     let mut rig = Rig::new(true);
-    let (x, y) = rig.controls.rect_of(Hit::Settings).center();
+    let (x, y) = rig.controls.rect_of(Hit::Capture).center();
     rig.move_to(x, y);
     rig.frame(0.6);
     rig.frame(0.1);
@@ -392,16 +391,6 @@ fn pill_fits_a_small_window_in_both_languages() {
 }
 
 #[test]
-fn spanish_pill_is_wider_than_english() {
-    let mut en = Rig::new(true);
-    let mut es = Rig::new(true);
-    es.model.lang = Lang::Es;
-    es.frame(0.016);
-    en.frame(0.016);
-    assert!(es.controls.rect_of(Hit::Pill).w > en.controls.rect_of(Hit::Pill).w);
-}
-
-#[test]
 fn smoothing_converges_monotonically_and_snaps() {
     let mut v = 0.0;
     let mut last = 0.0;
@@ -467,29 +456,36 @@ fn disabling_animations_makes_everything_instant() {
 }
 
 #[test]
-fn connecting_status_pulses_but_live_does_not() {
-    let alpha_of_dot = |rig: &Rig| {
+fn the_record_button_blinks_while_starting_and_is_steady_while_recording() {
+    // The square of the button: 11 px (half 5.5) with a 3 px corner.
+    let alpha_of_square = |rig: &Rig| {
         rig.ui
             .vertices()
             .iter()
-            .find(|v| v.shape[3] == 0.0 && v.shape[0] == 4.0)
+            .find(|v| v.shape[3] == 0.0 && v.shape[2] == 3.0 && (v.shape[0] - 5.5).abs() < 0.6)
             .map(|v| v.color[3])
     };
     let mut rig = Rig::new(true);
-    rig.model.status = StatusKind::Connecting;
+    rig.model.rec = RecView {
+        state: RecState::Starting,
+        seconds: 0.0,
+    };
     let mut seen = Vec::new();
     for _ in 0..40 {
         rig.frame(0.05);
-        seen.push(alpha_of_dot(&rig).unwrap());
+        seen.push(alpha_of_square(&rig).unwrap());
     }
     let (lo, hi) = seen
         .iter()
         .fold((f32::MAX, f32::MIN), |(lo, hi), a| (lo.min(*a), hi.max(*a)));
-    assert!(hi - lo > 0.3, "pulse range {lo}..{hi}");
+    assert!(hi - lo > 0.3, "blink range {lo}..{hi}");
 
-    rig.model.status = StatusKind::Live;
+    rig.model.rec = RecView {
+        state: RecState::Recording,
+        seconds: 3.0,
+    };
     rig.frame(0.05);
-    assert_eq!(alpha_of_dot(&rig), Some(1.0));
+    assert_eq!(alpha_of_square(&rig), Some(1.0));
 }
 
 #[test]
@@ -503,69 +499,96 @@ fn wants_pointer_only_over_widgets_not_backgrounds() {
     assert!(rig.controls.wants_pointer());
 }
 
-// -- The Studio button ----------------------------------------------------
+// -- The bar's own buttons -------------------------------------------------
 
 #[test]
-fn the_studio_button_asks_to_toggle_the_panel() {
-    let mut rig = Rig::new(true);
-    rig.click_on(Hit::Studio);
-    assert_eq!(rig.actions(), [Action::ToggleStudio]);
+fn the_capture_the_microphone_and_the_readouts_buttons_emit_their_actions() {
+    for (hit, action) in [
+        (Hit::Capture, Action::Capture),
+        (Hit::Mic, Action::ToggleMic),
+        (Hit::Hud, Action::ToggleHud),
+    ] {
+        let mut rig = Rig::new(true);
+        rig.click_on(hit);
+        assert_eq!(rig.actions(), vec![action], "{hit:?}");
+    }
 }
 
 #[test]
-fn the_studio_button_says_open_or_close_by_what_it_would_do() {
+fn the_buttons_follow_the_state_of_the_microphone_and_the_readouts() {
     let mut m = model();
-    let open = tooltip_for(Hit::Studio, &m).expect("a tooltip");
-    assert!(open.contains("Tab"), "the key is in the tooltip: {open}");
-    m.studio = true;
-    let close = tooltip_for(Hit::Studio, &m).expect("a tooltip");
-    assert_ne!(open, close);
-    assert!(close.starts_with("Close"), "{close}");
-    // Full screen hides the panel, so the button offers to open it again.
-    m.fullscreen = true;
-    assert_eq!(tooltip_for(Hit::Studio, &m).unwrap(), open);
+    m.mic.state = MicState::Live;
+    assert!(tooltip_for(Hit::Mic, &m).unwrap().contains("off"));
+    m.mic.state = MicState::Off;
+    assert!(tooltip_for(Hit::Mic, &m).unwrap().contains("on"));
+    m.hud = true;
+    assert!(tooltip_for(Hit::Hud, &m).unwrap().starts_with("Hide"));
+    m.hud = false;
+    assert!(tooltip_for(Hit::Hud, &m).unwrap().starts_with("Show"));
 }
 
 #[test]
-fn the_studio_button_sits_between_settings_and_full_screen_and_fits_the_pill() {
+fn the_bar_has_the_clip_first_and_full_screen_last_inside_the_bar() {
     let rig = Rig::new(true);
-    let (settings, studio, fullscreen) = (
-        rig.controls.rect_of(Hit::Settings),
-        rig.controls.rect_of(Hit::Studio),
+    let save = rig.controls.rect_of(Hit::ReplaySave);
+    let record = rig.controls.rect_of(Hit::Record);
+    let capture = rig.controls.rect_of(Hit::Capture);
+    let volume = rig.controls.rect_of(Hit::Volume);
+    let (mic, hud, full) = (
+        rig.controls.rect_of(Hit::Mic),
+        rig.controls.rect_of(Hit::Hud),
         rig.controls.rect_of(Hit::Fullscreen),
     );
-    assert!(settings.x < studio.x && studio.x < fullscreen.x);
+    assert!(save.x < record.x && record.x < capture.x && capture.x < volume.x);
+    assert!(volume.x < mic.x && mic.x < hud.x && hud.x < full.x);
     let pill = rig.controls.rect_of(Hit::Pill);
-    assert!(
-        fullscreen.x + fullscreen.w <= pill.x + pill.w,
-        "inside the pill"
-    );
-    assert!(
-        pill.x >= 0.0 && pill.x + pill.w <= 1280.0,
-        "inside a 1280 window"
-    );
+    assert!(save.x >= pill.x && full.x + full.w <= pill.x + pill.w);
+    assert!(pill.x >= 0.0 && pill.x + pill.w <= 1280.0);
 }
 
 #[test]
-fn a_pill_that_does_not_fit_the_video_area_drops_the_resolution_then_the_sync() {
-    let width_in = |limit: f32| {
+fn the_record_button_shows_the_time_while_recording() {
+    assert_eq!(clock(0.0), "0:00");
+    assert_eq!(clock(65.0), "1:05");
+    assert_eq!(clock(3725.0), "1:02:05");
+    let mut m = model();
+    m.lang = Lang::En;
+    assert_eq!(record_label(&m), "Record");
+    m.rec = RecView {
+        state: RecState::Recording,
+        seconds: 42.0,
+    };
+    assert_eq!(record_label(&m), "0:42");
+}
+
+#[test]
+fn a_bar_that_does_not_fit_the_video_area_drops_the_sync_then_the_hotkeys() {
+    let measure = |limit: f32| {
+        let mut m = model();
+        m.replay = ReplayView {
+            record_hotkey: "Ctrl+Alt+R".into(),
+            ..ReplayView::off("Ctrl+Alt+S")
+        };
         let mut rig = Rig::new(true);
+        rig.model = m;
         rig.limit = Some(limit);
         rig.frame(0.016);
         let pill = rig.controls.rect_of(Hit::Pill);
         (
             pill,
             rig.controls.hits.iter().any(|(h, _)| *h == Hit::SyncPlus),
+            rig.controls.rect_of(Hit::ReplaySave),
         )
     };
-    let (full, has_sync) = width_in(1280.0);
+    let (full, has_sync, save_full) = measure(1280.0);
     assert!(has_sync);
-    // Room for everything but the resolution.
-    let (short, has_sync) = width_in(full.w - 20.0);
-    assert!(has_sync && short.w < full.w);
-    // Room for less still: no sync block either.
-    let (least, has_sync) = width_in(short.w - 20.0);
-    assert!(!has_sync && least.w < short.w);
+    // Room for everything but the sync block.
+    let (short, has_sync, save_short) = measure(full.w - 20.0);
+    assert!(!has_sync && short.w < full.w);
+    assert_eq!(save_short.w, save_full.w, "the hotkeys are still there");
+    // Room for less still: the hotkeys go too and the buttons shrink.
+    let (least, _, save_least) = measure(short.w - 20.0);
+    assert!(least.w < short.w && save_least.w < save_short.w);
     for (pill, limit) in [(short, full.w - 20.0), (least, short.w - 20.0)] {
         assert!(
             pill.x >= 8.0 && pill.x + pill.w <= limit,
@@ -582,26 +605,6 @@ fn the_pill_is_centred_in_the_video_area_not_in_the_window() {
     let pill = rig.controls.rect_of(Hit::Pill);
     let middle = pill.x + pill.w / 2.0;
     assert!((middle - 480.0).abs() <= 1.0, "{middle}");
-}
-
-// -- Buttons that open the Studio panel ----------------------------------
-
-#[test]
-fn pill_buttons_ask_for_the_panel_on_their_section() {
-    use crate::studio::StudioSection as S;
-    let cases = [
-        (Hit::Settings, S::Settings),
-        (Hit::Replay, S::Recording),
-        (Hit::Sources, S::Sources),
-        (Hit::Scenes, S::Scenes),
-    ];
-    for (hit, section) in cases {
-        let mut rig = Rig::new(true);
-        rig.click_on(hit);
-        assert_eq!(rig.actions(), [Action::OpenStudio], "{hit:?}");
-        assert_eq!(rig.controls.take_studio_request(), Some(section), "{hit:?}");
-        assert_eq!(rig.controls.take_studio_request(), None, "asked once");
-    }
 }
 
 #[test]
