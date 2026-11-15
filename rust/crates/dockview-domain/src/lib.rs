@@ -6,6 +6,7 @@
 
 pub mod audio_status;
 pub mod audio_sync;
+pub mod brand;
 pub mod broadcast;
 pub mod capture_settings;
 pub mod desktop;

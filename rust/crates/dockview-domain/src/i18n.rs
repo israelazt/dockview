@@ -203,6 +203,10 @@ strings! {
     ToastStreamBadAddress => "Enter the server address (rtmp:// or rtmps://)", "Escribe la dirección del servidor (rtmp:// o rtmps://)";
     ToastStreamStartFailed => "The stream could not be started", "No se pudo iniciar la emisión";
     ToastStreamStopped => "Stream ended", "Emisión terminada";
+    WindowMinimize => "Minimize", "Minimizar";
+    WindowMaximize => "Maximize", "Maximizar";
+    WindowRestore => "Restore", "Restaurar";
+    WindowClose => "Close", "Cerrar";
     TrayTip => "Dockview", "Dockview";
     TrayNewCapture => "New screenshot", "Nueva captura";
     TrayOpen => "Open Dockview", "Abrir Dockview";
