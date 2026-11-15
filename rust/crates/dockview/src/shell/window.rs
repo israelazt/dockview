@@ -131,6 +131,7 @@ impl Shell {
         // its room; the pointer belongs to the video or to the panel.
         self.studio
             .update(model.studio_visible(), model.fullscreen, dt);
+        self.studio_openness = self.studio.openness();
         // The rail slides with the panel, so the frame is read after it moved.
         let chrome = self.chrome();
         let bar_px = chrome.bar_height();
@@ -227,6 +228,18 @@ impl Shell {
                 ui.begin(presenter.size(), scale);
                 ui.set_inset_top(content_top_px / scale.max(0.1));
                 ui.set_inset_left(rail_px / scale.max(0.1));
+                // With the Studio open, the air around the two cards and a fine
+                // frame around the video.
+                studio::draw_card_frame(
+                    ui,
+                    &model.theme,
+                    &place,
+                    (
+                        content_size.0 as f32 / scale.max(0.1),
+                        content_size.1 as f32 / scale.max(0.1),
+                    ),
+                    self.studio_openness,
+                );
                 // What floats over the video anchors to the video's room.
                 // The layer editor sits on the picture, under the controls; what
                 // the controls (the pill) use is not the editor's.
@@ -243,17 +256,27 @@ impl Shell {
                 let v = place.video;
                 let area = (v.x / scale, v.y / scale, v.w / scale, v.h / scale);
                 scene_editor.frame(ui, &model, area, &editor_pointer, *edit_mods);
+                // From here on, what floats over the picture is drawn and
+                // pointed at relative to the video card.
+                let vl = place.video_logical;
+                let (rail_l, top_l) = (rail_px / scale.max(0.1), content_top_px / scale.max(0.1));
+                let float_pointer = Pointer {
+                    pos: video_pointer.pos.map(|(x, y)| (x - vl.x, y - vl.y)),
+                    ..video_pointer
+                };
+                ui.set_inset_left(rail_l + vl.x);
+                ui.set_inset_top(top_l + vl.y);
                 ui.limit_width(Some(place.video_width));
-                controls.frame(ui, &model, &video_pointer, dt);
-                let hud_h = hud.frame(ui, &model, stats, &video_pointer, hud_show, dt, animations);
+                controls.frame(ui, &model, &float_pointer, dt);
+                let hud_h = hud.frame(ui, &model, stats, &float_pointer, hud_show, dt, animations);
                 // What anchors to the top sits under the readouts.
-                ui.set_inset_top((content_top_px / scale.max(0.1)) + hud_h);
+                ui.set_inset_top(top_l + vl.y + hud_h);
                 stats_panel.frame(
                     ui,
                     &model.theme,
                     model.lang,
                     stats,
-                    &video_pointer,
+                    &float_pointer,
                     stats_open,
                     dt,
                     animations,
@@ -268,7 +291,8 @@ impl Shell {
                     );
                 }
                 toasts.frame(ui, &model.theme, dt, animations);
-                ui.set_inset_top(content_top_px / scale.max(0.1));
+                ui.set_inset_top(top_l);
+                ui.set_inset_left(rail_l);
                 // The panel, on top, in the room it took.
                 ui.limit_width(None);
                 studio.frame(
@@ -280,45 +304,22 @@ impl Shell {
                     &panel_pointer,
                     dt,
                 );
-                // The tabs and the status, under the title bar.
-                if bar_px > 0.0 {
-                    ui.set_inset_left(0.0);
-                    ui.set_inset_top(bar_px / scale.max(0.1));
-                    navbar.frame(ui, &model, &nav_pointer);
-                    ui.set_inset_top(top_px / scale.max(0.1));
-                    // Only with the panel open: the viewer has no rail.
-                    if rail_px > 0.0 {
-                        // It slides in from the left, cut off at the edge of the
-                        // room it has taken so far.
-                        let slide = dockview_domain::window_chrome::RAIL_WIDTH
-                            * (1.0 - chrome.rail_out.clamp(0.0, 1.0));
-                        let (_, rail_h) = ui.logical_size();
-                        ui.set_clip(Some(dockview_ui::Rect::new(
-                            0.0,
-                            0.0,
-                            rail_px / scale.max(0.1),
-                            rail_h,
-                        )));
-                        ui.set_offset(-slide, 0.0);
-                        rail.frame(ui, &model, &rail_pointer, rail_active, dt);
-                        ui.set_offset(0.0, 0.0);
-                        ui.set_clip(None);
-                    }
-                    ui.set_inset_left(rail_px / scale.max(0.1));
-                    strip.frame(ui, &model);
-                    ui.set_inset_left(0.0);
-                }
-                // The window's own title bar, over everything.
-                ui.set_inset_top(0.0);
-                if bar_px > 0.0 {
-                    dockview_ui::titlebar::draw(
-                        ui,
-                        &model.theme,
-                        model.lang,
-                        &bar_state,
-                        &dockview_domain::brand::version_label(crate::os::renderer_name()),
-                    );
-                }
+                frame::draw(
+                    ui,
+                    &model,
+                    &chrome,
+                    frame::Parts {
+                        navbar,
+                        rail,
+                        strip,
+                        nav_pointer: &nav_pointer,
+                        rail_pointer: &rail_pointer,
+                        rail_active,
+                        bar_state: &bar_state,
+                    },
+                    scale,
+                    dt,
+                );
             }
         }
         match presenter.present(&ui.draw_list(), capture) {

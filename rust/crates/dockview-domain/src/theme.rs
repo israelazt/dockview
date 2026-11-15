@@ -105,6 +105,8 @@ pub struct Theme {
     /// The small rounded label next to the name (the version).
     pub chip: Color,
     pub chip_line: Color,
+    /// Behind the cards of the Studio: the air between them.
+    pub backdrop: Color,
     /// The brand's colour: the tab that is on, the logo.
     pub brand: Color,
     /// Text over the brand colour.
@@ -160,6 +162,7 @@ impl Theme {
             chrome_line: Color::hex(0xFFFFFF, 0.08),
             chip: Color::hex(grey::G2, 1.0),
             chip_line: Color::hex(0xFFFFFF, 0.09),
+            backdrop: Color::hex(grey::G0, 1.0),
             brand: Color::hex(BRAND_DARK, 1.0),
             on_brand: Color::hex(0x04150F, 1.0),
         }
@@ -186,6 +189,7 @@ impl Theme {
             chrome_line: Color::hex(0x000000, 0.08),
             chip: Color::hex(0xF7F7F7, 1.0),
             chip_line: Color::hex(0x000000, 0.09),
+            backdrop: Color::hex(0xE3E3E5, 1.0),
             brand: Color::hex(0x00C98F, 1.0),
             on_brand: Color::hex(0x04150F, 1.0),
         }

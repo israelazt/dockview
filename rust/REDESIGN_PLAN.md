@@ -224,6 +224,18 @@ Hecho y subido, **sin abrir la app** (el autor está jugando; todo se verificó 
 
 **Estado de 5.2 (2026-11-14):** hecho y subido, sin abrir la app. La tarjeta **«Salud del pipeline»** va arriba a la derecha (bajo la fila de datos y pegada al borde del vídeo), con una insignia de pulso, el título y un botón de cerrar; el **diagnóstico va primero**, en un bloque con titular (`PIPELINE SANO` en verde o `REQUIERE ATENCIÓN` en ámbar/rojo según el peor hallazgo) y las frases en lenguaje llano; debajo siguen los datos (vídeo, rendimiento, pantalla) más compactos. Se abre y cierra con el botón de pulso. Los dos interruptores de la maqueta no se dibujan. **Con esto la parte 5 queda hecha**; falta la revisión con la app real. Pendientes menores: pistas de grabación y desplegable de modos en Captura.
 
+## 5.7. Parte 6 — Armazón del Modo Estudio (por etapas)
+
+**Maqueta:** tres columnas de tarjetas (escenas y capas · lienzo con transiciones · emisión y mezclador), con aire entre ellas y una franja de estado arriba. **Hoy:** el vídeo ocupa la izquierda y un único panel acordeón (320 px, pegado al borde) tiene las seis secciones.
+
+**Dos hechos que condicionan el plan:** (1) con la barra lateral y dos columnas, el vídeo necesita al menos ~1200 px de ancho de ventana para quedarse en ≥ 480 px; por debajo hay que caer en un panel único; (2) el renderizador del vídeo solo sabe pintar un rectángulo, así que **las esquinas redondeadas del vídeo necesitarían un cambio en el shader**: por ahora el vídeo lleva un marco fino y esquinas rectas.
+
+**Etapas** (cada una deja la app usable):
+1. **6.1 · Tarjetas (hecha, 2026-11-14).** Con el panel abierto, el vídeo y el panel pasan a ser **tarjetas con aire** (12 px alrededor y entre ellas, que crece con la animación de apertura); el aire se pinta con un tono propio del tema (`backdrop`), el panel es una tarjeta redondeada con sombra y el vídeo lleva un marco fino. Lo que flota sobre el vídeo (barra, tarjetas de datos, avisos) se ancla ahora al rectángulo del vídeo, no a toda el área.
+2. **6.2 · Columna izquierda.** Escenas y Fuentes salen del panel y pasan a una columna a la izquierda del vídeo (tarjetas propias), solo si la ventana es ancha; si no, siguen en el panel.
+3. **6.3 · Columna derecha y franja de estado.** El panel conserva Audio, Grabación, Ajustes y Estadísticas; arriba, la franja con escena activa, FPS y latencia.
+Las partes 7 a 9 (escenas y capas, lienzo y transiciones, emisión) rellenan esas columnas.
+
 ## 6. Decisiones
 
 **Tomadas (2026-11-14):**

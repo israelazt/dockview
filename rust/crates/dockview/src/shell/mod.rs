@@ -5,6 +5,7 @@
 mod capture;
 mod cursor;
 mod events;
+mod frame;
 mod keys;
 mod studio;
 mod window;
@@ -94,6 +95,8 @@ pub struct Shell {
     hud: Hud,
     /// The readouts are fading in or out (so frames keep being drawn).
     hud_moving: bool,
+    /// How far the Studio panel was out when the frame was drawn.
+    studio_openness: f32,
     toasts: ToastHost,
     /// What the pointer is doing to the window's own frame (its buttons, its
     /// edges and its bar).
@@ -148,6 +151,7 @@ impl Shell {
             strip: ShortcutStrip::new(),
             hud: Hud::new(),
             hud_moving: false,
+            studio_openness: 0.0,
             toasts: ToastHost::new(),
             chrome_input: ChromeInput::default(),
             cursor_phys: None,

@@ -1,6 +1,7 @@
 //! Drawing the Studio panel: its background, its header, the sections and the
 //! scroll bar.
 
+use dockview_domain::design::RADIUS_CARD;
 use dockview_domain::i18n::{tr, Key};
 use dockview_domain::stats::Stats;
 use dockview_domain::theme::Theme;
@@ -17,10 +18,10 @@ use crate::{Rect, Ui};
 impl StudioPanel {
     // -- Drawing -----------------------------------------------------------
 
-    /// The background and the line along its left edge.
+    /// The card: rounded, with a fine border (its shadow is drawn by the window,
+    /// with the air around the cards).
     pub(super) fn draw_frame(&self, ui: &mut Ui, t: &Theme, panel: Rect) {
-        ui.rect(panel, 0.0, t.surface_solid);
-        ui.rect(Rect::new(panel.x, panel.y, 1.0, panel.h), 0.0, t.border);
+        ui.panel(panel, RADIUS_CARD, t.surface_solid, t.border, 1.0);
     }
 
     /// The title and the close button, over a line.
