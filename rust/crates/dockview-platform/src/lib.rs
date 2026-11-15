@@ -52,6 +52,8 @@ pub mod replay_machine;
 pub mod screen;
 #[cfg(windows)]
 pub mod screen_io;
+#[cfg(windows)]
+pub mod secrets;
 pub mod settings_store;
 #[cfg(windows)]
 pub mod snapshot;

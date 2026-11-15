@@ -14,6 +14,7 @@ serde_json.workspace = true
 windows = { workspace = true, features = [
     "Win32_Foundation",
     "Win32_Security",
+    "Win32_Security_Cryptography",
     "Win32_System_Console",
     "Win32_Globalization",
     "Win32_System_Com",
