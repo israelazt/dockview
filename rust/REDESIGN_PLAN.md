@@ -171,6 +171,14 @@ Hecho y subido, **sin abrir la app** (el autor está jugando; todo se verificó 
 
 **Estado (2026-11-14):** T-3.1 a T-3.3 hechas y subidas, sin abrir la app. Falta la comprobación visual con la app real.
 
+## 5.4. Parte 4 — Franja de atajos (diseño y estado)
+
+**Esqueleto:** una barra con borde y esquinas redondeadas sobre el contenido, a la derecha de la barra lateral: `Atajos:` y chips de tecla con su acción (en la maqueta: Espacio, F1-F4, F9, F10) y, a la derecha, el motor con un punto verde.
+
+**Adaptación:** 30 px de alto (la maqueta tiene ~36), siempre visible salvo en pantalla completa; sin la barra lateral ocupa todo el ancho. Solo se listan **atajos que existen**: `Tab` Estudio, `F` Pantalla completa, el atajo global de guardar clip y el de grabar (los que da la máquina: hoy `Ctrl+Alt+S` y `Ctrl+Alt+R`, y si uno no se pudo registrar no se muestra) y `Ctrl+Alt+F1-F9` Escenas. La maqueta enseñaba Espacio (transición), F9 y F10, que aquí no existen. A la derecha, `Luminifex v{versión}` con un punto que sigue el estado de la imagen (verde en directo, ámbar conectando, rojo con problema, gris en reposo). Sin espacio, primero desaparece la versión y después los últimos atajos. La franja solo se lee: no recibe clics.
+
+**Estado (2026-11-14):** T-4.1 a T-4.3 hechas y subidas, sin abrir la app. **Con esto el esqueleto está completo** (barra de título, fila de navegación, barra lateral, franja de atajos); falta tu revisión con la app real y regenerar la línea base de capturas (T-1.7).
+
 ## 6. Decisiones
 
 **Tomadas (2026-11-14):**

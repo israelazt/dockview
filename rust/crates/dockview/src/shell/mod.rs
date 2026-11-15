@@ -29,6 +29,7 @@ use dockview_ui::navbar::NavBar;
 use dockview_ui::rail::Rail;
 use dockview_ui::scene_editor::SceneEditor;
 use dockview_ui::stats::StatsPanel;
+use dockview_ui::strip::ShortcutStrip;
 use dockview_ui::studio::{StudioPanel, StudioSection};
 use dockview_ui::toast::{ToastHost, ToastKind};
 use dockview_ui::Ui;
@@ -86,6 +87,8 @@ pub struct Shell {
     navbar: NavBar,
     /// The icon rail on the left.
     rail: Rail,
+    /// The shortcuts above the content.
+    strip: ShortcutStrip,
     toasts: ToastHost,
     /// What the pointer is doing to the window's own frame (its buttons, its
     /// edges and its bar).
@@ -137,6 +140,7 @@ impl Shell {
             studio,
             navbar: NavBar::new(),
             rail: Rail::new(),
+            strip: ShortcutStrip::new(),
             toasts: ToastHost::new(),
             chrome_input: ChromeInput::default(),
             cursor_phys: None,
@@ -243,7 +247,7 @@ impl Shell {
             .cursor_phys
             .is_some_and(|(x, y)| chrome.zone_at(x, y) != Zone::Content);
         let scale = self.ui_scale.max(0.1);
-        let bar = (chrome.bar_height() + chrome.nav_height()) / scale;
+        let bar = (chrome.bar_height() + chrome.nav_height() + chrome.strip_height()) / scale;
         let rail = chrome.rail_width() / scale;
         Pointer {
             pos: if over_frame || self.chrome_held {

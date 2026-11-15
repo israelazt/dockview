@@ -148,9 +148,12 @@ impl Shell {
         // of the window.
         let top_px = bar_px + chrome.nav_height();
         let rail_px = chrome.rail_width();
+        // The shortcuts strip sits above the content, right of the rail.
+        let strip_px = chrome.strip_height();
+        let content_top_px = top_px + strip_px;
         let content_size = (
             (window_size.0 as f32 - rail_px).max(1.0) as u32,
-            (window_size.1 as f32 - top_px).max(1.0) as u32,
+            (window_size.1 as f32 - content_top_px).max(1.0) as u32,
         );
         let place = studio::place(content_size, scale, self.studio.openness());
         let (video_pointer, panel_pointer) = route_pointer(&pointer, place.panel);
@@ -168,9 +171,9 @@ impl Shell {
         presenter.wait_for_slot(100);
         // The video fits the room the panel leaves (all of it when closed).
         // With the bar, the video always has an area of its own, under it.
-        let area = (top_px > 0.0 || place.panel.is_some()).then_some(PhysicalRect {
+        let area = (content_top_px > 0.0 || place.panel.is_some()).then_some(PhysicalRect {
             x: place.video.x + rail_px,
-            y: place.video.y + top_px,
+            y: place.video.y + content_top_px,
             ..place.video
         });
         presenter.set_video_area(area);
@@ -208,6 +211,7 @@ impl Shell {
         let studio = &mut self.studio;
         let navbar = &mut self.navbar;
         let rail = &mut self.rail;
+        let strip = &mut self.strip;
         let stats_panel = &mut self.stats_panel;
         let (stats, stats_open) = (self.core.stats(), self.core.stats_open());
         let animations = self.animations;
@@ -215,7 +219,7 @@ impl Shell {
         {
             {
                 ui.begin(presenter.size(), scale);
-                ui.set_inset_top(top_px / scale.max(0.1));
+                ui.set_inset_top(content_top_px / scale.max(0.1));
                 ui.set_inset_left(rail_px / scale.max(0.1));
                 // What floats over the video anchors to the video's room.
                 // The layer editor sits on the picture, under the controls; what
@@ -272,6 +276,9 @@ impl Shell {
                     navbar.frame(ui, &model, &nav_pointer);
                     ui.set_inset_top(top_px / scale.max(0.1));
                     rail.frame(ui, &model, &rail_pointer, rail_active, dt);
+                    ui.set_inset_left(rail_px / scale.max(0.1));
+                    strip.frame(ui, &model);
+                    ui.set_inset_left(0.0);
                 }
                 // The window's own title bar, over everything.
                 ui.set_inset_top(0.0);
