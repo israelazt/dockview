@@ -5,8 +5,6 @@ use std::path::Path;
 use dockview_domain::events::AppEvent;
 use dockview_domain::i18n::{self, Key, Lang};
 use dockview_ui::toast::ToastKind;
-use windows::core::HSTRING;
-use windows::Win32::UI::WindowsAndMessaging::{MessageBoxW, MB_ICONERROR, MB_OK};
 
 /// Why the program could not start.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -47,18 +45,10 @@ pub fn report_startup_failure(lang: Lang, failure: StartupFailure, detail: &str,
     if silent {
         return;
     }
-    let log = dockview_platform::log_file::default_log_path();
+    let log = crate::os::default_log_path();
     let text = startup_failure_text(lang, failure, detail, log.as_deref());
     let title = i18n::tr(lang, Key::StartupFailedTitle);
-    // SAFETY: a plain call with strings that outlive it and no owner window.
-    unsafe {
-        MessageBoxW(
-            None,
-            &HSTRING::from(text),
-            &HSTRING::from(title),
-            MB_OK | MB_ICONERROR,
-        );
-    }
+    crate::os::show_error_box(title, &text);
 }
 
 /// How an event is shown: the words and the kind of toast.

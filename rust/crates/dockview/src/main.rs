@@ -13,14 +13,32 @@
 // the console, to see the log while developing.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-#[cfg(not(windows))]
-compile_error!("Dockview only supports Windows.");
+// Elsewhere than Windows the program only says it has no adapters yet, so the
+// window's code (which does build there) is not used.
+#![cfg_attr(not(windows), allow(dead_code))]
 
+#[cfg(windows)]
 mod capture_overlay;
+mod os;
+#[cfg(windows)]
 mod run;
 mod shell;
+#[cfg(windows)]
 mod snap;
 
+#[cfg(windows)]
 fn main() {
     run::run();
+}
+
+/// Dockview only has its system adapters for Windows so far (Linux is a goal of
+/// 1.0); elsewhere it says so and leaves.
+#[cfg(not(windows))]
+fn main() {
+    use std::io::Write;
+    let _ = writeln!(
+        std::io::stderr(),
+        "Dockview does not have an adapter for this system yet."
+    );
+    std::process::exit(1);
 }

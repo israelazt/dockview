@@ -98,11 +98,12 @@ Hoy: solo Windows; el binario se niega a compilar en otro sistema. Hecho: la reg
   5-0b ✅ Puerto `Presenter` (dominio) y `D3dPresenter` (plataforma): el shell dibuja
           el vídeo y la interfaz sin ver Direct3D. Verificado: captura de la
           interfaz idéntica píxel a píxel
-  5-0c    Puerto de servicios de ventana (excluir de capturas, cuadro de mensaje,
-          ajuste de animaciones, selector de carpeta): el shell sin `windows::`
-  5-0d    El binario compila en Linux (adaptadores de Windows con `cfg`, los de
-          Linux como «no disponible» con un mensaje claro); CI compila el
-          workspace entero en Linux
+  5-0c ✅ Módulo `os` del binario (`os/windows.rs` real y `os/other.rs` «no
+          disponible»): ventana nativa, gráficos, cuadro de mensaje, ajuste de
+          animaciones, selector de carpeta, pantallazos. El shell ya no usa
+          `windows::` ni `dockview_platform::`
+  5-0d ✅ El binario completo compila en Linux (solo dice que aún no tiene
+          adaptadores) y sus tests pasan allí; el CI de Linux lo comprueba
   5-0e    Revisión del codificador: la grabación y la repetición ya están tras
           `ReplayMachine`; definir la forma del puerto `StreamOutput` (A-1) para
           compartir el codificador

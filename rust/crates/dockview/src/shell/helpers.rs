@@ -1,30 +1,11 @@
-//! Small functions of the window side: what Windows says about animations and
-//! the theme, how the video is filtered, and the helper thread.
+//! Small functions of the window side: what the system says about the theme and
+//! how the video is filtered.
 
 use dockview_domain::render_plan::render_plan;
 pub use dockview_domain::render_plan::ScaleFilter;
 use dockview_domain::settings::RenderPreset;
 use dockview_domain::theme::Appearance;
 use winit::window::Theme as WindowTheme;
-
-/// Whether Windows allows UI animations ("Show animations in Windows").
-pub fn system_animations_enabled() -> bool {
-    use windows::core::BOOL;
-    use windows::Win32::UI::WindowsAndMessaging::{
-        SystemParametersInfoW, SPI_GETCLIENTAREAANIMATION, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS,
-    };
-    let mut enabled = BOOL(1);
-    // SAFETY: the out-pointer refers to a live BOOL, as SPI_GETCLIENTAREAANIMATION requires.
-    let result = unsafe {
-        SystemParametersInfoW(
-            SPI_GETCLIENTAREAANIMATION,
-            0,
-            Some((&mut enabled as *mut BOOL).cast()),
-            SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS(0),
-        )
-    };
-    result.map_or(true, |()| enabled.as_bool())
-}
 
 /// How the video is scaled for a preset.
 pub fn filter_for(preset: RenderPreset) -> ScaleFilter {

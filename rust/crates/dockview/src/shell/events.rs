@@ -1,13 +1,9 @@
 //! The window system's callbacks: start-up, events and the idle tick.
 
-use std::ffi::c_void;
-
-use windows::Win32::Foundation::HWND;
 use winit::application::ApplicationHandler;
 use winit::dpi::{LogicalSize, PhysicalSize};
 use winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow};
-use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use winit::window::{Window, WindowId};
 
 use super::helpers::appearance_of;
@@ -44,16 +40,7 @@ impl ApplicationHandler for Shell {
         };
 
         dockview_domain::log_info!("window created");
-        let hwnd = match window.window_handle().map(|h| h.as_raw()) {
-            Ok(RawWindowHandle::Win32(h)) => HWND(h.hwnd.get() as *mut c_void),
-            _ => {
-                dockview_domain::log_error!("window has no Win32 handle");
-                self.fail_startup(StartupFailure::Window, "the window has no Win32 handle");
-                event_loop.exit();
-                return;
-            }
-        };
-        match super::graphics::create_presenter(&window) {
+        match crate::os::create_presenter(&window) {
             Ok(mut presenter) => {
                 presenter.set_filter(filter_for(self.core.render_preset()));
                 self.presenter = Some(presenter);
@@ -73,7 +60,7 @@ impl ApplicationHandler for Shell {
             .unwrap_or(window.scale_factor() as f32);
         self.core
             .set_system_appearance(appearance_of(window.theme()));
-        self.host.borrow_mut().hwnd = Some(hwnd);
+        self.host.borrow_mut().native = crate::os::native_window(&window);
         self.window = Some(window);
         self.refresh_host_info();
         // A screen started from the command line began before this window

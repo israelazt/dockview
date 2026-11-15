@@ -5,7 +5,6 @@
 mod capture;
 mod cursor;
 mod events;
-mod graphics;
 mod keys;
 mod studio;
 mod window;
@@ -31,7 +30,8 @@ use dockview_ui::toast::{ToastHost, ToastKind};
 use dockview_ui::Ui;
 use winit::window::{CursorIcon, Window};
 
-use helpers::{filter_for, system_animations_enabled};
+use crate::os::system_animations_enabled;
+use helpers::filter_for;
 use host::{HostRequest, HostShared};
 use present::{report_startup_failure, toast_for, StartupFailure};
 

@@ -17,7 +17,7 @@ use dockview_platform::ui_gpu::UiGpu;
 use dockview_ui::snip::{SnipChrome, SnipView};
 use dockview_ui::Ui;
 
-use crate::shell::helpers::system_animations_enabled;
+use crate::os::system_animations_enabled;
 
 /// The real overlay.
 pub struct CaptureOverlay;

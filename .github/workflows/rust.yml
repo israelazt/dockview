@@ -38,8 +38,8 @@ jobs:
 
   # The layers that must stay portable (Linux is a requirement of 1.0): the
   # domain, the application and the interface build and pass their tests on
-  # Linux, and the platform crate builds there (with only its portable parts).
-  # The program itself and the Windows adapters are not built here.
+  # Linux, the platform crate builds there (with only its portable parts) and the
+  # program builds too, with its system adapters answering "not available".
   linux:
     runs-on: ubuntu-latest
     defaults:
@@ -59,3 +59,7 @@ jobs:
           && cargo clippy -p dockview-platform --lib --tests -- -D warnings
       - name: Tests (portable layers)
         run: cargo test -p dockview-domain -p dockview-app -p dockview-ui -p dockview-platform --lib --tests
+      # The program builds on Linux too (it only says it has no adapters yet); its
+      # window code is checked and its own tests run.
+      - name: The program builds and its tests pass
+        run: cargo test -p dockview

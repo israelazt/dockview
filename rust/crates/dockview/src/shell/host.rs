@@ -10,13 +10,9 @@ use std::cell::RefCell;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
+use crate::os::{self, NativeWindow};
 use dockview_domain::ports::Host;
 use dockview_domain::settings::RenderPreset;
-use dockview_platform::clips;
-use windows::Win32::Foundation::HWND;
-use windows::Win32::UI::WindowsAndMessaging::{
-    SetWindowDisplayAffinity, WDA_EXCLUDEFROMCAPTURE, WDA_NONE,
-};
 
 /// Something the application asked the window to do.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -35,8 +31,8 @@ pub enum HostRequest {
 /// What the shell and the application share about the window.
 #[derive(Debug, Default)]
 pub struct HostShared {
-    /// The window's handle, once it exists.
-    pub hwnd: Option<HWND>,
+    /// The window's native handle, once it exists.
+    pub native: Option<NativeWindow>,
     pub window_size: (u32, u32),
     pub monitor_hz: Option<f32>,
     pub gpu_ms: Option<f32>,
@@ -69,19 +65,14 @@ impl Host for ShellHost {
     }
 
     fn exclude_from_capture(&self, on: bool) {
-        if let Some(hwnd) = self.shared.borrow().hwnd {
-            let affinity = if on { WDA_EXCLUDEFROMCAPTURE } else { WDA_NONE };
-            // SAFETY: a plain call on our own window; it fails harmlessly on
-            // Windows versions that do not support it.
-            unsafe {
-                let _ = SetWindowDisplayAffinity(hwnd, affinity);
-            }
+        if let Some(window) = self.shared.borrow().native {
+            os::exclude_from_capture(window, on);
         }
     }
 
     fn pick_folder(&self, start: &Path) -> Option<PathBuf> {
-        let owner = self.shared.borrow().hwnd;
-        clips::pick_folder(owner, start)
+        let owner = self.shared.borrow().native;
+        os::pick_folder(owner, start)
     }
 
     fn window_size(&self) -> (u32, u32) {
@@ -109,7 +100,7 @@ impl Host for ShellHost {
     }
 
     fn reveal_file(&self, path: &Path) {
-        clips::reveal_file(path);
+        os::reveal_file(path);
     }
 
     fn quit(&self) {

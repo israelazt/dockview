@@ -46,7 +46,7 @@ impl Shell {
         // The old swap chain has to go before a new one can use the window.
         self.presenter = None;
         self.last_graphics_try = Instant::now();
-        match super::graphics::create_presenter(window) {
+        match crate::os::create_presenter(window) {
             Ok(mut presenter) => {
                 presenter.set_filter(filter_for(self.core.render_preset()));
                 // The glyphs lived in a texture of the lost device.

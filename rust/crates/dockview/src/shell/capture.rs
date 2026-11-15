@@ -2,9 +2,9 @@
 //! and how; the overlay (which needs the screen and the interface engine) is
 //! run here, and what came of it is told to the application.
 
+use crate::os;
 use dockview_domain::events::AppEvent;
 use dockview_domain::select::Mode;
-use dockview_platform::screen_io::{local_time, pictures_screenshots_folder};
 
 use super::*;
 
@@ -13,11 +13,11 @@ impl Shell {
     /// over the whole screen, so the window waits until it is done.
     pub(super) fn start_capture(&mut self, mode: Mode) {
         let settings = self.core.capture_settings().clone();
-        let folder = pictures_screenshots_folder().unwrap_or_else(|| std::path::PathBuf::from("."));
-        let (date, time) = local_time();
+        let folder = os::screenshots_folder().unwrap_or_else(|| std::path::PathBuf::from("."));
+        let (date, time) = os::local_time();
         let job = settings.job(mode, &folder, date, time);
         let lang = self.core.ui_lang();
-        match crate::snap::take(&job, lang) {
+        match os::take_screenshot(&job, lang) {
             Ok(done) if done == dockview_app::snap_service::CANCELLED => {}
             Ok(done) => {
                 dockview_domain::log_info!("screenshot: {done}");
