@@ -42,3 +42,4 @@ pub mod theme;
 pub mod transition;
 pub mod tray;
 pub mod view;
+pub mod window_chrome;
