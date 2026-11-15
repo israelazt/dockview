@@ -82,7 +82,7 @@ impl ChromeInput {
                 }
             }
             // The navigation row, the rail and the content are the interface's own.
-            Zone::Nav | Zone::Rail | Zone::Content => None,
+            Zone::Nav | Zone::Rail | Zone::Strip | Zone::Content => None,
         }
     }
 

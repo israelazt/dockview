@@ -9,6 +9,8 @@ use crate::layout::Rect;
 pub const TITLE_BAR_HEIGHT: f32 = 34.0;
 /// Height of the navigation row under the title bar, in logical pixels.
 pub const NAV_HEIGHT: f32 = 44.0;
+/// Height of the shortcuts strip above the content, in logical pixels.
+pub const STRIP_HEIGHT: f32 = 30.0;
 /// Width of the icon rail on the left, in logical pixels.
 pub const RAIL_WIDTH: f32 = 52.0;
 /// Width of each of the three window buttons in logical pixels.
@@ -59,6 +61,8 @@ pub enum Zone {
     Nav,
     /// The icon rail on the left, under the row.
     Rail,
+    /// The shortcuts strip above the content: only to be read.
+    Strip,
 }
 
 /// The shape the mouse cursor takes over a zone.
@@ -167,10 +171,31 @@ impl Chrome {
         })
     }
 
-    /// Everything right of the rail and below the bar and the row: where the
-    /// application draws.
+    /// Height of the shortcuts strip in physical pixels (0 in full screen).
+    pub fn strip_height(&self) -> f32 {
+        if self.fullscreen {
+            0.0
+        } else {
+            self.px(STRIP_HEIGHT)
+        }
+    }
+
+    /// The shortcuts strip: right of the rail (all the width when there is no
+    /// rail), under the row. `None` in full screen.
+    pub fn strip(&self) -> Option<Rect> {
+        let left = self.rail_width();
+        (!self.fullscreen).then(|| Rect {
+            x: left,
+            y: self.bar_height() + self.nav_height(),
+            w: (self.size.0 as f32 - left).max(0.0),
+            h: self.strip_height(),
+        })
+    }
+
+    /// Everything right of the rail and below the bar, the row and the strip:
+    /// where the application draws.
     pub fn content(&self) -> Rect {
-        let top = self.bar_height() + self.nav_height();
+        let top = self.bar_height() + self.nav_height() + self.strip_height();
         let left = self.rail_width();
         Rect {
             x: left,
@@ -230,6 +255,9 @@ impl Chrome {
         if x < self.rail_width() {
             return Zone::Rail;
         }
+        if y < self.bar_height() + self.nav_height() + self.strip_height() {
+            return Zone::Strip;
+        }
         Zone::Content
     }
 
@@ -287,8 +315,11 @@ mod tests {
         assert_eq!(hi.bar_height(), 68.0);
         assert_eq!(hi.bar().unwrap().h, 68.0);
         assert_eq!(hi.nav().unwrap().y, 68.0);
-        assert_eq!(hi.content().y, 68.0 + 2.0 * NAV_HEIGHT);
-        assert_eq!(hi.content().h, 720.0 - 68.0 - 2.0 * NAV_HEIGHT);
+        assert_eq!(hi.content().y, 68.0 + 2.0 * (NAV_HEIGHT + STRIP_HEIGHT));
+        assert_eq!(
+            hi.content().h,
+            720.0 - 68.0 - 2.0 * (NAV_HEIGHT + STRIP_HEIGHT)
+        );
     }
 
     #[test]
@@ -328,9 +359,11 @@ mod tests {
         assert_eq!(c.nav().unwrap().h, NAV_HEIGHT);
         assert_eq!(c.zone_at(600.0, 40.0), Zone::Nav);
         assert_eq!(c.zone_at(600.0, 77.0), Zone::Nav);
-        assert_eq!(c.zone_at(600.0, 78.0), Zone::Content);
-        assert_eq!(c.content().y, 34.0 + NAV_HEIGHT);
-        assert_eq!(c.content().h, 720.0 - 34.0 - NAV_HEIGHT);
+        assert_eq!(c.zone_at(600.0, 78.0), Zone::Strip);
+        assert_eq!(c.zone_at(600.0, 78.0 + STRIP_HEIGHT - 1.0), Zone::Strip);
+        assert_eq!(c.zone_at(600.0, 78.0 + STRIP_HEIGHT), Zone::Content);
+        assert_eq!(c.content().y, 34.0 + NAV_HEIGHT + STRIP_HEIGHT);
+        assert_eq!(c.content().h, 720.0 - 34.0 - NAV_HEIGHT - STRIP_HEIGHT);
     }
 
     #[test]
@@ -344,6 +377,8 @@ mod tests {
         assert_eq!(c.zone_at(20.0, 300.0), Zone::Content);
         assert_eq!(c.content().x, 0.0);
         assert_eq!(c.content().w, 1280.0);
+        assert_eq!(c.strip().unwrap().x, 0.0, "the strip takes the whole width");
+        assert_eq!(c.strip().unwrap().w, 1280.0);
         // The bar and the row do not depend on it.
         assert_eq!(c.zone_at(600.0, 40.0), Zone::Nav);
     }
@@ -357,6 +392,13 @@ mod tests {
             (0.0, 34.0 + NAV_HEIGHT, RAIL_WIDTH)
         );
         assert_eq!(rail.h, 720.0 - 34.0 - NAV_HEIGHT);
+        // The strip starts where the rail ends and runs to the right edge.
+        let strip = c.strip().unwrap();
+        assert_eq!(
+            (strip.x, strip.y, strip.h),
+            (RAIL_WIDTH, 34.0 + NAV_HEIGHT, STRIP_HEIGHT)
+        );
+        assert_eq!(strip.w, 1280.0 - RAIL_WIDTH);
         assert_eq!(c.zone_at(20.0, 300.0), Zone::Rail);
         assert_eq!(c.zone_at(RAIL_WIDTH - 1.0, 300.0), Zone::Rail);
         assert_eq!(c.zone_at(RAIL_WIDTH, 300.0), Zone::Content);
@@ -424,7 +466,7 @@ mod tests {
         assert_eq!(c.zone_at(640.0, 1.0), Zone::Content);
         assert_eq!(c.zone_at(1279.0, 1.0), Zone::Content);
         assert_eq!(c.zone_at(600.0, 40.0), Zone::Content);
-        assert!(c.nav().is_none() && c.rail().is_none());
+        assert!(c.nav().is_none() && c.rail().is_none() && c.strip().is_none());
         assert_eq!(c.zone_at(20.0, 300.0), Zone::Content);
         assert_eq!(c.content().x, 0.0);
         assert_eq!(c.content().y, 0.0);

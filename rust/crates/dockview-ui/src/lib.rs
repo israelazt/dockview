@@ -13,6 +13,7 @@ pub mod rec;
 pub mod scene_editor;
 pub mod snip;
 pub mod stats;
+pub mod strip;
 pub mod studio;
 #[cfg(test)]
 mod test_model;

@@ -215,6 +215,12 @@ strings! {
     NavConnecting => "Connecting", "Conectando";
     NavLive => "LIVE", "EN DIRECTO";
     NavReconnecting => "Reconnecting", "Reconectando";
+    StripLabel => "Shortcuts:", "Atajos:";
+    StripStudio => "Studio", "Estudio";
+    StripFullscreen => "Full screen", "Pantalla completa";
+    StripSaveClip => "Save clip", "Guardar clip";
+    StripRecord => "Record", "Grabar";
+    StripScenes => "Scenes", "Escenas";
     RailLog => "Open the log", "Abrir el registro";
     WindowMinimize => "Minimize", "Minimizar";
     WindowMaximize => "Maximize", "Maximizar";
