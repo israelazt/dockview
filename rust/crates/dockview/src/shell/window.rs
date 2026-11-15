@@ -176,6 +176,7 @@ impl Shell {
                     ),
                     self.studio_openness,
                 );
+                studio::draw_status(ui, &model, stats, &place, self.studio_openness);
                 // What floats over the video anchors to the video's room.
                 // The layer editor sits on the picture, under the controls; what
                 // the controls (the pill) use is not the editor's.

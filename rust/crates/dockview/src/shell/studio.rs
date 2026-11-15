@@ -9,6 +9,7 @@ use dockview_ui::Rect;
 /// Space around the video and the panel while the Studio is open, in logical
 /// pixels: both become cards with air around them (it grows with the opening).
 pub const CARD_MARGIN: f32 = 12.0;
+pub use dockview_ui::studio_status::STATUS_H;
 
 /// The room the video and the panel have in this frame.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -22,6 +23,9 @@ pub struct StudioPlace {
     pub side: Option<Rect>,
     /// What the panel measures when fully open, in logical pixels.
     pub full_width: f32,
+    /// The status strip over the cards, in logical pixels; `None` when the
+    /// Studio is closed.
+    pub status: Option<Rect>,
     /// What the left column measures when fully open, in logical pixels.
     pub side_full_width: f32,
     /// The width left for the video, in logical pixels: what the controls over
@@ -36,16 +40,20 @@ pub struct StudioPlace {
 /// `openness` open (0 to 1).
 pub fn place(window: (u32, u32), scale: f32, openness: f32) -> StudioPlace {
     let scale = scale.max(0.1);
-    let layout = studio_layout(window, scale, openness);
-    let full = studio_layout(window, scale, 1.0);
+    // The status strip takes a band at the top; the cards share what is left.
+    let open = openness.clamp(0.0, 1.0);
+    let band = ((STATUS_H + CARD_MARGIN) * scale * open).round();
+    let below = (window.0, (window.1 as f32 - band).max(1.0) as u32);
+    let layout = studio_layout(below, scale, openness);
+    let full = studio_layout(below, scale, 1.0);
     let logical = |r: PhysicalRect| Rect::new(r.x / scale, r.y / scale, r.w / scale, r.h / scale);
     // With the panel out, both it and the video are cards with a margin: the
     // video has it at left, top and bottom and half of it to the panel; the
     // panel has it at right, top and bottom and the other half to the video.
     // Every card has the margin towards the window's edge and half of it
     // towards its neighbour, so two cards are one margin apart.
-    let (video, panel, side) = match layout.panel {
-        None => (layout.video, None, None),
+    let (video, panel, side, status) = match layout.panel {
+        None => (layout.video, None, None, None),
         Some(p) => {
             let m = (CARD_MARGIN * scale * openness.clamp(0.0, 1.0)).round();
             let ww = window.0 as f32;
@@ -54,22 +62,47 @@ pub fn place(window: (u32, u32), scale: f32, openness: f32) -> StudioPlace {
                 let right = if r.x + r.w >= ww { m } else { m * 0.5 };
                 PhysicalRect {
                     x: r.x + left,
-                    y: r.y + m,
+                    y: r.y + m + band,
                     w: (r.w - left - right).max(1.0),
                     h: (r.h - m * 2.0).max(1.0),
                 }
             };
-            (card(layout.video), Some(card(p)), layout.side.map(card))
+            let (video, panel) = (card(layout.video), card(p));
+            let side = layout.side.map(card);
+            let left = side.map_or(video.x, |s| s.x);
+            let strip = PhysicalRect {
+                x: left,
+                y: m,
+                w: panel.x + panel.w - left,
+                h: STATUS_H * scale * open,
+            };
+            (video, Some(panel), side, Some(strip))
         }
     };
     StudioPlace {
         video,
         panel: panel.map(logical),
         side: side.map(logical),
+        status: status.map(logical),
         side_full_width: full.side.map_or(0.0, |s| s.w / scale - CARD_MARGIN * 1.5),
-        full_width: full.panel.map_or(0.0, |p| p.w / scale),
+        full_width: full.panel.map_or(0.0, |p| p.w / scale - CARD_MARGIN * 1.5),
         video_width: video.w / scale,
         video_logical: logical(video),
+    }
+}
+
+/// The status strip over the cards, fading in with the Studio.
+pub fn draw_status(
+    ui: &mut dockview_ui::Ui,
+    model: &dockview_domain::view::Model,
+    stats: &dockview_domain::stats::Stats,
+    place: &StudioPlace,
+    openness: f32,
+) {
+    if let Some(area) = place.status.filter(|a| a.h > 0.0) {
+        ui.set_opacity(openness.clamp(0.0, 1.0));
+        dockview_ui::studio_status::draw(ui, model, stats, area);
+        ui.set_opacity(1.0);
     }
 }
 
@@ -136,26 +169,30 @@ mod tests {
         let panel = p.panel.expect("open");
         let m = CARD_MARGIN;
         // The video: margin at left, top and bottom; half of it towards the panel.
-        assert_eq!((p.video.x, p.video.y, p.video.h), (m, m, 1080.0 - 2.0 * m));
+        let band = STATUS_H + m;
+        assert_eq!(
+            (p.video.x, p.video.y, p.video.h),
+            (m, m + band, 1080.0 - 2.0 * m - band)
+        );
         assert_eq!(p.video.w, 780.0 - 1.5 * m);
         // The panel: the other half towards the video, the margin at right, top and bottom.
         assert_eq!(
             (panel.x, panel.y, panel.h),
-            (780.0 + m / 2.0, m, 1080.0 - 2.0 * m)
+            (780.0 + m / 2.0, m + band, 1080.0 - 2.0 * m - band)
         );
         assert_eq!(panel.w, 320.0 - 1.5 * m);
         assert_eq!(panel.x + panel.w, 1100.0 - m, "the margin at the right");
         // A gap of one margin between the two cards.
         assert_eq!(panel.x - (p.video.x + p.video.w), m);
         assert_eq!(p.video_width, p.video.w);
-        assert_eq!(p.full_width, 320.0);
+        assert_eq!(p.full_width, 320.0 - 1.5 * CARD_MARGIN, "the card, not the slot");
     }
 
     #[test]
     fn at_a_higher_scale_the_panel_is_the_same_in_logical_pixels_and_so_is_the_margin() {
         let p = place((1650, 1080), 1.5, 1.0);
         let panel = p.panel.expect("open");
-        assert_eq!(p.full_width, 320.0);
+        assert_eq!(p.full_width, 320.0 - 1.5 * CARD_MARGIN);
         assert_eq!(panel.w, 320.0 - 1.5 * CARD_MARGIN);
         assert_eq!(
             p.video.x,
@@ -173,14 +210,14 @@ mod tests {
         let open = place((1920, 1080), 1.0, 1.0);
         assert_eq!(closed.video.x, 0.0);
         assert!(half.video.x > 0.0 && half.video.x < open.video.x);
-        assert_eq!(half.full_width, 320.0);
+        assert_eq!(half.full_width, 320.0 - 1.5 * CARD_MARGIN);
     }
 
     #[test]
     fn a_small_window_never_gives_the_panel_more_than_its_share() {
         let p = place((600, 400), 1.0, 1.0);
         let panel = p.panel.expect("open");
-        assert_eq!(p.full_width, 270.0, "45 % of 600");
+        assert_eq!(p.full_width, 270.0 - 1.5 * CARD_MARGIN, "45 % of 600, as a card");
         assert_eq!(panel.w, 270.0 - 1.5 * CARD_MARGIN);
         assert!(p.video.w + panel.w < 600.0);
     }
@@ -190,11 +227,28 @@ mod tests {
         let p = place((1920, 1080), 1.0, 1.0);
         let (side, panel) = (p.side.expect("wide"), p.panel.expect("open"));
         let m = CARD_MARGIN;
-        assert_eq!((side.x, side.y, side.h), (m, m, 1080.0 - 2.0 * m));
+        let band = STATUS_H + m;
+        assert_eq!(
+            (side.x, side.y, side.h),
+            (m, m + band, 1080.0 - 2.0 * m - band)
+        );
         assert_eq!(p.video_logical.x - (side.x + side.w), m);
         assert_eq!(panel.x - (p.video_logical.x + p.video_logical.w), m);
         assert_eq!(panel.x + panel.w, 1920.0 - m);
         assert!(p.video_width >= 600.0, "{}", p.video_width);
+    }
+
+    #[test]
+    fn the_status_strip_sits_over_all_the_cards_with_one_margin_below() {
+        let p = place((1920, 1080), 1.0, 1.0);
+        let (strip, panel) = (p.status.expect("open"), p.panel.expect("open"));
+        let side = p.side.expect("wide");
+        assert_eq!((strip.x, strip.y, strip.h), (side.x, CARD_MARGIN, STATUS_H));
+        assert_eq!(strip.x + strip.w, panel.x + panel.w);
+        assert_eq!(p.video_logical.y - (strip.y + strip.h), CARD_MARGIN);
+        assert_eq!(place((1920, 1080), 1.0, 0.0).status, None);
+        let narrow = place((1100, 700), 1.0, 1.0);
+        assert_eq!(narrow.status.unwrap().x, narrow.video_logical.x);
     }
 
     #[test]

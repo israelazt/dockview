@@ -36,7 +36,7 @@ pub(super) fn source_name(m: &Model) -> String {
     .unwrap_or_else(|| "—".into())
 }
 
-fn status_color(t: &Theme, status: StatusKind) -> Color {
+pub(super) fn status_color(t: &Theme, status: StatusKind) -> Color {
     match status {
         StatusKind::Live => t.brand,
         StatusKind::Connecting => t.warn,
@@ -45,7 +45,7 @@ fn status_color(t: &Theme, status: StatusKind) -> Color {
     }
 }
 
-fn tier_color(t: &Theme, tier: LatencyTier) -> Color {
+pub(super) fn tier_color(t: &Theme, tier: LatencyTier) -> Color {
     match tier {
         LatencyTier::UltraLow | LatencyTier::Low => t.brand,
         LatencyTier::Medium => t.warn,
