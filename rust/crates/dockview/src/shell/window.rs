@@ -1,8 +1,8 @@
 //! The window: drawing a frame, the cursor and screenshots.
 
+use dockview_domain::presenter::Screenshot;
 use dockview_domain::render_plan::{render_plan, video_frame_due};
 use dockview_domain::view::RecState;
-use dockview_platform::render::{is_device_lost, Renderer, Screenshot};
 use dockview_ui::input::Pointer;
 use dockview_ui::studio::route_pointer;
 use winit::window::CursorIcon;
@@ -39,23 +39,19 @@ impl Shell {
     /// device was lost (a driver update or reset). If it cannot be done yet, the
     /// idle loop tries again.
     pub(super) fn recreate_graphics(&mut self) {
-        let hwnd = self.host.borrow().hwnd;
-        let (Some(window), Some(hwnd)) = (&self.window, hwnd) else {
+        let Some(window) = &self.window else {
             return;
         };
-        let size = window.inner_size();
         dockview_domain::log_warn!("the graphics device was lost: building the renderer again");
         // The old swap chain has to go before a new one can use the window.
-        self.ui_gpu = None;
-        self.renderer = None;
+        self.presenter = None;
         self.last_graphics_try = Instant::now();
-        match Renderer::new(hwnd, size.width, size.height) {
-            Ok(mut renderer) => {
-                renderer.set_filter(filter_for(self.core.render_preset()));
-                self.ui_gpu = UiGpu::new(renderer.device()).ok();
+        match super::graphics::create_presenter(window) {
+            Ok(mut presenter) => {
+                presenter.set_filter(filter_for(self.core.render_preset()));
                 // The glyphs lived in a texture of the lost device.
                 self.ui.text.reset_atlas();
-                self.renderer = Some(renderer);
+                self.presenter = Some(presenter);
             }
             Err(e) => dockview_domain::log_warn!("could not build the renderer yet: {e}"),
         }
@@ -98,22 +94,22 @@ impl Shell {
             && self.core.rendered_frames() >= SCREENSHOT_AFTER_FRAMES
             && settled;
 
-        let Some(renderer) = self.renderer.as_mut() else {
+        let Some(presenter) = self.presenter.as_mut() else {
             return;
         };
         // Wait for a free present slot *before* picking the frame so we always
         // show the freshest one.
-        renderer.wait_for_present_slot(100);
+        presenter.wait_for_slot(100);
         // The video fits the room the panel leaves (all of it when closed).
-        renderer.set_video_area(place.panel.map(|_| place.video));
+        presenter.set_video_area(place.panel.map(|_| place.video));
         let mut arrived = None;
         let mut graphics_lost = false;
         let slot = Arc::clone(self.core.output_slot());
         if let Some(frame) = slot.take_latest() {
             arrived = Some(frame.arrived);
-            if let Err(e) = renderer.upload(&frame) {
+            if let Err(e) = presenter.upload(&frame) {
                 dockview_domain::log_warn!("upload failed: {e}");
-                graphics_lost |= is_device_lost(&e);
+                graphics_lost |= e.device_lost;
             }
             self.core.frame_uploaded((frame.width, frame.height));
             if self.core.rendered_frames() == 1 {
@@ -123,19 +119,16 @@ impl Shell {
             self.last_video_shown = now;
         }
 
-        let (ui, ui_gpu, controls) = (&mut self.ui, &mut self.ui_gpu, &mut self.controls);
+        let (ui, controls) = (&mut self.ui, &mut self.controls);
         let (scene_editor, edit_mods) = (&mut self.scene_editor, &self.edit_mods);
         let studio = &mut self.studio;
         let stats_panel = &mut self.stats_panel;
         let (stats, stats_open) = (self.core.stats(), self.core.stats_open());
         let animations = self.animations;
         let toasts = &mut self.toasts;
-        let result = renderer.draw(
-            &mut |_device, context, size| {
-                let Some(gpu) = ui_gpu.as_mut() else {
-                    return;
-                };
-                ui.begin(size, scale);
+        {
+            {
+                ui.begin(presenter.size(), scale);
                 // What floats over the video anchors to the video's room.
                 // The layer editor sits on the picture, under the controls; what
                 // the controls (the pill) use is not the editor's.
@@ -184,21 +177,17 @@ impl Shell {
                     &panel_pointer,
                     dt,
                 );
-                if let Err(e) = gpu.render(context, &ui.draw_list()) {
-                    dockview_domain::log_warn!("ui draw failed: {e}");
-                }
-            },
-            capture,
-        );
-        match result {
+            }
+        }
+        match presenter.present(&ui.draw_list(), capture) {
             Ok(Some(shot)) => self.save_screenshot(&shot),
             Ok(None) => {}
             Err(e) => {
                 dockview_domain::log_warn!("present failed: {e}");
-                graphics_lost |= is_device_lost(&e);
+                graphics_lost |= e.device_lost;
             }
         }
-        graphics_lost |= self.renderer.as_ref().is_some_and(Renderer::device_lost);
+        graphics_lost |= self.presenter.as_ref().is_some_and(|p| p.device_lost());
         if graphics_lost {
             self.recreate_graphics();
         }

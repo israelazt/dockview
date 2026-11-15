@@ -37,6 +37,8 @@ pub mod overlay_window;
 #[cfg(windows)]
 pub mod perf;
 #[cfg(windows)]
+pub mod presenter;
+#[cfg(windows)]
 pub mod recorder;
 #[cfg(windows)]
 pub mod recording;

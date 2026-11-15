@@ -2,7 +2,6 @@
 
 use std::ffi::c_void;
 
-use dockview_platform::render::Renderer;
 use windows::Win32::Foundation::HWND;
 use winit::application::ApplicationHandler;
 use winit::dpi::{LogicalSize, PhysicalSize};
@@ -54,17 +53,10 @@ impl ApplicationHandler for Shell {
                 return;
             }
         };
-        let size = window.inner_size();
-        match Renderer::new(hwnd, size.width, size.height) {
-            Ok(mut renderer) => {
-                renderer.set_filter(filter_for(self.core.render_preset()));
-                match UiGpu::new(renderer.device()) {
-                    Ok(gpu) => self.ui_gpu = Some(gpu),
-                    Err(e) => dockview_domain::log_error!(
-                        "could not initialise the interface renderer: {e}"
-                    ),
-                }
-                self.renderer = Some(renderer);
+        match super::graphics::create_presenter(&window) {
+            Ok(mut presenter) => {
+                presenter.set_filter(filter_for(self.core.render_preset()));
+                self.presenter = Some(presenter);
             }
             Err(e) => {
                 dockview_domain::log_error!("could not initialise Direct3D: {e}");
@@ -108,8 +100,8 @@ impl ApplicationHandler for Shell {
             }
             WindowEvent::Resized(size) => {
                 self.needs_redraw = true;
-                if let Some(renderer) = self.renderer.as_mut() {
-                    if let Err(e) = renderer.resize(size.width, size.height) {
+                if let Some(presenter) = self.presenter.as_mut() {
+                    if let Err(e) = presenter.resize(size.width, size.height) {
                         dockview_domain::log_warn!("resize failed: {e}");
                     }
                 }
@@ -179,7 +171,7 @@ impl ApplicationHandler for Shell {
             event_loop.exit();
             return;
         }
-        if self.renderer.is_none()
+        if self.presenter.is_none()
             && self.window.is_some()
             && self.last_graphics_try.elapsed() >= GRAPHICS_RETRY
         {

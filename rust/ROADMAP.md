@@ -91,9 +91,23 @@ Hoy: solo Windows; el binario se niega a compilar en otro sistema. Hecho: la reg
 **Riesgo grande:** el renderizador y el codificador están muy ligados a Direct3D 11 y Media Foundation; 5-2 y 5-4 son reescrituras, no portes. Con D4 (Linux en 1.0) hay que **abstraer ahora**: el renderizador y el codificador detrás de puertos (paso 5-0, ver abajo) antes de seguir añadiendo funciones que dependan de ellos.
 
 ```
-5-0  Poner el renderizador y el codificador detrás de puertos neutros
-     (hoy `Renderer` y la grabación son tipos concretos de Windows)             (M)
+5-0  Poner el renderizador y la ventana detrás de puertos neutros (M), en pasos:
+  5-0a ✅ CI de Linux (dominio, app e interfaz se compilan y sus tests se ejecutan
+          en Ubuntu en cada push); `platform` compila en Linux con sus módulos de
+          Windows marcados `cfg(windows)`
+  5-0b ✅ Puerto `Presenter` (dominio) y `D3dPresenter` (plataforma): el shell dibuja
+          el vídeo y la interfaz sin ver Direct3D. Verificado: captura de la
+          interfaz idéntica píxel a píxel
+  5-0c    Puerto de servicios de ventana (excluir de capturas, cuadro de mensaje,
+          ajuste de animaciones, selector de carpeta): el shell sin `windows::`
+  5-0d    El binario compila en Linux (adaptadores de Windows con `cfg`, los de
+          Linux como «no disponible» con un mensaje claro); CI compila el
+          workspace entero en Linux
+  5-0e    Revisión del codificador: la grabación y la repetición ya están tras
+          `ReplayMachine`; definir la forma del puerto `StreamOutput` (A-1) para
+          compartir el codificador
 ```
+(El codificador y la grabación ya estaban detrás de `ReplayMachine`; lo que faltaba era el renderizador, que el shell usaba directamente.)
 
 ## Etapa final (no antes)
 

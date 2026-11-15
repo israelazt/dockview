@@ -5,6 +5,7 @@
 mod capture;
 mod cursor;
 mod events;
+mod graphics;
 mod keys;
 mod studio;
 mod window;
@@ -20,8 +21,7 @@ use std::time::{Duration, Instant};
 
 use dockview_app::Core;
 use dockview_domain::i18n;
-use dockview_platform::render::Renderer;
-use dockview_platform::ui_gpu::UiGpu;
+use dockview_domain::presenter::Presenter;
 use dockview_ui::controls::Controls;
 use dockview_ui::input::Pointer;
 use dockview_ui::scene_editor::SceneEditor;
@@ -50,9 +50,9 @@ pub struct Shell {
     /// What the core may ask about the window, and what it asked for.
     host: Rc<RefCell<HostShared>>,
     window: Option<Window>,
-    renderer: Option<Renderer>,
+    /// The window's graphics (the video and the interface on top).
+    presenter: Option<Box<dyn Presenter>>,
     ui: Ui,
-    ui_gpu: Option<UiGpu>,
     ui_scale: f32,
     exit_requested: bool,
     /// The program could not start (see `fail_startup`).
@@ -98,9 +98,8 @@ impl Shell {
             core,
             host,
             window: None,
-            renderer: None,
+            presenter: None,
             ui: Ui::new(),
-            ui_gpu: None,
             ui_scale: 1.0,
             exit_requested: false,
             failed: false,
@@ -149,8 +148,8 @@ impl Shell {
                     }
                 }
                 HostRequest::Preset(preset) => {
-                    if let Some(renderer) = self.renderer.as_mut() {
-                        renderer.set_filter(filter_for(preset));
+                    if let Some(presenter) = self.presenter.as_mut() {
+                        presenter.set_filter(filter_for(preset));
                     }
                 }
                 HostRequest::Redraw => self.needs_redraw = true,
@@ -175,7 +174,7 @@ impl Shell {
                 .and_then(|m| m.refresh_rate_millihertz())
                 .map(|mhz| mhz as f32 / 1000.0);
         }
-        shared.gpu_ms = self.renderer.as_ref().and_then(Renderer::gpu_ms);
+        shared.gpu_ms = self.presenter.as_ref().and_then(|p| p.gpu_ms());
     }
 
     /// Shows what the core says happened.

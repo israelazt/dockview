@@ -273,6 +273,11 @@ impl Renderer {
         Ok(())
     }
 
+    /// The size of what is drawn on, in physical pixels.
+    pub fn size(&self) -> (u32, u32) {
+        self.size
+    }
+
     pub fn device(&self) -> &ID3D11Device {
         &self.device
     }
