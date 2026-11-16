@@ -268,3 +268,115 @@ fn c() {}
     assert!(!production.contains("fn c()"));
     assert_eq!(before_the_tests_module("fn only() {}"), "fn only() {}");
 }
+
+// -- The modes do not know each other ------------------------------------------
+
+/// The modules of `dockview-ui` that belong to each mode (see `docs/MODES_PLAN.md`):
+/// the viewer, the Studio and Settings. What they share (the engine, the
+/// widgets, the texts, the options) is in none of these lists.
+const MODE_MODULES: [(&str, &[&str]); 3] = [
+    ("the viewer", &["controls", "hud", "hud_cards", "rec"]),
+    (
+        "the Studio",
+        &[
+            "studio",
+            "studio_status",
+            "canvas_bar",
+            "scene_editor",
+            "rail",
+        ],
+    ),
+    ("Settings", &["settings"]),
+];
+
+/// The module a source file of `dockview-ui/src` belongs to (its first path
+/// component without the extension).
+fn ui_module_of(relative: &Path) -> Option<String> {
+    let first = relative.components().next()?.as_os_str().to_string_lossy();
+    Some(first.trim_end_matches(".rs").to_string())
+}
+
+/// The modules a piece of code reaches with `crate::name` or `super::name`
+/// at the top of the crate (also inside braces: `use crate::{a, b}`).
+fn crate_paths_in(code: &str) -> Vec<String> {
+    let mut found = Vec::new();
+    for (at, _) in code.match_indices("crate::") {
+        let rest = &code[at + "crate::".len()..];
+        if let Some(group) = rest.strip_prefix('{') {
+            let inside = group.split('}').next().unwrap_or("");
+            for part in inside.split(',') {
+                let name: String = part
+                    .trim()
+                    .chars()
+                    .take_while(|c| c.is_alphanumeric() || *c == '_')
+                    .collect();
+                if !name.is_empty() {
+                    found.push(name);
+                }
+            }
+        } else {
+            let name: String = rest
+                .chars()
+                .take_while(|c| c.is_alphanumeric() || *c == '_')
+                .collect();
+            if !name.is_empty() {
+                found.push(name);
+            }
+        }
+    }
+    found
+}
+
+#[test]
+fn a_mode_of_the_interface_never_reaches_into_another() {
+    let src = workspace().join("crates").join("dockview-ui").join("src");
+    let mut files = Vec::new();
+    rust_files(&src, &mut files);
+    let mut offenders = Vec::new();
+    for path in files {
+        let relative = path.strip_prefix(&src).unwrap().to_path_buf();
+        // Tests may build a whole model with the helpers of another mode.
+        let shown = relative.to_string_lossy().replace('\\', "/");
+        if shown.contains("tests") {
+            continue;
+        }
+        let Some(module) = ui_module_of(&relative) else {
+            continue;
+        };
+        let Some((mine, _)) = MODE_MODULES
+            .iter()
+            .find(|(_, names)| names.contains(&module.as_str()))
+        else {
+            continue;
+        };
+        let text = fs::read_to_string(&path).unwrap();
+        let production = before_the_tests_module(&text);
+        let code: String = production
+            .lines()
+            .map(|l| l.split("//").next().unwrap_or(""))
+            .collect::<Vec<_>>()
+            .join("\n");
+        for reached in crate_paths_in(&code) {
+            for (other, names) in MODE_MODULES {
+                if other != *mine && names.contains(&reached.as_str()) {
+                    offenders.push(format!("{shown} ({mine}) reaches {reached} ({other})"));
+                }
+            }
+        }
+    }
+    assert!(
+        offenders.is_empty(),
+        "a mode must not use another one's code; share it through the engine instead:\n{}",
+        offenders.join("\n")
+    );
+}
+
+#[test]
+fn the_mode_guard_reads_paths_inside_braces_too() {
+    assert_eq!(
+        crate_paths_in("use crate::{fit, hud::Hud, studio};"),
+        ["fit", "hud", "studio"]
+    );
+    assert_eq!(crate_paths_in("use crate::input::Pointer;"), ["input"]);
+    assert!(crate_paths_in("let x = 1;").is_empty());
+}

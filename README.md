@@ -71,6 +71,10 @@ minute. To skip them (a CI runner, or a PC that is busy with a game):
 $env:DOCKVIEW_NO_HARDWARE = "1"; cargo test --workspace
 ```
 
+## Going live
+
+Studio mode, **Stream** section: choose the service (Twitch, YouTube, Kick or another), paste the stream key (`Ctrl+V`, then Enter; it is kept encrypted for your Windows user and never shown again), pick the frame rate and the bitrate and press **Go live**. What the viewer shows goes out, with the sound of the game and the microphone. The tab row shows *Connecting…* and then *Live*; if the connection drops it reconnects by itself.
+
 ## Command line
 
 `dockview.exe [options]`: `--video NAME` (a card, by part of its name),

@@ -37,6 +37,20 @@ Las flechas solo van hacia abajo. `ui`, `app` y `platform` no se ven entre sí: 
 - **Lo que `Core` pide a la ventana lo pide por un puerto**, `Host`: pantalla completa, excluir la ventana de las capturas, elegir una carpeta. El binario lo implementa con winit y Windows.
 - **El binario no decide nada**: cada vuelta del bucle es «leer entrada → `Core::tick` → `Core::model` → `ui.frame(model)` → dibujar → `Core::apply(acciones)`».
 
+## Los tres modos de Luminifex
+
+La ventana tiene tres modos, y cada uno hace lo suyo (ver `docs/MODES_PLAN.md`):
+
+| Modo | Es | Vive en |
+|---|---|---|
+| **Visor directo** | Mirar: la imagen, la píldora de acciones rápidas (guardar clip, grabar, volumen, micrófono), las lecturas del HUD | `ui`: `controls`, `hud`, `hud_cards`, `rec` |
+| **Modo Estudio** | Producir: escenas, capas y fuentes, transición y lienzo, audio (con sincronía), grabación y replay, **emisión**, estadísticas | `ui`: `studio/`, `studio_status`, `canvas_bar`, `scene_editor`, `rail` |
+| **Ajustes** | Configurar la app: calidad de imagen, modo de vídeo, tema, idioma, bandeja. Vista propia que reemplaza el contenido | `ui`: `settings/`; `domain`: `settings_view`; `app`: `core/settings_actions.rs` |
+
+El modo es **un solo valor** (`AppMode`, en `domain::navigation`) en el modelo y en `Core`. Lo compartido (el motor de interfaz, el texto, las opciones, el marco de la ventana) no es de ningún modo. **Una guarda** (`architecture.rs`, `a_mode_of_the_interface_never_reaches_into_another`) falla si un archivo de un modo nombra un módulo de otro.
+
+Pendiente de este diseño: que `Model` y `Action` también se partan por modo (`ViewerView`/`ViewerAction`, `StudioView`/`StudioAction`); hoy solo Ajustes tiene los suyos.
+
 ## Reglas
 
 1. **Todo lo que toca hardware, disco o la ventana está detrás de un puerto** (trait en `domain`). Los servicios se prueban con dobles falsos, sin capturadora, GPU ni ventana. El adaptador real vive en `platform` (o, para la ventana, en el binario).

@@ -98,8 +98,8 @@ Igual que el resto: tarea atómica (cambio pequeño con tests; `fmt`, `clippy -D
 
 | Tarea | Qué | Listo cuando |
 |---|---|---|
-| E-1 | Guardas de `architecture.rs`: ningún módulo de `ui` ni `core` importa a otro modo | Fallan si alguien lo rompe |
-| E-2 | `ARCHITECTURE.md` (la sección de modos), `README.md` y la memoria al día | Docs sin la mezcla vieja |
+| E-1 ✅ | Guarda de `architecture.rs` para `ui`: ningún módulo de un modo nombra un módulo de otro (visor, Estudio, Ajustes). **Pendiente:** la guarda equivalente para `core` | Falla si alguien lo rompe |
+| E-2 ✅ | `ARCHITECTURE.md` (sección «Los tres modos»), `README.md` (cómo emitir) y la memoria al día | Docs al día |
 
 ## Riesgos
 
@@ -107,3 +107,9 @@ Igual que el resto: tarea atómica (cambio pequeño con tests; `fmt`, `clippy -D
 2. **Los atajos globales de replay y grabación** (`Ctrl+Alt+S`, `Ctrl+Alt+R`) siguen siendo de Luminifex, no de un modo: siguen funcionando con la ventana cerrada.
 3. **Quitar cosas del visor** (la lista de fuentes, el panel `I`, `V`/`A`) cambia hábitos del autor: se confirma cada una en su tarea y se deja constancia aquí.
 4. **El panel de Estudio hoy guarda cuál sección estaba abierta**; al quitar Ajustes de él hay que mantener compatibilidad con lo guardado.
+
+## Estado al cerrar (2026-11-16)
+
+Bloques A, B, C, D y E hechos, con dos cosas aplazadas a propósito: partir `Model`/`Action` por modo (`ViewerView`/`ViewerAction`, `StudioView`/`StudioAction`) y la guarda de modos para `core`. Además se añadió lo necesario para **poder emitir**: la sección Emisión del Estudio y el pegado con `Ctrl+V` en los campos de texto del panel.
+
+**Para emitir por primera vez** (la prueba real contra un servidor sigue pendiente, por decisión del autor): abrir Luminifex, Modo Estudio, sección **Emisión**; elegir el servicio; pegar la clave de emisión (`Ctrl+V`) y pulsar Intro; ajustar imágenes por segundo y bitrate (30 fps y 4500 kbps por defecto sirven para Twitch); pulsar **Emitir**. La fila de pestañas muestra «Conectando…» y luego «En directo». La dirección de Kick cambia de vez en cuando: si no conecta, se edita a mano en el campo de la dirección.
