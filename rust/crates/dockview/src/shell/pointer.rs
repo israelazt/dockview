@@ -76,7 +76,7 @@ impl Shell {
             window.set_cursor(icon);
         }
         // While watching full screen, an idle cursor gets out of the way.
-        let hidden = self.core.fullscreen() && !self.controls.is_visible();
+        let hidden = self.motion.layout_fullscreen() && !self.controls.is_visible();
         if hidden != self.cursor_hidden {
             self.cursor_hidden = hidden;
             window.set_cursor_visible(!hidden);

@@ -11,6 +11,7 @@ mod pointer;
 mod studio;
 mod window;
 
+pub mod fs_motion;
 pub mod helpers;
 pub mod host;
 pub mod present;
@@ -77,6 +78,13 @@ pub struct Shell {
     /// The window was maximized when it went to full screen: it is maximized
     /// again when it leaves.
     maximized_before_fullscreen: bool,
+    /// Going to full screen and back, in motion (see `fs_motion`).
+    motion: fs_motion::FullscreenMotion,
+    /// Where the picture was on the desktop in the last frame at rest (physical
+    /// pixels): where the motion starts from.
+    video_desktop: dockview_domain::layout::Rect,
+    /// A frame has been drawn: from then on full screen is animated.
+    rendered_any: bool,
     needs_redraw: bool,
     cursor_icon: CursorIcon,
     /// The layer editor over the picture, and the keys that modify its drags.
@@ -156,6 +164,14 @@ impl Shell {
             last_video_shown: Instant::now(),
             last_graphics_try: Instant::now(),
             maximized_before_fullscreen: false,
+            motion: fs_motion::FullscreenMotion::default(),
+            video_desktop: dockview_domain::layout::Rect {
+                x: 0.0,
+                y: 0.0,
+                w: 0.0,
+                h: 0.0,
+            },
+            rendered_any: false,
             needs_redraw: true,
             cursor_icon: CursorIcon::Default,
             scene_editor: SceneEditor::new(),
@@ -193,7 +209,7 @@ impl Shell {
             size,
             scale: self.ui_scale,
             maximized,
-            fullscreen: self.core.fullscreen(),
+            fullscreen: self.motion.layout_fullscreen(),
             rail_out: self.studio.openness(),
         }
     }
@@ -309,6 +325,15 @@ impl Shell {
         report_startup_failure(self.core.lang(), failure, detail, silent);
     }
 
+    /// Full screen was asked for or left: animated once the window has
+    /// shown something (at start-up it is at once).
+    fn begin_fullscreen(&mut self, on: bool) {
+        let animate = self.animations && self.rendered_any && self.window.is_some();
+        if let Some(change) = self.motion.request(on, animate, self.video_desktop) {
+            self.set_window_fullscreen(change == fs_motion::Change::Enter);
+        }
+    }
+
     /// Enters or leaves full screen, taking care of the maximized state.
     fn set_window_fullscreen(&mut self, on: bool) {
         let Some(window) = &self.window else {
@@ -331,7 +356,7 @@ impl Shell {
         let requests = std::mem::take(&mut self.host.borrow_mut().requests);
         for request in requests {
             match request {
-                HostRequest::Fullscreen(on) => self.set_window_fullscreen(on),
+                HostRequest::Fullscreen(on) => self.begin_fullscreen(on),
                 HostRequest::Preset(preset) => {
                     if let Some(presenter) = self.presenter.as_mut() {
                         presenter.set_filter(filter_for(preset));

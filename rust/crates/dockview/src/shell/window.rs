@@ -52,12 +52,19 @@ impl Shell {
         let now = Instant::now();
         let dt = now.duration_since(self.last_frame).as_secs_f32().min(0.1);
         self.last_frame = now;
+        // Going to full screen and back: the clock of the motion, and the
+        // change of the window when the frame has gone out.
+        if let Some(change) = self.motion.advance(dt, self.video_desktop) {
+            self.set_window_fullscreen(change == fs_motion::Change::Enter);
+        }
         // The Studio panel opens (and in full screen, goes at once) and takes
         // its room; the pointer belongs to the video or to the panel.
-        self.studio
-            .update(model.studio_visible(), model.fullscreen, dt);
-        self.side
-            .update(model.studio_visible(), model.fullscreen, dt);
+        // The panel closes as full screen is asked for (animated while the
+        // window has not changed yet) and opens as it is left.
+        let panel_visible = model.studio && !model.fullscreen;
+        let instant = self.motion.layout_fullscreen();
+        self.studio.update(panel_visible, instant, dt);
+        self.side.update(panel_visible, instant, dt);
         self.studio_openness = self.studio.openness();
         // The rail slides with the panel, so the frame is read after it moved.
         let chrome = self.chrome();
@@ -115,7 +122,25 @@ impl Shell {
             y: place.video.y + content_top_px,
             ..place.video
         });
-        presenter.set_video_area(area);
+        // Going to full screen and back: while the picture is between two
+        // places it is drawn in between; at rest its place is remembered, so
+        // the next motion starts from it (all in desktop coordinates, because
+        // the window changes place and size in between).
+        let inner = self
+            .window
+            .as_ref()
+            .and_then(|w| w.inner_position().ok())
+            .map_or((0.0, 0.0), |p| (p.x as f32, p.y as f32));
+        let (shown, at_rest_desktop) =
+            self.motion
+                .place_picture(area, (window_size.0 as f32, window_size.1 as f32), inner);
+        if !self.motion.is_blending() {
+            self.video_desktop = at_rest_desktop;
+        }
+        presenter.set_video_area(shown);
+        // The frame fades with the motion (the panel has its own opening on top).
+        let frame_opacity = self.motion.frame_opacity();
+        let fade = self.studio_openness * frame_opacity;
         let mut arrived = None;
         let mut graphics_lost = false;
         let slot = Arc::clone(self.core.output_slot());
@@ -176,17 +201,10 @@ impl Shell {
                         content_size.0 as f32 / scale.max(0.1),
                         content_size.1 as f32 / scale.max(0.1),
                     ),
-                    self.studio_openness,
+                    fade,
                 );
-                studio::draw_status(ui, &model, stats, &place, self.studio_openness);
-                studio::draw_bar(
-                    ui,
-                    canvas_bar,
-                    &model,
-                    &place,
-                    &bar_pointer,
-                    self.studio_openness,
-                );
+                studio::draw_status(ui, &model, stats, &place, fade);
+                studio::draw_bar(ui, canvas_bar, &model, &place, &bar_pointer, fade);
                 // What floats over the video anchors to the video's room.
                 // The layer editor sits on the picture, under the controls; what
                 // the controls (the pill) use is not the editor's.
@@ -289,6 +307,7 @@ impl Shell {
                     &panel_pointer,
                     dt,
                 );
+                ui.set_opacity(frame_opacity);
                 frame::draw(
                     ui,
                     &model,
@@ -305,6 +324,7 @@ impl Shell {
                     scale,
                     dt,
                 );
+                ui.set_opacity(1.0);
             }
         }
         match presenter.present(&ui.draw_list(), capture) {
@@ -325,6 +345,7 @@ impl Shell {
         }
 
         self.hud_moving = self.hud.is_animating(hud_show);
+        self.rendered_any = true;
         self.pointer.end_frame();
         let actions = self.controls.take_actions();
         if let Some(section) = self
