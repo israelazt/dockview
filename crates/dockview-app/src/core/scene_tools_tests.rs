@@ -23,6 +23,8 @@ fn snap_and_grid_are_switches_that_are_saved() {
 fn fit_stretches_the_chosen_layer_over_the_picture_and_undo_puts_it_back() {
     use crate::keys::KeyCommand;
     let mut rig = rig_editing();
+    rig.core
+        .apply(Action::GoTo(dockview_domain::navigation::AppMode::Studio));
     rig.core.apply(Action::Scene(SceneAction::ToggleEdit));
     // Nothing chosen: nothing happens.
     rig.core.apply(Action::Scene(SceneAction::FitLayer));

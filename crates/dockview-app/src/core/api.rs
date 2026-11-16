@@ -74,10 +74,6 @@ impl Core {
         &self.measures.stats
     }
 
-    pub fn stats_open(&self) -> bool {
-        self.view.stats_open
-    }
-
     /// Whether the Studio panel is open (it stays hidden in full screen).
     pub fn studio_panel_open(&self) -> bool {
         self.view.mode.shows_panel()

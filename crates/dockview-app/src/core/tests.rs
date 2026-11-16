@@ -304,14 +304,16 @@ fn capturing_a_monitor_listens_to_the_sound_of_the_pc() {
 }
 
 #[test]
-fn the_command_line_can_open_the_stats_panel() {
-    let rig = Rig::builder()
-        .cli(crate::cli::Cli {
-            show_stats: true,
-            ..crate::cli::Cli::default()
-        })
-        .build();
-    assert!(rig.core.model().stats_open);
+fn asking_for_the_statistics_opens_the_studio_even_from_full_screen() {
+    use dockview_domain::navigation::AppMode;
+    let mut rig = Rig::new();
+    rig.core.apply(Action::ToggleFullscreen);
+    rig.core.apply(Action::OpenStats);
+    assert_eq!(rig.core.model().mode, AppMode::Studio);
+    assert!(
+        !rig.core.model().fullscreen,
+        "leaves full screen to show it"
+    );
 }
 
 // -- Recovery of the sound -----------------------------------------------

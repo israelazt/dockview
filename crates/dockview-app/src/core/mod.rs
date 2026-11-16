@@ -162,7 +162,6 @@ struct ViewState {
     /// The system's light or dark setting, which `auto` follows.
     system_appearance: Appearance,
     system_lang: Lang,
-    stats_open: bool,
     /// The tab chosen in the navigation row while the panel is open.
     /// The mode that is on (the Studio panel is open in every mode but the
     /// viewer).

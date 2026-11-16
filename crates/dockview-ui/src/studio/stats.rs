@@ -10,7 +10,7 @@ use dockview_domain::view::Model;
 use super::widgets::{GAP, LABEL_H};
 use super::{StudioPanel, NOTE, PAD};
 use crate::fit::fit_text;
-use crate::stats::{finding_text, sections, tone_color, wrap_text};
+use crate::stats_data::{finding_text, sections, tone_color, wrap_text};
 use crate::text::Weight;
 use crate::{Rect, TextStyle, Ui};
 

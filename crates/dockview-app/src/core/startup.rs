@@ -23,7 +23,6 @@ impl Core {
         };
         let test_pattern = cli.test_pattern;
         let preview = cli.ui_preview;
-        let show_stats = cli.show_stats;
         // The main source has a slot of its own that forwards to the output
         // one, so a scene can start or stop without restarting anything.
         let input_slot = Arc::new(FrameSlot::new());
@@ -54,7 +53,6 @@ impl Core {
                 exclusion: None,
                 system_appearance: Appearance::Dark,
                 system_lang,
-                stats_open: show_stats,
                 mode: start_mode,
                 before_settings: dockview_domain::navigation::AppMode::Viewer,
                 layer_selected: cli.edit_layers.then_some(1),

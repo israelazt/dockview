@@ -60,8 +60,6 @@ impl Shell {
                 || self.canvas_bar.wants_pointer()
                 || self.navbar.wants_pointer()
                 || self.hud.wants_pointer()
-                || self.source_picker.wants_pointer()
-                || self.stats_panel.wants_pointer()
                 || self.rail.wants_pointer()
         };
         let frame = self

@@ -16,8 +16,6 @@ pub(super) enum Piece {
     /// A single line, centred.
     Line(String, Color),
     Divider,
-    /// The small arrow that says the card opens a list.
-    Chevron,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -71,7 +69,6 @@ pub(super) fn cards(m: &Model, stats: &Stats) -> Vec<Card> {
         pieces: vec![
             Piece::Dot(status_color(t, m.status)),
             Piece::Stack(source_name(m), detail, t.text),
-            Piece::Chevron,
         ],
     });
 

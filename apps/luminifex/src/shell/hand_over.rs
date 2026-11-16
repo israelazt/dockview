@@ -15,8 +15,6 @@ impl Shell {
         for action in actions
             .into_iter()
             .chain(self.hud.take_actions())
-            .chain(self.source_picker.take_actions())
-            .chain(self.stats_panel.take_actions())
             .chain(self.canvas_bar.take_actions())
             .chain(self.settings_page.take_actions())
             .chain(self.navbar.take_actions())
@@ -25,6 +23,11 @@ impl Shell {
             .chain(self.side.take_actions())
             .chain(editor)
         {
+            if action == dockview_domain::view::Action::OpenStats {
+                // The Studio opens on its statistics.
+                self.studio.open_section(StudioSection::Stats);
+                self.side.open_section(StudioSection::Stats);
+            }
             self.core.apply(action);
         }
     }

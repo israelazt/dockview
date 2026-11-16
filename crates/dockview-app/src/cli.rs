@@ -188,7 +188,13 @@ impl Cli {
                     )
                 }
                 "--window" => cli.capture_window = Some(value("--window")?),
-                "--stats" => cli.show_stats = true,
+                "--stats" => {
+                    // The measurements are shown in the Studio's statistics.
+                    cli.show_stats = true;
+                    cli.open_studio = true;
+                    cli.studio_section
+                        .get_or_insert_with(|| "stats".to_string());
+                }
                 "--video" => cli.video = Some(value("--video")?),
                 "--log-stats" => cli.log_stats = Some(PathBuf::from(value("--log-stats")?)),
                 "--demo-findings" => cli.demo_findings = true,
@@ -360,9 +366,17 @@ mod tests {
     }
 
     #[test]
-    fn stats_is_a_flag() {
-        assert!(parse(&["--stats"]).unwrap().show_stats);
+    fn stats_is_a_flag_that_opens_the_studio_on_the_statistics() {
+        let cli = parse(&["--stats"]).unwrap();
+        assert!(cli.show_stats && cli.open_studio);
+        assert_eq!(cli.studio_section.as_deref(), Some("stats"));
         assert!(!parse(&[]).unwrap().show_stats);
+        let other = parse(&["--stats", "--studio-section", "audio"]).unwrap();
+        assert_eq!(
+            other.studio_section.as_deref(),
+            Some("audio"),
+            "an explicit one wins"
+        );
     }
 
     #[test]

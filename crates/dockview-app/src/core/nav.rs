@@ -15,6 +15,10 @@ impl Core {
             self.view.before_settings = self.view.mode;
         }
         self.view.mode = mode;
+        // The layer editor is the Studio's: leaving it ends the editing.
+        if mode != AppMode::Studio {
+            self.view.scene_editing = false;
+        }
         let studio = mode == AppMode::Studio;
         if self.settings.studio_open != studio {
             self.settings.studio_open = studio;

@@ -189,6 +189,8 @@ fn drag_layer(rig: &mut Rig, layer: usize, units: [i32; 4]) {
 #[test]
 fn undo_puts_a_dragged_layer_back_one_gesture_at_a_time() {
     let mut rig = rig_editing();
+    rig.core
+        .apply(Action::GoTo(dockview_domain::navigation::AppMode::Studio));
     let start = rect_of_layer(&rig, 1);
     // One drag is many small changes but one step of undo.
     rig.core.apply(Action::Scene(SceneAction::BeginEdit(1)));
@@ -212,6 +214,8 @@ fn undo_puts_a_dragged_layer_back_one_gesture_at_a_time() {
 #[test]
 fn a_press_that_changes_nothing_leaves_nothing_to_undo() {
     let mut rig = rig_editing();
+    rig.core
+        .apply(Action::GoTo(dockview_domain::navigation::AppMode::Studio));
     drag_layer(&mut rig, 1, [5000, 5000, 2000, 2000]);
     // Holding a layer without moving it must not add a step.
     rig.core.apply(Action::Scene(SceneAction::BeginEdit(2)));
@@ -246,6 +250,8 @@ fn the_undo_list_is_forgotten_when_layers_move_or_the_scene_changes() {
 fn the_arrows_push_the_chosen_layer_in_the_editor_and_undo_goes_back() {
     use crate::keys::KeyCommand;
     let mut rig = rig_editing();
+    rig.core
+        .apply(Action::GoTo(dockview_domain::navigation::AppMode::Studio));
     rig.core.apply(Action::Scene(SceneAction::ToggleEdit));
     rig.core
         .apply(Action::Scene(SceneAction::SelectLayer(Some(1))));

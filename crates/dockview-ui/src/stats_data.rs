@@ -143,21 +143,6 @@ pub fn wrap_text(ui: &mut Ui, text: &str, style: TextStyle, max_w: f32) -> Vec<S
     lines
 }
 
-/// Truncates a value that would overflow its column.
-pub(super) fn fit(ui: &mut Ui, text: &str, style: TextStyle, max_w: f32) -> String {
-    if ui.measure(text, style).0 <= max_w {
-        return text.to_owned();
-    }
-    let chars: Vec<char> = text.chars().collect();
-    for keep in (1..chars.len()).rev() {
-        let candidate = chars[..keep].iter().collect::<String>() + "…";
-        if ui.measure(&candidate, style).0 <= max_w {
-            return candidate;
-        }
-    }
-    "…".to_owned()
-}
-
 pub(crate) fn tone_color(finding: Finding, theme: &Theme) -> dockview_domain::theme::Color {
     match finding {
         Finding::Healthy => theme.live,

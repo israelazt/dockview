@@ -192,7 +192,6 @@ pub struct Model {
     pub mic_selected: Option<usize>,
     /// What the Settings mode shows.
     pub settings: crate::settings_view::SettingsView,
-    pub stats_open: bool,
     /// The mode that is on. Full screen shows only the picture without
     /// leaving the mode.
     pub mode: crate::navigation::AppMode,
@@ -241,7 +240,8 @@ pub enum Action {
     ToggleCanvasSnap,
     /// Show or hide the grid of the layer editor.
     ToggleCanvasGrid,
-    ToggleStats,
+    /// Open the Studio on its statistics.
+    OpenStats,
     /// Open or close the Studio side panel.
     ToggleStudio,
     /// Open the Studio panel (and leave full screen to show it); it stays
@@ -376,7 +376,6 @@ mod tests {
             mic_devices: vec![],
             mic_selected: None,
             settings: crate::settings_view::SettingsView::default(),
-            stats_open: false,
             mode: if studio {
                 AppMode::Studio
             } else {

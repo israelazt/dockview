@@ -24,7 +24,7 @@ use dockview_domain::view::*;
 use math::*;
 
 use super::input::Pointer;
-use super::stats::wrap_text;
+use super::stats_data::wrap_text;
 use super::text::Weight;
 use super::{Rect, TextStyle, Ui};
 use dockview_domain::i18n::{tr, Key};

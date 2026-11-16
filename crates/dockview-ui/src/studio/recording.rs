@@ -10,7 +10,7 @@ use dockview_domain::view::{Action, Model, RecState, ReplayState};
 use super::widgets::{GAP, LABEL_H, ROW_H};
 use super::{StudioPanel, PAD};
 use crate::fit::fit_text;
-use crate::stats::wrap_text;
+use crate::stats_data::wrap_text;
 use crate::text::Weight;
 use crate::{Rect, TextStyle, Ui};
 

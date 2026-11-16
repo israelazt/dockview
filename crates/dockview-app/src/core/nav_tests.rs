@@ -177,3 +177,42 @@ fn the_readouts_can_be_hidden_and_shown_and_it_is_remembered() {
     rig.core.apply(Action::ToggleHud);
     assert!(rig.core.model().hud);
 }
+
+#[test]
+fn the_sync_the_undo_and_the_source_keys_only_work_in_the_studio() {
+    use crate::keys::KeyCommand;
+    let mut rig = Rig::new();
+    let sync = |rig: &Rig| rig.core.model().sync_ms;
+    // In the viewer they do nothing.
+    rig.core.on_key(KeyCommand::SyncLater);
+    assert_eq!(sync(&rig), 0);
+    rig.core.apply(Action::GoTo(AppMode::Settings));
+    rig.core.on_key(KeyCommand::SyncLater);
+    assert_eq!(sync(&rig), 0);
+    // In the Studio they work.
+    rig.core.apply(Action::GoTo(AppMode::Studio));
+    rig.core.on_key(KeyCommand::SyncLater);
+    assert!(sync(&rig) > 0);
+}
+
+#[test]
+fn the_volume_keys_work_in_every_mode() {
+    use crate::keys::KeyCommand;
+    for mode in [AppMode::Viewer, AppMode::Studio, AppMode::Settings] {
+        let mut rig = Rig::new();
+        rig.core.apply(Action::GoTo(mode));
+        rig.core.on_key(KeyCommand::VolumeDown);
+        assert!(rig.core.model().volume < 1.0, "{mode:?}");
+    }
+}
+
+#[test]
+fn leaving_the_studio_ends_the_layer_editing() {
+    let mut rig = Rig::new();
+    rig.core.apply(Action::GoTo(AppMode::Studio));
+    rig.core.apply(Action::Scene(
+        dockview_domain::view::SceneAction::ToggleEdit,
+    ));
+    rig.core.apply(Action::GoTo(AppMode::Viewer));
+    assert!(!rig.core.model().scenes.editing);
+}

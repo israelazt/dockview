@@ -110,7 +110,6 @@ impl Core {
             ),
             audio_selected: self.sources.audio_index,
             settings: self.settings_view(),
-            stats_open: self.view.stats_open,
             mode: self.view.mode,
             snip: dockview_domain::snap::ENABLED,
             replay: self.replay_view(),
@@ -274,8 +273,9 @@ impl Core {
                     }
                 }
             }
-            Action::ToggleStats => {
-                self.view.stats_open = !self.view.stats_open;
+            Action::OpenStats => {
+                // The interface shows the Statistics section of the Studio.
+                self.open_studio();
                 return;
             }
             Action::ToggleStudio => {
@@ -308,6 +308,19 @@ impl Core {
 
     /// Carries out what a key asked for.
     pub fn on_key(&mut self, command: KeyCommand) {
+        // Undo, the audio sync and the choice of the source belong to the
+        // Studio: in the viewer and in Settings they do nothing.
+        let studio_only = matches!(
+            command,
+            KeyCommand::Undo
+                | KeyCommand::SyncEarlier
+                | KeyCommand::SyncLater
+                | KeyCommand::NextVideo
+                | KeyCommand::NextAudio
+        );
+        if studio_only && self.view.mode != AppMode::Studio {
+            return;
+        }
         // In the layer editor the arrows push the chosen layer instead.
         if self.view.scene_editing && self.view.layer_selected.is_some() {
             let step = match command {

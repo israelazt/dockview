@@ -21,7 +21,6 @@ pub(crate) fn model() -> Model {
         mic_devices: vec!["Windows default".into(), "USB Microphone".into()],
         mic_selected: Some(0),
         settings: dockview_domain::settings_view::SettingsView::default(),
-        stats_open: false,
         mode: dockview_domain::navigation::AppMode::Viewer,
         snip: true,
         replay: ReplayView::off("Ctrl+Alt+S"),
