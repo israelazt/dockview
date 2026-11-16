@@ -1,5 +1,7 @@
 # Fexarium: desacoplar la app y crear el monorepo (2026-11-16)
 
+> **En pausa desde 2026-11-16:** el autor decidió trabajar **solo en Luminifex**. El Bloque 0 (monorepo) está hecho; los bloques 1 a 5 esperan. Ahora manda `MODES_PLAN.md` (cada modo hace lo suyo).
+
 ## Qué se decidió
 
 - La familia de productos se llama **Fexarium** (el nombre es **tentativo**: se guarda en un solo sitio para cambiarlo con una línea).
