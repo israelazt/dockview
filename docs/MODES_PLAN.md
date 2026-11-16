@@ -63,11 +63,13 @@ Igual que el resto: tarea atómica (cambio pequeño con tests; `fmt`, `clippy -D
 
 ## Bloque B — Ajustes es una vista propia
 
+**Hecho (2026-11-16).** `AppMode::shows_panel` ahora es solo el Estudio; Ajustes tiene su `SettingsView`/`SettingsAction` (`domain/settings_view.rs`), su vista (`ui/settings/`) y su parte de `Core` (`core/settings_actions.rs`); el Estudio quedó con 5 secciones (Fuentes, Escenas, Audio, Grabación, Estadísticas). Las acciones `SetPreset`/`SetTheme`/`SetLang`/`SetVideoMode` ya no existen como `Action` sueltas. En la ventana, el modo Ajustes oculta la imagen (1 píxel) y dibuja solo su vista y los avisos.
+
 | Tarea | Qué | Listo cuando |
 |---|---|---|
-| B-1 | `ui/settings/`: la vista completa (calidad de imagen, modo de vídeo, tema, idioma, bandeja) con su `SettingsView` y `SettingsAction` | Cada elección cambia el ajuste y se guarda |
-| B-2 | Quitar la sección «Ajustes» del panel de Estudio y la transición de Ajustes; la transición queda solo en la barra del Estudio | `grep`: un solo sitio para la transición |
-| B-3 | La tecla `P` y los textos de Ajustes; `Esc` y las pestañas vuelven al modo anterior | Tests del arnés |
+| B-1 ✅ | `ui/settings/`: la vista completa (calidad de imagen, modo de vídeo, tema, idioma, bandeja) con su `SettingsView` y `SettingsAction` | Cada elección cambia el ajuste y se guarda |
+| B-2 ✅ | Quitar la sección «Ajustes» del panel de Estudio y la transición de Ajustes; la transición queda solo en la barra del Estudio | `grep`: un solo sitio para la transición |
+| B-3 ✅ | `Esc` y las pestañas vuelven al modo anterior (Ajustes recuerda de dónde vino); `Tab` abre el Estudio desde cualquier modo. **`P` sigue siendo una tecla global** que cambia la calidad de imagen en cualquier modo; el valor se ve en Ajustes | Tests del arnés |
 
 **Pausa B.**
 

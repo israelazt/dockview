@@ -109,10 +109,7 @@ impl Core {
                     .collect::<Vec<_>>(),
             ),
             audio_selected: self.sources.audio_index,
-            preset: self.settings.render_preset,
-            theme_mode: self.theme_mode(),
-            lang_mode: self.lang_mode(),
-            video_mode: self.settings.video_mode,
+            settings: self.settings_view(),
             stats_open: self.view.stats_open,
             mode: self.view.mode,
             snip: dockview_domain::snap::ENABLED,
@@ -304,25 +301,7 @@ impl Core {
             Action::ToggleCanvasGrid => {
                 self.settings.canvas_grid = !self.settings.canvas_grid;
             }
-            Action::SetVideoMode(mode) => {
-                self.settings.video_mode = mode;
-                // A deliberate choice ends any automatic switch and allows a
-                // new automatic attempt later (for example after changing port).
-                self.measures.auto.reset();
-                self.select_video(self.sources.video_index);
-            }
-            Action::SetPreset(preset) => {
-                self.settings.render_preset = preset;
-                self.host.set_render_preset(preset);
-            }
-            Action::SetTheme(mode) => {
-                self.settings.theme = mode;
-                self.cli.theme = None; // an explicit choice wins over --theme
-            }
-            Action::SetLang(mode) => {
-                self.settings.language = mode;
-                self.cli.lang = None;
-            }
+            Action::Settings(change) => self.apply_settings(change),
         }
         self.settings_changed();
     }
@@ -352,8 +331,8 @@ impl Core {
                     self.view.scene_editing = false;
                 } else if self.view.fullscreen {
                     self.set_fullscreen(false);
-                } else if self.view.mode.shows_panel() {
-                    self.set_mode(AppMode::Viewer);
+                } else {
+                    self.leave_mode();
                 }
             }
             KeyCommand::ToggleStudio => self.toggle_studio(),

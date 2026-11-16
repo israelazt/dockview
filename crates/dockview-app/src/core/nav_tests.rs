@@ -33,28 +33,57 @@ fn the_studio_tab_opens_the_panel_and_the_viewer_tab_closes_it() {
 }
 
 #[test]
-fn settings_opens_the_panel_and_stays_the_tab_that_is_on() {
+fn settings_is_a_mode_of_its_own_without_the_studio_panel_and_esc_goes_back() {
+    use crate::keys::KeyCommand;
     let mut rig = Rig::new();
     rig.core.apply(Action::GoTo(AppMode::Settings));
-    assert!(rig.core.model().mode.shows_panel());
     assert_eq!(tab(&rig), AppMode::Settings);
+    assert!(!rig.core.model().studio_visible(), "no panel in Settings");
+    rig.core.on_key(KeyCommand::Escape);
+    assert_eq!(tab(&rig), AppMode::Viewer, "back to where it came from");
+    // From the Studio it goes back to the Studio.
     rig.core.apply(Action::GoTo(AppMode::Studio));
+    rig.core.apply(Action::GoTo(AppMode::Settings));
+    rig.core.on_key(KeyCommand::Escape);
     assert_eq!(tab(&rig), AppMode::Studio);
+    assert!(rig.core.model().studio_visible());
 }
 
 #[test]
-fn the_panel_comes_back_on_the_last_mode_and_full_screen_hides_it_without_leaving_it() {
+fn tab_opens_the_studio_from_the_viewer_and_from_settings_and_closes_it() {
     let mut rig = Rig::new();
-    rig.core.apply(Action::GoTo(AppMode::Settings));
-    rig.core.apply(Action::GoTo(AppMode::Viewer));
     rig.core.apply(Action::ToggleStudio);
-    assert_eq!(tab(&rig), AppMode::Settings, "the tab it was on");
+    assert_eq!(tab(&rig), AppMode::Studio);
+    rig.core.apply(Action::ToggleStudio);
+    assert_eq!(tab(&rig), AppMode::Viewer);
+    rig.core.apply(Action::GoTo(AppMode::Settings));
+    rig.core.apply(Action::ToggleStudio);
+    assert_eq!(
+        tab(&rig),
+        AppMode::Studio,
+        "from Settings it goes to the Studio"
+    );
+}
+
+#[test]
+fn full_screen_hides_the_panel_without_leaving_the_mode() {
+    let mut rig = Rig::new();
+    rig.core.apply(Action::GoTo(AppMode::Studio));
     rig.core.apply(Action::ToggleFullscreen);
     assert!(
         !rig.core.model().studio_visible(),
         "the panel is hidden in full screen"
     );
-    assert_eq!(tab(&rig), AppMode::Settings, "but the mode is still on");
+    assert_eq!(tab(&rig), AppMode::Studio, "but the mode is still on");
+}
+
+#[test]
+fn opening_settings_leaves_full_screen_to_show_it() {
+    let mut rig = Rig::new();
+    rig.core.apply(Action::ToggleFullscreen);
+    rig.core.apply(Action::GoTo(AppMode::Settings));
+    assert!(!rig.core.model().fullscreen);
+    assert_eq!(tab(&rig), AppMode::Settings);
 }
 
 fn encoder(rig: &Rig) -> (EncoderState, String) {

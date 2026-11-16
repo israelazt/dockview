@@ -56,7 +56,7 @@ impl Core {
                 system_lang,
                 stats_open: show_stats,
                 mode: start_mode,
-                last_panel: dockview_domain::navigation::AppMode::Studio,
+                before_settings: dockview_domain::navigation::AppMode::Viewer,
                 layer_selected: cli.edit_layers.then_some(1),
                 scene_editing: cli.edit_layers,
                 window_hidden: false,

@@ -1,6 +1,5 @@
 //! The window: drawing a frame, the cursor and screenshots.
 
-use dockview_domain::layout::Rect as PhysicalRect;
 use dockview_domain::presenter::Screenshot;
 use dockview_domain::render_plan::{render_plan, video_frame_due};
 use dockview_domain::view::RecState;
@@ -48,6 +47,7 @@ impl Shell {
         }
         self.refresh_host_info();
         let model = self.core.model();
+        let settings_mode = model.mode == dockview_domain::navigation::AppMode::Settings;
         let rec = model.rec;
         let now = Instant::now();
         let dt = now.duration_since(self.last_frame).as_secs_f32().min(0.1);
@@ -117,11 +117,12 @@ impl Shell {
         presenter.wait_for_slot(100);
         // The video fits the room the panel leaves (all of it when closed).
         // With the bar, the video always has an area of its own, under it.
-        let area = (content_top_px > 0.0 || place.panel.is_some()).then_some(PhysicalRect {
-            x: place.video.x + rail_px,
-            y: place.video.y + content_top_px,
-            ..place.video
-        });
+        let area = picture::video_area(
+            &place,
+            (rail_px, content_top_px),
+            content_top_px > 0.0 || place.panel.is_some(),
+            settings_mode,
+        );
         // Going to full screen and back: while the picture is between two
         // places it is drawn in between; at rest its place is remembered, so
         // the next motion starts from it (all in desktop coordinates, because
@@ -186,127 +187,142 @@ impl Shell {
         let (stats, stats_open) = (self.core.stats(), self.core.stats_open());
         let animations = self.animations;
         let toasts = &mut self.toasts;
+        let settings_page = &mut self.settings_page;
         {
             {
                 ui.begin(presenter.size(), scale);
                 ui.set_inset_top(content_top_px / scale.max(0.1));
                 ui.set_inset_left(rail_px / scale.max(0.1));
-                // With the Studio open, the air around the two cards and a fine
-                // frame around the video.
-                studio::draw_card_frame(
-                    ui,
-                    &model.theme,
-                    &place,
-                    (
-                        content_size.0 as f32 / scale.max(0.1),
-                        content_size.1 as f32 / scale.max(0.1),
-                    ),
-                    fade,
-                );
-                studio::draw_status(ui, &model, stats, &place, fade);
-                studio::draw_bar(ui, canvas_bar, &model, &place, &bar_pointer, fade);
-                // What floats over the video anchors to the video's room.
-                // The layer editor sits on the picture, under the controls; what
-                // the controls (the pill) use is not the editor's.
-                let over_list = source_picker.covers(
-                    video_pointer
-                        .pos
-                        .map(|(x, y)| (x - place.video_logical.x, y - place.video_logical.y)),
-                );
-                let editor_pointer = if controls.over_controls() || over_list {
-                    Pointer {
-                        pos: None,
-                        wheel: 0.0,
-                        just_pressed: false,
-                        ..video_pointer
-                    }
+                if settings_mode {
+                    let (w, h) = ui.logical_size();
+                    settings_page.frame(
+                        ui,
+                        &model,
+                        dockview_ui::Rect::new(0.0, 0.0, w, h),
+                        &pointer,
+                        dt,
+                    );
+                    toasts.frame(ui, &model.theme, dt, animations);
                 } else {
-                    video_pointer
-                };
-                let v = place.video;
-                let area = (v.x / scale, v.y / scale, v.w / scale, v.h / scale);
-                scene_editor.frame(ui, &model, area, &editor_pointer, *edit_mods);
-                // From here on, what floats over the picture is drawn and
-                // pointed at relative to the video card.
-                let vl = place.video_logical;
-                let (rail_l, top_l) = (rail_px / scale.max(0.1), content_top_px / scale.max(0.1));
-                let float_pointer = Pointer {
-                    pos: video_pointer.pos.map(|(x, y)| (x - vl.x, y - vl.y)),
-                    ..video_pointer
-                };
-                ui.set_inset_left(rail_l + vl.x);
-                ui.set_inset_top(top_l + vl.y);
-                ui.limit_width(Some(place.video_width));
-                // The pill anchors to the bottom of the video, above the
-                // transition bar, not to the window's.
-                ui.limit_height(Some(vl.h));
-                // Under the list the bar must not take the pointer either.
-                let bar_pointer = if source_picker.covers(float_pointer.pos) {
-                    Pointer {
-                        pos: None,
-                        ..float_pointer
-                    }
-                } else {
-                    float_pointer
-                };
-                controls.frame(ui, &model, &bar_pointer, dt);
-                let hud_h = hud.frame(ui, &model, stats, &float_pointer, hud_show, dt, animations);
-                if hud.take_source_click() {
-                    source_picker.toggle();
-                }
-                if !hud_show {
-                    source_picker.close();
-                }
-                // What anchors to the top sits under the readouts.
-                ui.set_inset_top(top_l + vl.y + hud_h);
-                ui.limit_height(Some((vl.h - hud_h).max(0.0)));
-                stats_panel.frame(
-                    ui,
-                    &model.theme,
-                    model.lang,
-                    stats,
-                    &float_pointer,
-                    stats_open,
-                    dt,
-                    animations,
-                );
-                if rec.is_on() {
-                    dockview_ui::rec::draw(
+                    // With the Studio open, the air around the two cards and a fine
+                    // frame around the video.
+                    studio::draw_card_frame(
                         ui,
                         &model.theme,
-                        rec.seconds,
-                        rec.state == RecState::Starting,
+                        &place,
+                        (
+                            content_size.0 as f32 / scale.max(0.1),
+                            content_size.1 as f32 / scale.max(0.1),
+                        ),
+                        fade,
+                    );
+                    studio::draw_status(ui, &model, stats, &place, fade);
+                    studio::draw_bar(ui, canvas_bar, &model, &place, &bar_pointer, fade);
+                    // What floats over the video anchors to the video's room.
+                    // The layer editor sits on the picture, under the controls; what
+                    // the controls (the pill) use is not the editor's.
+                    let over_list = source_picker.covers(
+                        video_pointer
+                            .pos
+                            .map(|(x, y)| (x - place.video_logical.x, y - place.video_logical.y)),
+                    );
+                    let editor_pointer = if controls.over_controls() || over_list {
+                        Pointer {
+                            pos: None,
+                            wheel: 0.0,
+                            just_pressed: false,
+                            ..video_pointer
+                        }
+                    } else {
+                        video_pointer
+                    };
+                    let v = place.video;
+                    let area = (v.x / scale, v.y / scale, v.w / scale, v.h / scale);
+                    scene_editor.frame(ui, &model, area, &editor_pointer, *edit_mods);
+                    // From here on, what floats over the picture is drawn and
+                    // pointed at relative to the video card.
+                    let vl = place.video_logical;
+                    let (rail_l, top_l) =
+                        (rail_px / scale.max(0.1), content_top_px / scale.max(0.1));
+                    let float_pointer = Pointer {
+                        pos: video_pointer.pos.map(|(x, y)| (x - vl.x, y - vl.y)),
+                        ..video_pointer
+                    };
+                    ui.set_inset_left(rail_l + vl.x);
+                    ui.set_inset_top(top_l + vl.y);
+                    ui.limit_width(Some(place.video_width));
+                    // The pill anchors to the bottom of the video, above the
+                    // transition bar, not to the window's.
+                    ui.limit_height(Some(vl.h));
+                    // Under the list the bar must not take the pointer either.
+                    let bar_pointer = if source_picker.covers(float_pointer.pos) {
+                        Pointer {
+                            pos: None,
+                            ..float_pointer
+                        }
+                    } else {
+                        float_pointer
+                    };
+                    controls.frame(ui, &model, &bar_pointer, dt);
+                    let hud_h =
+                        hud.frame(ui, &model, stats, &float_pointer, hud_show, dt, animations);
+                    if hud.take_source_click() {
+                        source_picker.toggle();
+                    }
+                    if !hud_show {
+                        source_picker.close();
+                    }
+                    // What anchors to the top sits under the readouts.
+                    ui.set_inset_top(top_l + vl.y + hud_h);
+                    ui.limit_height(Some((vl.h - hud_h).max(0.0)));
+                    stats_panel.frame(
+                        ui,
+                        &model.theme,
+                        model.lang,
+                        stats,
+                        &float_pointer,
+                        stats_open,
+                        dt,
                         animations,
                     );
+                    if rec.is_on() {
+                        dockview_ui::rec::draw(
+                            ui,
+                            &model.theme,
+                            rec.seconds,
+                            rec.state == RecState::Starting,
+                            animations,
+                        );
+                    }
+                    toasts.frame(ui, &model.theme, dt, animations);
+                    // The list of sources, over the rest of what floats.
+                    ui.set_inset_top(top_l + vl.y);
+                    ui.limit_height(Some(vl.h));
+                    source_picker.frame(ui, &model, &float_pointer, hud.source_card());
+                    ui.set_inset_top(top_l);
+                    ui.set_inset_left(rail_l);
+                    // The panel and the left column, on top, in the room they took.
+                    ui.limit_width(None);
+                    ui.limit_height(None);
+                    side.frame(
+                        ui,
+                        &model,
+                        stats,
+                        place.side,
+                        place.side_full_width,
+                        &side_pointer,
+                        dt,
+                    );
+                    studio.frame(
+                        ui,
+                        &model,
+                        stats,
+                        place.panel,
+                        place.full_width,
+                        &panel_pointer,
+                        dt,
+                    );
                 }
-                toasts.frame(ui, &model.theme, dt, animations);
-                // The list of sources, over the rest of what floats.
-                ui.set_inset_top(top_l + vl.y);
-                ui.limit_height(Some(vl.h));
-                source_picker.frame(ui, &model, &float_pointer, hud.source_card());
-                ui.set_inset_top(top_l);
-                ui.set_inset_left(rail_l);
-                // The panel and the left column, on top, in the room they took.
-                ui.limit_width(None);
-                ui.limit_height(None);
-                side.frame(
-                    ui,
-                    &model,
-                    stats,
-                    place.side,
-                    place.side_full_width,
-                    &side_pointer,
-                    dt,
-                );
-                studio.frame(
-                    ui,
-                    &model,
-                    stats,
-                    place.panel,
-                    place.full_width,
-                    &panel_pointer,
-                    dt,
-                );
                 ui.set_opacity(frame_opacity);
                 frame::draw(
                     ui,
@@ -347,30 +363,7 @@ impl Shell {
         self.hud_moving = self.hud.is_animating(hud_show);
         self.rendered_any = true;
         self.pointer.end_frame();
-        let actions = self.controls.take_actions();
-        if let Some(section) = self
-            .navbar
-            .take_studio_request()
-            .or_else(|| self.rail.take_studio_request())
-        {
-            self.studio.open_section(section);
-            self.side.open_section(section);
-        }
-        let editor = self.scene_editor.take_actions();
-        for action in actions
-            .into_iter()
-            .chain(self.hud.take_actions())
-            .chain(self.source_picker.take_actions())
-            .chain(self.stats_panel.take_actions())
-            .chain(self.canvas_bar.take_actions())
-            .chain(self.navbar.take_actions())
-            .chain(self.rail.take_actions())
-            .chain(self.studio.take_actions())
-            .chain(self.side.take_actions())
-            .chain(editor)
-        {
-            self.core.apply(action);
-        }
+        self.hand_over_actions();
         if self.rail.take_log_request() {
             if let Some(path) = crate::os::default_log_path() {
                 crate::os::reveal_file(&path);

@@ -83,6 +83,11 @@ impl Core {
         self.view.mode.shows_panel()
     }
 
+    /// The mode that is on.
+    pub fn mode(&self) -> dockview_domain::navigation::AppMode {
+        self.view.mode
+    }
+
     pub fn fullscreen(&self) -> bool {
         self.view.fullscreen
     }

@@ -38,6 +38,7 @@ pub mod replay;
 pub mod scene;
 pub mod select;
 pub mod settings;
+pub mod settings_view;
 pub mod snap;
 pub mod sources;
 pub mod stats;

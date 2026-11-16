@@ -65,18 +65,16 @@ pub enum StudioSection {
     Scenes,
     Audio,
     Recording,
-    Settings,
     Stats,
 }
 
 impl StudioSection {
     /// In the order they are listed.
-    pub const ALL: [StudioSection; 6] = [
+    pub const ALL: [StudioSection; 5] = [
         Self::Sources,
         Self::Scenes,
         Self::Audio,
         Self::Recording,
-        Self::Settings,
         Self::Stats,
     ];
 
@@ -87,7 +85,6 @@ impl StudioSection {
             "scenes" => Some(Self::Scenes),
             "audio" => Some(Self::Audio),
             "recording" => Some(Self::Recording),
-            "settings" => Some(Self::Settings),
             "stats" => Some(Self::Stats),
             _ => None,
         }
@@ -109,7 +106,6 @@ impl StudioSection {
             Self::Scenes => Key::StudioScenes,
             Self::Audio => Key::StudioAudio,
             Self::Recording => Key::StudioRecording,
-            Self::Settings => Key::StudioSettings,
             Self::Stats => Key::StudioStats,
         }
     }
@@ -132,7 +128,6 @@ impl StudioSection {
         width: f32,
     ) -> f32 {
         match self {
-            Self::Settings => super::settings::body_height(),
             Self::Sources => super::sources::body_height_in(m, scope.cards()),
             Self::Audio => super::audio::body_height(m),
             Self::Scenes => super::scenes::body_height_in(m, scope.cards()),
@@ -165,7 +160,7 @@ impl SectionRow {
 /// `StudioSection::ALL[i]`, so the folding can be animated, and `heights[i]`
 /// is how tall its body is when open. Only the sections `scope` lists are
 /// stacked. Returns the rows and the height of the whole list.
-pub fn stack(scope: Scope, expanded: &[f32; 6], heights: &[f32; 6]) -> (Vec<SectionRow>, f32) {
+pub fn stack(scope: Scope, expanded: &[f32; 5], heights: &[f32; 5]) -> (Vec<SectionRow>, f32) {
     let mut rows = Vec::with_capacity(StudioSection::ALL.len());
     let mut top = 0.0;
     // The cards of the left column list the scenes first.
@@ -206,8 +201,8 @@ mod tests {
                 .filter(|s| scope.includes(**s))
                 .count()
         };
-        assert_eq!(count(Scope::Full), 6);
-        assert_eq!(count(Scope::Main), 4);
+        assert_eq!(count(Scope::Full), 5);
+        assert_eq!(count(Scope::Main), 3);
         assert_eq!(count(Scope::Side), 2);
         for s in StudioSection::ALL {
             assert_ne!(Scope::Main.includes(s), Scope::Side.includes(s), "{s:?}");
@@ -218,7 +213,7 @@ mod tests {
 
     #[test]
     fn the_side_cards_are_apart_and_the_scenes_come_first() {
-        let (rows, height) = stack(Scope::Side, &[1.0; 6], &[BODY_H; 6]);
+        let (rows, height) = stack(Scope::Side, &[1.0; 5], &[BODY_H; 5]);
         assert_eq!(rows[0].section, StudioSection::Scenes);
         assert_eq!(rows[1].section, StudioSection::Sources);
         assert_eq!(rows[1].top, rows[0].bottom() + Scope::Side.gap());
@@ -228,10 +223,10 @@ mod tests {
 
     #[test]
     fn a_scope_stacks_only_its_sections() {
-        let (rows, height) = stack(Scope::Side, &[0.0; 6], &[BODY_H; 6]);
+        let (rows, height) = stack(Scope::Side, &[0.0; 5], &[BODY_H; 5]);
         assert_eq!(rows.len(), 2);
         assert_eq!(height, HEADER_H * 2.0 + Scope::Side.gap());
-        let (rows, _) = stack(Scope::Main, &[0.0; 6], &[BODY_H; 6]);
+        let (rows, _) = stack(Scope::Main, &[0.0; 5], &[BODY_H; 5]);
         assert!(rows
             .iter()
             .all(|r| !matches!(r.section, StudioSection::Sources | StudioSection::Scenes)));
@@ -240,58 +235,63 @@ mod tests {
 
     #[test]
     fn folded_sections_are_just_their_headers() {
-        let (rows, height) = stack(Scope::Full, &[0.0; 6], &[BODY_H; 6]);
-        assert_eq!(rows.len(), 6);
-        assert_eq!(height, HEADER_H * 6.0);
+        let (rows, height) = stack(Scope::Full, &[0.0; 5], &[BODY_H; 5]);
+        assert_eq!(rows.len(), 5);
+        assert_eq!(height, HEADER_H * 5.0);
         assert_eq!(rows[2].top, HEADER_H * 2.0);
         assert!(rows.iter().all(|r| r.body == 0.0));
     }
 
     #[test]
     fn opening_a_section_pushes_the_ones_below_it_down() {
-        let mut open = [0.0; 6];
+        let mut open = [0.0; 5];
         open[1] = 1.0;
-        let (rows, height) = stack(Scope::Full, &open, &[BODY_H; 6]);
+        let (rows, height) = stack(Scope::Full, &open, &[BODY_H; 5]);
         assert_eq!(rows[1].body, BODY_H);
         assert_eq!(rows[2].top, rows[1].bottom());
         assert_eq!(rows[2].top, HEADER_H * 2.0 + BODY_H);
-        assert_eq!(height, HEADER_H * 6.0 + BODY_H);
+        assert_eq!(height, HEADER_H * 5.0 + BODY_H);
     }
 
     #[test]
     fn a_half_open_section_is_half_as_tall() {
-        let mut open = [0.0; 6];
+        let mut open = [0.0; 5];
         open[0] = 0.5;
-        let (rows, _) = stack(Scope::Full, &open, &[BODY_H; 6]);
+        let (rows, _) = stack(Scope::Full, &open, &[BODY_H; 5]);
         assert_eq!(rows[0].body, (BODY_H / 2.0).round());
     }
 
     #[test]
     fn out_of_range_amounts_are_kept_in_range() {
-        let (rows, _) = stack(Scope::Full, &[2.0, -1.0, 0.0, 0.0, 0.0, 0.0], &[BODY_H; 6]);
+        let (rows, _) = stack(Scope::Full, &[2.0, -1.0, 0.0, 0.0, 0.0], &[BODY_H; 5]);
         assert_eq!(rows[0].body, BODY_H);
         assert_eq!(rows[1].body, 0.0);
     }
 
     #[test]
     fn each_section_can_have_its_own_height() {
-        let mut heights = [BODY_H; 6];
+        let mut heights = [BODY_H; 5];
         heights[0] = 200.0;
-        let (rows, height) = stack(Scope::Full, &[1.0; 6], &heights);
+        let (rows, height) = stack(Scope::Full, &[1.0; 5], &heights);
         assert_eq!(rows[0].body, 200.0);
         assert_eq!(rows[0].full, 200.0);
         assert_eq!(rows[1].top, HEADER_H + 200.0);
-        assert_eq!(height, HEADER_H * 6.0 + 200.0 + BODY_H * 5.0);
+        assert_eq!(height, HEADER_H * 5.0 + 200.0 + BODY_H * 4.0);
         // Folded, a tall body takes no room however tall it would be.
-        let (rows, _) = stack(Scope::Full, &[0.0; 6], &heights);
+        let (rows, _) = stack(Scope::Full, &[0.0; 5], &heights);
         assert_eq!((rows[0].body, rows[0].full), (0.0, 200.0));
     }
 
     #[test]
     fn sections_can_be_named_on_the_command_line() {
         assert_eq!(
-            StudioSection::from_name("Settings"),
-            Some(StudioSection::Settings)
+            StudioSection::from_name("Audio"),
+            Some(StudioSection::Audio)
+        );
+        assert_eq!(
+            StudioSection::from_name("settings"),
+            None,
+            "Settings is a mode, not a section"
         );
         assert_eq!(
             StudioSection::from_name("STATS"),

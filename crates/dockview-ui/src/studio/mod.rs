@@ -24,7 +24,6 @@ mod scene_list;
 mod scenes;
 mod scroll;
 mod sections;
-mod settings;
 mod sources;
 mod stats;
 mod typing;
@@ -92,9 +91,9 @@ pub struct StudioPanel {
     /// Which sections it lists.
     scope: Scope,
     /// Which sections are meant to be open.
-    open: [bool; 6],
+    open: [bool; 5],
     /// How open each one is now (0 to 1), moving towards `open`.
-    amount: [f32; 6],
+    amount: [f32; 5],
     scroll: f32,
     scroll_target: f32,
     /// How far the panel is opened, 0 (closed) to 1, linear in time.
@@ -146,8 +145,8 @@ impl StudioPanel {
     pub fn new() -> Self {
         Self {
             scope: Scope::Full,
-            open: [false; 6],
-            amount: [0.0; 6],
+            open: [false; 5],
+            amount: [0.0; 5],
             scroll: 0.0,
             scroll_target: 0.0,
             progress: 0.0,
@@ -307,7 +306,7 @@ impl StudioPanel {
         self.apply_typed_keys(ui);
         // Only a section that is open, or still folding, has a body to measure
         // (some of them wrap text, which is not free).
-        let mut heights = [0.0; 6];
+        let mut heights = [0.0; 5];
         for (i, section) in StudioSection::ALL.into_iter().enumerate() {
             if self.scope.includes(section) && (self.is_open(section) || self.amount[i] > 0.0) {
                 heights[i] = section.body_height_in(self.scope, ui, m, stats, full_width);

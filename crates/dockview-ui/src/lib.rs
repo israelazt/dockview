@@ -14,6 +14,7 @@ mod options;
 pub mod rail;
 pub mod rec;
 pub mod scene_editor;
+pub mod settings;
 pub mod snip;
 pub mod source_picker;
 pub mod stats;

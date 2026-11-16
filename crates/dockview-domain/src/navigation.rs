@@ -27,10 +27,9 @@ impl AppMode {
         }
     }
 
-    /// Whether the mode shows the Studio panel (Settings does too until it has a
-    /// view of its own).
+    /// Whether the mode shows the Studio panel: only the Studio does.
     pub fn shows_panel(self) -> bool {
-        self != Self::Viewer
+        self == Self::Studio
     }
 }
 
@@ -120,7 +119,8 @@ mod tests {
     fn the_tabs_are_in_order_and_only_the_viewer_has_no_panel() {
         assert_eq!(AppMode::ALL[0], AppMode::Viewer);
         assert!(!AppMode::Viewer.shows_panel());
-        assert!(AppMode::ALL[1..].iter().all(|t| t.shows_panel()));
+        assert!(AppMode::Studio.shows_panel());
+        assert!(!AppMode::Settings.shows_panel(), "it has a view of its own");
         assert_eq!(AppMode::default(), AppMode::Viewer);
     }
 

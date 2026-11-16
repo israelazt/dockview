@@ -11,7 +11,6 @@ use dockview_domain::view::{Action, Model};
 use dockview_domain::window_chrome::NAV_HEIGHT;
 
 use super::input::Pointer;
-use super::studio::StudioSection;
 use super::text::Weight;
 use super::{Rect, TextStyle, Ui};
 
@@ -108,7 +107,6 @@ fn items(theme: &Theme, lang: Lang, nav: &NavView) -> Vec<Item> {
 #[derive(Debug, Default)]
 pub struct NavBar {
     actions: Vec<Action>,
-    section: Option<StudioSection>,
     /// The tab the left button went down on.
     pressed: Option<AppMode>,
     hover: Option<AppMode>,
@@ -121,12 +119,6 @@ impl NavBar {
 
     pub fn take_actions(&mut self) -> Vec<Action> {
         std::mem::take(&mut self.actions)
-    }
-
-    /// The section of the Studio panel a tab asked to be opened (see
-    /// `StudioPanel::open_section`), once.
-    pub fn take_studio_request(&mut self) -> Option<StudioSection> {
-        self.section.take()
     }
 
     /// Whether the pointer is over something that can be clicked.
@@ -182,10 +174,6 @@ impl NavBar {
             if let (Some(pressed), Some(over)) = (self.pressed.take(), self.hover) {
                 if pressed == over {
                     self.actions.push(Action::GoTo(over));
-                    self.section = match over {
-                        AppMode::Settings => Some(StudioSection::Settings),
-                        _ => None,
-                    };
                 }
             }
             self.pressed = None;
@@ -315,19 +303,16 @@ mod tests {
         let mut bar = NavBar::new();
         click(&mut bar, &m, centre_of(&m, AppMode::Studio));
         assert_eq!(bar.take_actions(), [Action::GoTo(AppMode::Studio)]);
-        assert_eq!(bar.take_studio_request(), None);
         click(&mut bar, &m, centre_of(&m, AppMode::Viewer));
         assert_eq!(bar.take_actions(), [Action::GoTo(AppMode::Viewer)]);
     }
 
     #[test]
-    fn settings_asks_for_its_section_of_the_panel_and_only_once() {
+    fn settings_is_a_mode_of_its_own_and_asks_for_no_section_of_the_panel() {
         let m = model();
         let mut bar = NavBar::new();
         click(&mut bar, &m, centre_of(&m, AppMode::Settings));
         assert_eq!(bar.take_actions(), [Action::GoTo(AppMode::Settings)]);
-        assert_eq!(bar.take_studio_request(), Some(StudioSection::Settings));
-        assert_eq!(bar.take_studio_request(), None, "asked once");
     }
 
     #[test]

@@ -12,8 +12,10 @@ mod studio;
 mod window;
 
 pub mod fs_motion;
+pub mod hand_over;
 pub mod helpers;
 pub mod host;
+pub mod picture;
 pub mod present;
 
 use std::cell::RefCell;
@@ -99,6 +101,8 @@ pub struct Shell {
     stats_panel: StatsPanel,
     /// The transition bar under the video in the Studio mode.
     canvas_bar: CanvasBar,
+    /// The Settings mode.
+    settings_page: dockview_ui::settings::SettingsPage,
     /// The side panel of the Studio mode.
     studio: StudioPanel,
     /// The column on the left of the video with the scenes and the sources,
@@ -137,6 +141,8 @@ impl Shell {
         let animations = core.cli().screenshot.is_none() && system_animations_enabled();
         let mut controls = Controls::new(preview);
         controls.set_animations(animations);
+        let mut settings_page = dockview_ui::settings::SettingsPage::new();
+        settings_page.set_animations(animations);
         let mut studio = StudioPanel::new();
         studio.set_animations(animations);
         let mut side = StudioPanel::with_scope(Scope::Side);
@@ -182,6 +188,7 @@ impl Shell {
             animations,
             stats_panel: StatsPanel::new(),
             canvas_bar: CanvasBar::new(),
+            settings_page,
             studio,
             side,
             navbar: NavBar::new(),

@@ -117,7 +117,6 @@ strings! {
     FindSlowGpu => "Drawing takes a big part of each frame. Try the Performance image quality.", "Dibujar ocupa gran parte de cada frame. Prueba la calidad de imagen «Rendimiento».";
     FindAudioLost => "The audio device was lost. Choose it again in Settings.", "Se perdió el dispositivo de audio. Vuelve a elegirlo en Ajustes.";
     VideoMode => "Video mode", "Modo de video";
-    SceneTransitionTitle => "Scene change", "Cambio de escena";
     TransitionSmooth => "Smooth", "Suave";
     TransitionCut => "Cut", "Corte";
     TransitionBarTitle => "Transition", "Transición";
@@ -174,7 +173,6 @@ strings! {
     StudioLayersSources => "Layers & sources", "Capas y fuentes";
     StudioAudio => "Audio", "Audio";
     StudioRecording => "Recording", "Grabación";
-    StudioSettings => "Settings", "Ajustes";
     StudioStats => "Statistics", "Estadísticas";
     TipStudio => "Open the Studio panel with every tool (Tab)", "Abrir el panel Estudio con todas las herramientas (Tab)";
     TipStudioClose => "Close the Studio panel (Tab)", "Cerrar el panel Estudio (Tab)";
@@ -213,6 +211,11 @@ strings! {
     ToastStreamStopped => "Stream ended", "Emisión terminada";
     NavViewer => "Live view", "Visor directo";
     NavStudio => "Studio mode", "Modo Estudio";
+    SettingsGroupImage => "Picture", "Imagen";
+    SettingsGroupLook => "Appearance", "Apariencia";
+    SettingsGroupApp => "App", "Aplicación";
+    SettingsKeepInTray => "Keep running in the tray", "Seguir en la bandeja";
+    SettingsKeepInTrayHint => "The window closes, but the replay and the hotkeys stay on.", "La ventana se cierra, pero el replay y los atajos siguen activos.";
     NavSettings => "Settings", "Ajustes";
     NavEncoderReady => "READY", "LISTO";
     NavEncoderActive => "ACTIVE", "ACTIVO";

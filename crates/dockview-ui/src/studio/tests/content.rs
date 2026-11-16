@@ -2,141 +2,7 @@
 
 use super::*;
 
-// -- The Settings section -------------------------------------------------
-
-use dockview_domain::settings::{LangMode, RenderPreset, SceneTransition, VideoModePref};
-use dockview_domain::theme::ThemeMode;
-
-fn settings_open() -> Rig {
-    let mut rig = Rig::new();
-    rig.frame(0.016);
-    rig.click_on(PanelHit::Header(StudioSection::Settings));
-    rig
-}
-
-#[test]
-fn folded_the_settings_section_registers_no_controls() {
-    let mut rig = Rig::new();
-    rig.frame(0.016);
-    assert!(rig.panel.items.is_empty());
-}
-
-#[test]
-fn the_settings_offer_the_same_choices_and_actions_as_the_popover() {
-    let rig = settings_open();
-    assert_eq!(
-        rig.panel.items,
-        [
-            Action::SetPreset(RenderPreset::Performance),
-            Action::SetPreset(RenderPreset::Balanced),
-            Action::SetPreset(RenderPreset::Quality),
-            Action::SetVideoMode(VideoModePref::Auto),
-            Action::SetVideoMode(VideoModePref::Compressed),
-            Action::SetSceneTransition(SceneTransition::Smooth),
-            Action::SetSceneTransition(SceneTransition::Cut),
-            Action::SetTheme(ThemeMode::Auto),
-            Action::SetTheme(ThemeMode::Dark),
-            Action::SetTheme(ThemeMode::Light),
-            Action::SetLang(LangMode::Auto),
-            Action::SetLang(LangMode::En),
-            Action::SetLang(LangMode::Es),
-        ]
-    );
-}
-
-#[test]
-fn clicking_a_choice_asks_for_it() {
-    let mut rig = settings_open();
-    // Dark is the ninth control (see the order above).
-    rig.click_on(PanelHit::Item(8));
-    assert_eq!(
-        rig.panel.take_actions(),
-        [Action::SetTheme(ThemeMode::Dark)]
-    );
-    rig.click_on(PanelHit::Item(12));
-    assert_eq!(rig.panel.take_actions(), [Action::SetLang(LangMode::Es)]);
-    rig.click_on(PanelHit::Item(6));
-    assert_eq!(
-        rig.panel.take_actions(),
-        [Action::SetSceneTransition(SceneTransition::Cut)]
-    );
-    rig.click_on(PanelHit::Item(2));
-    assert_eq!(
-        rig.panel.take_actions(),
-        [Action::SetPreset(RenderPreset::Quality)]
-    );
-}
-
-#[test]
-fn the_indicator_follows_what_the_model_says_is_selected() {
-    let mut rig = settings_open();
-    rig.model.theme_mode = ThemeMode::Light;
-    rig.model.preset = RenderPreset::Quality;
-    rig.model.lang_mode = LangMode::Es;
-    rig.model.video_mode = VideoModePref::Compressed;
-    rig.model.scenes.transition = SceneTransition::Cut;
-    rig.frame(0.016);
-    assert_eq!(rig.panel.slide["scene-transition"], 1.0);
-    assert_eq!(rig.panel.slide["theme"], 2.0);
-    assert_eq!(rig.panel.slide["quality"], 2.0);
-    assert_eq!(rig.panel.slide["language"], 2.0);
-    assert_eq!(rig.panel.slide["video-mode"], 1.0);
-}
-
-#[test]
-fn the_indicator_glides_to_a_new_choice_when_animations_are_on() {
-    let mut rig = settings_open();
-    rig.panel.set_animations(true);
-    rig.frame(0.016);
-    rig.model.theme_mode = ThemeMode::Light;
-    rig.frame(0.016);
-    let half_way = rig.panel.slide["theme"];
-    assert!(half_way > 0.0 && half_way < 2.0, "{half_way}");
-    for _ in 0..80 {
-        rig.frame(0.016);
-    }
-    assert_eq!(rig.panel.slide["theme"], 2.0);
-}
-
-#[test]
-fn the_settings_body_is_as_tall_as_its_content() {
-    use super::settings::body_height;
-    use super::widgets::{GAP, LABEL_H, ROW_H};
-    let groups = 5.0 * (LABEL_H + ROW_H) + 4.0 * GAP;
-    assert!(body_height() > groups, "room above and below");
-    assert!(body_height() < groups + 40.0, "but not much");
-    assert_eq!(
-        section_height(StudioSection::Settings, &model()),
-        body_height()
-    );
-}
-
-#[test]
-fn the_settings_controls_stay_inside_the_panel() {
-    let rig = settings_open();
-    let area = rig.panel.area().unwrap();
-    for (hit, rect) in &rig.panel.hits {
-        if matches!(hit, PanelHit::Item(_)) {
-            assert!(
-                rect.x >= area.x && rect.x + rect.w <= area.x + area.w,
-                "{rect:?}"
-            );
-        }
-    }
-}
-
-#[test]
-fn the_texts_of_the_settings_come_in_the_language_of_the_model() {
-    use dockview_domain::i18n::{tr, Key, Lang};
-    assert_ne!(
-        tr(Lang::En, Key::PresetPerformance),
-        tr(Lang::Es, Key::PresetPerformance)
-    );
-    let mut rig = settings_open();
-    rig.model.lang = Lang::Es;
-    rig.frame(0.016);
-    assert!(!rig.ui.vertices().is_empty());
-}
+// -- Sections in general ---------------------------------------------------
 
 #[test]
 fn a_section_can_be_unfolded_from_the_start() {
@@ -1014,7 +880,7 @@ fn a_folded_section_takes_no_room_and_costs_no_measuring() {
         .iter()
         .filter(|(h, _)| matches!(h, PanelHit::Header(_)))
         .count();
-    assert_eq!(folded, 6);
-    let (_, content_h) = stack(Scope::Full, &rig.panel.amount, &[0.0; 6]);
-    assert_eq!(content_h, HEADER_H * 6.0, "only the six headers");
+    assert_eq!(folded, 5);
+    let (_, content_h) = stack(Scope::Full, &rig.panel.amount, &[0.0; 5]);
+    assert_eq!(content_h, HEADER_H * 5.0, "only the five headers");
 }

@@ -256,8 +256,9 @@ fn the_measurements_close_once_a_second_and_reach_the_log() {
 fn asking_for_the_compressed_mode_reopens_the_card_with_it() {
     use dockview_domain::settings::VideoModePref;
     let mut rig = Rig::new();
-    rig.core
-        .apply(Action::SetVideoMode(VideoModePref::Compressed));
+    rig.core.apply(Action::Settings(
+        dockview_domain::settings_view::SettingsAction::SetVideoMode(VideoModePref::Compressed),
+    ));
 
     let sources = rig.sources.lock().unwrap();
     assert_eq!(sources.captures.len(), 2);

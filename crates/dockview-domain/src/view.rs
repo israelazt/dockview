@@ -2,13 +2,13 @@
 //! (`Action`). The application builds the model; the interface draws it and
 //! returns actions. Neither knows the other.
 
-use crate::settings::{LangMode, RecordingQuality, RenderPreset, SceneTransition, VideoModePref};
+use crate::settings::{RecordingQuality, SceneTransition};
 
 use crate::broadcast::StreamState;
 use crate::i18n::Lang;
 use crate::navigation::NavView;
 use crate::scene::NormRect;
-use crate::theme::{Theme, ThemeMode};
+use crate::theme::Theme;
 
 /// How healthy the video source is, for the status dot.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -190,10 +190,8 @@ pub struct Model {
     /// The first entry is the Windows default microphone.
     pub mic_devices: Vec<String>,
     pub mic_selected: Option<usize>,
-    pub preset: RenderPreset,
-    pub theme_mode: ThemeMode,
-    pub lang_mode: LangMode,
-    pub video_mode: VideoModePref,
+    /// What the Settings mode shows.
+    pub settings: crate::settings_view::SettingsView,
     pub stats_open: bool,
     /// The mode that is on. Full screen shows only the picture without
     /// leaving the mode.
@@ -234,10 +232,8 @@ pub enum Action {
     ToggleMic,
     /// Start or stop recording the session.
     ToggleRecord,
-    SetPreset(RenderPreset),
-    SetTheme(ThemeMode),
-    SetLang(LangMode),
-    SetVideoMode(VideoModePref),
+    /// A change in the Settings mode.
+    Settings(crate::settings_view::SettingsAction),
     SetSceneTransition(SceneTransition),
     /// How long a smooth scene change takes, in milliseconds.
     SetTransitionMs(u32),
@@ -379,10 +375,7 @@ mod tests {
             audio_selected: None,
             mic_devices: vec![],
             mic_selected: None,
-            preset: RenderPreset::Balanced,
-            theme_mode: ThemeMode::Auto,
-            lang_mode: LangMode::Auto,
-            video_mode: VideoModePref::Auto,
+            settings: crate::settings_view::SettingsView::default(),
             stats_open: false,
             mode: if studio {
                 AppMode::Studio

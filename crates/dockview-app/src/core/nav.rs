@@ -7,48 +7,59 @@ use dockview_domain::view::ReplayState;
 use super::*;
 
 impl Core {
-    /// Goes to `mode` and remembers it: the saved settings say whether the
-    /// panel was open, and the panel comes back on the last mode it had.
+    /// Goes to `mode`. The saved settings remember whether the Studio was the
+    /// mode that was on; Settings remembers where it came from so that leaving
+    /// it goes back there.
     pub(super) fn set_mode(&mut self, mode: AppMode) {
-        self.view.mode = mode;
-        if mode.shows_panel() {
-            self.view.last_panel = mode;
+        if mode == AppMode::Settings && self.view.mode != AppMode::Settings {
+            self.view.before_settings = self.view.mode;
         }
-        if self.settings.studio_open != mode.shows_panel() {
-            self.settings.studio_open = mode.shows_panel();
+        self.view.mode = mode;
+        let studio = mode == AppMode::Studio;
+        if self.settings.studio_open != studio {
+            self.settings.studio_open = studio;
             self.settings_changed();
         }
     }
 
-    /// Opens the Studio panel when it is closed, or closes it.
+    /// Opens the Studio, or goes back to the viewer if it is already on (the
+    /// Tab key). From Settings it goes to the Studio.
     pub(super) fn toggle_studio(&mut self) {
-        if self.view.mode.shows_panel() {
+        if self.view.mode == AppMode::Studio {
             self.set_mode(AppMode::Viewer);
         } else {
-            self.set_mode(self.view.last_panel);
+            self.open_studio();
         }
     }
 
-    /// Opens the Studio panel if it is closed, leaving full screen (where it
-    /// is hidden) so that it shows.
+    /// Goes to the Studio, leaving full screen (where only the picture shows)
+    /// so that it is seen.
     pub(super) fn open_studio(&mut self) {
-        if self.view.fullscreen {
+        self.go_to(AppMode::Studio);
+    }
+
+    /// Goes to a mode, leaving full screen when it is not the viewer.
+    pub(super) fn go_to(&mut self, mode: AppMode) {
+        if mode != AppMode::Viewer && self.view.fullscreen {
             self.set_fullscreen(false);
         }
-        if !self.view.mode.shows_panel() {
-            self.set_mode(self.view.last_panel);
-        }
+        self.set_mode(mode);
     }
 
-    /// Goes to a mode. Studio and Settings open the Studio panel (the section
-    /// is chosen by the interface, which also sees the click).
-    pub(super) fn go_to(&mut self, mode: AppMode) {
-        if mode == AppMode::Viewer {
-            self.set_mode(AppMode::Viewer);
-            return;
+    /// What `Esc` does to the mode that is on: Settings goes back to where it
+    /// came from, the Studio closes. Whether it did anything.
+    pub(super) fn leave_mode(&mut self) -> bool {
+        match self.view.mode {
+            AppMode::Viewer => false,
+            AppMode::Studio => {
+                self.set_mode(AppMode::Viewer);
+                true
+            }
+            AppMode::Settings => {
+                self.set_mode(self.view.before_settings);
+                true
+            }
         }
-        self.open_studio();
-        self.set_mode(mode);
     }
 
     pub(super) fn nav_view(&self) -> NavView {

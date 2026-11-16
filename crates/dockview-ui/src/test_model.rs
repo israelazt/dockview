@@ -2,8 +2,7 @@
 
 use dockview_domain::i18n::Lang;
 use dockview_domain::navigation::NavView;
-use dockview_domain::settings::{LangMode, RenderPreset, VideoModePref};
-use dockview_domain::theme::{Theme, ThemeMode};
+use dockview_domain::theme::Theme;
 use dockview_domain::view::*;
 
 pub(crate) fn model() -> Model {
@@ -21,10 +20,7 @@ pub(crate) fn model() -> Model {
         audio_selected: Some(0),
         mic_devices: vec!["Windows default".into(), "USB Microphone".into()],
         mic_selected: Some(0),
-        preset: RenderPreset::Balanced,
-        theme_mode: ThemeMode::Auto,
-        lang_mode: LangMode::Auto,
-        video_mode: VideoModePref::Auto,
+        settings: dockview_domain::settings_view::SettingsView::default(),
         stats_open: false,
         mode: dockview_domain::navigation::AppMode::Viewer,
         snip: true,

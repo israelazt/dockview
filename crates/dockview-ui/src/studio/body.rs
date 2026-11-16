@@ -20,7 +20,6 @@ impl StudioPanel {
         body: Rect,
     ) {
         match section {
-            StudioSection::Settings => self.draw_settings(ui, m, body),
             StudioSection::Sources => self.draw_sources(ui, m, body),
             StudioSection::Audio => self.draw_audio(ui, m, body),
             StudioSection::Scenes => self.draw_scenes(ui, m, body),

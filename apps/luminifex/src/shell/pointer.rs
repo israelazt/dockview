@@ -50,15 +50,20 @@ impl Shell {
         let Some(window) = &self.window else {
             return;
         };
-        let pointer = self.controls.wants_pointer()
-            || self.studio.wants_pointer()
-            || self.side.wants_pointer()
-            || self.canvas_bar.wants_pointer()
-            || self.navbar.wants_pointer()
-            || self.hud.wants_pointer()
-            || self.source_picker.wants_pointer()
-            || self.stats_panel.wants_pointer()
-            || self.rail.wants_pointer();
+        // Settings has a view of its own: only it and the tabs can be pointed at.
+        let pointer = if self.core.mode() == dockview_domain::navigation::AppMode::Settings {
+            self.settings_page.wants_pointer() || self.navbar.wants_pointer()
+        } else {
+            self.controls.wants_pointer()
+                || self.studio.wants_pointer()
+                || self.side.wants_pointer()
+                || self.canvas_bar.wants_pointer()
+                || self.navbar.wants_pointer()
+                || self.hud.wants_pointer()
+                || self.source_picker.wants_pointer()
+                || self.stats_panel.wants_pointer()
+                || self.rail.wants_pointer()
+        };
         let frame = self
             .cursor_phys
             .map(|(x, y)| self.chrome().zone_at(x, y).cursor())

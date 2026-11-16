@@ -33,6 +33,7 @@ mod scene_tests;
 #[cfg(test)]
 mod scene_tools_tests;
 mod scene_transition;
+mod settings_actions;
 mod sources;
 mod startup;
 mod stats;
@@ -166,8 +167,8 @@ struct ViewState {
     /// The mode that is on (the Studio panel is open in every mode but the
     /// viewer).
     mode: dockview_domain::navigation::AppMode,
-    /// The mode the panel comes back to when it is opened again (Tab, the pill).
-    last_panel: dockview_domain::navigation::AppMode,
+    /// Where Settings was opened from (it goes back there when it is left).
+    before_settings: dockview_domain::navigation::AppMode,
     /// The layer of the active scene the editor works on.
     layer_selected: Option<usize>,
     /// The layer editor is on, over the picture.
