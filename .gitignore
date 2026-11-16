@@ -1,40 +1,22 @@
-# Build output
-bin/
-obj/
+# Rust
+target/
+dist/
 
-# Single-file publish output at project root
-Dockview.exe
+# Leftovers of the old C# build on this machine (the C# itself lives in main)
+/bin/
+/obj/
+/coverage/
+/Dockview.exe
+/Dockview.Tests/
 
-# User-specific Visual Studio files
-.vs/
-*.user
-*.suo
-*.userosscache
-*.sln.docstates
-
-# Rider
+# IDE
 .idea/
-
-# VS Code
 .vscode/
-
-# NuGet
-*.nupkg
-packages/
-project.lock.json
-project.fragment.lock.json
-artifacts/
-
-# Test coverage
-coverage/
+.vs/
 
 # OS
 Thumbs.db
 .DS_Store
-
-# Rust
-rust/target/
-rust/dist/
 
 # Skill symlinks (real files live in .agents/skills)
 .claude/skills/
