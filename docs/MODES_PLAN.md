@@ -88,9 +88,9 @@ Igual que el resto: tarea atómica (cambio pequeño con tests; `fmt`, `clippy -D
 
 | Tarea | Qué | Listo cuando |
 |---|---|---|
-| D-1 | `StudioView` y `StudioAction`; las secciones del panel quedan: Fuentes, Escenas, Audio (con sincronía), Grabación, Estadísticas | `Action` del Estudio separada |
-| D-2 | La lista de fuentes del Estudio absorbe lo que el visor hacía (cambiar de fuente) y el selector flotante desaparece o se vuelve interno del Estudio | Un solo selector |
-| D-3 | La emisión (URL, clave, estado) en su sección o en Grabación, sin tocar nada del visor | Sección clara |
+| D-1 ◐ | Las secciones del panel quedan: Fuentes, Escenas, Audio (con sincronía), Grabación, **Emisión**, Estadísticas. **Pendiente:** `StudioView` y `StudioAction` como tipos propios (hoy siguen en el `Action` plano) | `Action` del Estudio separada |
+| D-2 ✅ | El selector flotante del visor se borró (C-2); cambiar de fuente es solo de la lista «Capas y fuentes» del Estudio | Un solo selector |
+| D-3 ✅ | Sección **Emisión** del Estudio: servicio (Twitch, YouTube, Kick u otro), dirección del servidor, clave (se escribe y no se vuelve a mostrar), imágenes por segundo, bitrate, botón Emitir/Detener y estado en vivo. Acciones nuevas `SetStreamFps`/`SetStreamKbps`; el campo de texto del panel sirve ya para el nombre de escena, la dirección y la clave (`EditTarget`) | Sección clara |
 
 **Pausa D.**
 

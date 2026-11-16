@@ -131,3 +131,34 @@ fn with_the_replay_off_the_sound_still_reaches_the_stream() {
     tap.offer(Instant::now(), &[0.1; 20]);
     assert!(stream_audio.take(Duration::ZERO).is_some());
 }
+
+#[test]
+fn the_frame_rate_and_the_bitrate_are_chosen_kept_in_range_and_saved() {
+    let mut rig = Rig::new();
+    let view = rig.core.model().stream;
+    assert_eq!((view.fps, view.video_kbps), (30, 4500), "the defaults");
+    rig.core.apply(Action::SetStreamFps(60));
+    rig.core.apply(Action::SetStreamKbps(6000));
+    let view = rig.core.model().stream;
+    assert_eq!((view.fps, view.video_kbps), (60, 6000));
+    let saved = rig.saved_soon().expect("saved");
+    assert_eq!((saved.stream.fps, saved.stream.video_kbps), (60, 6000));
+    // Absurd values are brought into the range the encoder accepts.
+    rig.core.apply(Action::SetStreamFps(0));
+    rig.core.apply(Action::SetStreamKbps(10_000_000));
+    let view = rig.core.model().stream;
+    assert_eq!(view.fps, dockview_domain::stream_settings::MIN_FPS);
+    assert_eq!(view.video_kbps, dockview_domain::stream_settings::MAX_KBPS);
+}
+
+#[test]
+fn the_view_of_the_stream_carries_what_the_section_shows() {
+    let mut rig = Rig::new();
+    rig.core.apply(Action::SetStreamUrl(
+        "rtmps://live.twitch.tv:443/app".into(),
+    ));
+    rig.core.apply(Action::SetStreamKey("live_key".into()));
+    let view = rig.core.model().stream;
+    assert_eq!(view.address, "rtmps://live.twitch.tv:443/app");
+    assert!(view.has_key, "the key is there but its text never is");
+}

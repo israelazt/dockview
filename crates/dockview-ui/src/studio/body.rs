@@ -24,6 +24,7 @@ impl StudioPanel {
             StudioSection::Audio => self.draw_audio(ui, m, body),
             StudioSection::Scenes => self.draw_scenes(ui, m, body),
             StudioSection::Recording => self.draw_recording(ui, m, body),
+            StudioSection::Stream => self.draw_stream(ui, m, body),
             StudioSection::Stats => self.draw_stats(ui, m, stats, body),
         }
     }

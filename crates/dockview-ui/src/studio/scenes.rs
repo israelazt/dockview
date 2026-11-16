@@ -7,6 +7,7 @@ use dockview_domain::i18n::{tr, Key, Lang};
 use dockview_domain::theme::{Color, Theme};
 use dockview_domain::view::{Action, Model, SceneAction};
 
+use super::edit;
 use super::scene_list::{self, SCENE_ROW_H};
 use super::widgets::{list_height, GAP, LABEL_H, ROW_H};
 use super::{intersect, PanelHit, StudioPanel, PAD};
@@ -94,7 +95,11 @@ impl StudioPanel {
         if self.confirm_delete != Some(active) {
             self.confirm_delete = None;
         }
-        if self.editing.as_ref().is_some_and(|(i, _)| *i != active) {
+        if self
+            .editing
+            .as_ref()
+            .is_some_and(|(t, _)| matches!(t, edit::EditTarget::Scene(i) if *i != active))
+        {
             self.editing = None;
         }
         y += GAP;
@@ -219,7 +224,7 @@ impl StudioPanel {
         let typing = self
             .editing
             .as_ref()
-            .filter(|(i, _)| *i == active)
+            .filter(|(t, _)| *t == edit::EditTarget::Scene(active))
             .map(|(_, e)| (e.text().to_owned(), e.before_caret().to_owned()));
         let Some((typed, before_caret)) = typing else {
             self.rename_of = Some((active, name.to_owned()));

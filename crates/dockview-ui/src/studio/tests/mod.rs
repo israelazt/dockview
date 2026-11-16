@@ -16,7 +16,7 @@ fn section_height(section: StudioSection, m: &Model) -> f32 {
     section.body_height(&mut Ui::new(), m, &Stats::default(), PANEL_WIDTH)
 }
 
-fn heights_of(m: &Model) -> [f32; 5] {
+fn heights_of(m: &Model) -> [f32; 6] {
     StudioSection::ALL.map(|s| section_height(s, m))
 }
 
@@ -362,7 +362,7 @@ fn a_header_scrolled_under_the_top_cannot_be_clicked_where_it_is_cut() {
     tall_window(&mut rig);
     // Scrolled so that the second header straddles the top of the list.
     let heights = heights_of(&rig.model);
-    let (rows, _) = stack(Scope::Full, &[1.0; 5], &heights);
+    let (rows, _) = stack(Scope::Full, &[1.0; 6], &heights);
     rig.panel.scroll_target = rows[1].top + HEADER_H / 2.0;
     rig.frame(0.016);
     let scenes = rig.rect_of(PanelHit::Header(StudioSection::Scenes));
@@ -438,6 +438,7 @@ fn the_texts_come_in_the_language_of_the_model() {
 
 mod content;
 mod side;
+mod stream;
 
 #[test]
 fn a_section_opened_from_the_pill_is_shown_once_the_panel_is_on_screen() {

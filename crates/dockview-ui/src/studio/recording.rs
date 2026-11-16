@@ -20,7 +20,7 @@ const STATUS_LINE: f32 = 18.0;
 const HINT_LINE: f32 = 16.0;
 /// Height of the clip length stepper, and of the big buttons.
 const STEPPER_H: f32 = 40.0;
-const BUTTON_H: f32 = 40.0;
+pub(super) const BUTTON_H: f32 = 40.0;
 /// The size of the round buttons of the stepper.
 const STEP_BUTTON: f32 = 32.0;
 
@@ -276,7 +276,7 @@ impl StudioPanel {
 
     /// A wide button with an icon and a label; with `accent` it is filled.
     #[allow(clippy::too_many_arguments)]
-    fn big_button(
+    pub(super) fn big_button(
         &mut self,
         ui: &mut Ui,
         m: &Model,

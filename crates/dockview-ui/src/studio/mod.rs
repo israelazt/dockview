@@ -26,6 +26,7 @@ mod scroll;
 mod sections;
 mod sources;
 mod stats;
+mod stream;
 mod typing;
 mod widgets;
 
@@ -85,15 +86,18 @@ enum PanelHit {
     Rename,
     /// The text field of the rename; a press inside it does not end the edit.
     EditField,
+    /// The fields of the stream's address and key.
+    StreamUrl,
+    StreamKey,
 }
 
 pub struct StudioPanel {
     /// Which sections it lists.
     scope: Scope,
     /// Which sections are meant to be open.
-    open: [bool; 5],
+    open: [bool; 6],
     /// How open each one is now (0 to 1), moving towards `open`.
-    amount: [f32; 5],
+    amount: [f32; 6],
     scroll: f32,
     scroll_target: f32,
     /// How far the panel is opened, 0 (closed) to 1, linear in time.
@@ -129,8 +133,11 @@ pub struct StudioPanel {
     confirm_delete: Option<usize>,
     /// The scene the delete button of the last frame would ask about.
     ask_delete_of: Option<usize>,
-    /// The scene whose name is being typed, with the text so far.
-    editing: Option<(usize, edit::TextEdit)>,
+    /// The line being typed (a scene's name, the stream address or key), with
+    /// the text so far.
+    editing: Option<(edit::EditTarget, edit::TextEdit)>,
+    /// The address of the stream server as the last frame showed it.
+    stream_url_of: String,
     /// The scene the rename button of the last frame would edit, and its name.
     rename_of: Option<(usize, String)>,
     /// Keys typed since the last frame; they are applied in the next one, where
@@ -145,8 +152,8 @@ impl StudioPanel {
     pub fn new() -> Self {
         Self {
             scope: Scope::Full,
-            open: [false; 5],
-            amount: [0.0; 5],
+            open: [false; 6],
+            amount: [0.0; 6],
             scroll: 0.0,
             scroll_target: 0.0,
             progress: 0.0,
@@ -169,6 +176,7 @@ impl StudioPanel {
             confirm_delete: None,
             ask_delete_of: None,
             editing: None,
+            stream_url_of: String::new(),
             rename_of: None,
             typed: Vec::new(),
             edit_room: 180.0,
@@ -306,7 +314,7 @@ impl StudioPanel {
         self.apply_typed_keys(ui);
         // Only a section that is open, or still folding, has a body to measure
         // (some of them wrap text, which is not free).
-        let mut heights = [0.0; 5];
+        let mut heights = [0.0; 6];
         for (i, section) in StudioSection::ALL.into_iter().enumerate() {
             if self.scope.includes(section) && (self.is_open(section) || self.amount[i] > 0.0) {
                 heights[i] = section.body_height_in(self.scope, ui, m, stats, full_width);

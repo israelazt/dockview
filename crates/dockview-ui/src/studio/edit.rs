@@ -18,6 +18,17 @@ pub enum TextKey {
     Escape,
 }
 
+/// What a line of text being typed is for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EditTarget {
+    /// The name of the scene at this position.
+    Scene(usize),
+    /// The address of the stream server.
+    StreamUrl,
+    /// The stream key (it is never shown).
+    StreamKey,
+}
+
 /// What a key did, beyond changing the text.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Outcome {

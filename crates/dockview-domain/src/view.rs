@@ -170,6 +170,9 @@ pub struct StreamView {
     pub has_key: bool,
     /// The server address chosen.
     pub address: String,
+    /// Frames per second and video bitrate (kilobits per second) chosen.
+    pub fps: u32,
+    pub video_kbps: u32,
 }
 
 /// Everything the controls display.
@@ -260,6 +263,10 @@ pub enum Action {
     SetStreamUrl(String),
     /// The stream key, which is kept apart from the settings.
     SetStreamKey(String),
+    /// Frames per second of the stream.
+    SetStreamFps(u32),
+    /// Video bitrate of the stream, in kilobits per second.
+    SetStreamKbps(u32),
     /// Move the clip length one step longer (+1) or shorter (-1).
     ReplayLength(i32),
     SaveReplay,

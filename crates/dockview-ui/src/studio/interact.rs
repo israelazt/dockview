@@ -17,7 +17,16 @@ impl StudioPanel {
     ) {
         if pointer.just_pressed {
             self.pressed = self.hovered;
-            if self.hovered != Some(PanelHit::EditField) {
+            // A press inside the line being typed keeps the edit going.
+            let inside = self.editing.as_ref().is_some_and(|(target, _)| {
+                self.hovered
+                    == Some(match target {
+                        edit::EditTarget::Scene(_) => PanelHit::EditField,
+                        edit::EditTarget::StreamUrl => PanelHit::StreamUrl,
+                        edit::EditTarget::StreamKey => PanelHit::StreamKey,
+                    })
+            });
+            if !inside {
                 self.editing = None;
             }
         }
@@ -84,10 +93,23 @@ impl StudioPanel {
             PanelHit::CancelDelete => self.confirm_delete = None,
             PanelHit::Rename => {
                 if let Some((index, name)) = self.rename_of.clone() {
-                    self.editing = Some((index, edit::TextEdit::new(&name)));
+                    self.editing =
+                        Some((edit::EditTarget::Scene(index), edit::TextEdit::new(&name)));
                 }
             }
             PanelHit::EditField => {}
+            // The address starts from what it is; the key always starts empty
+            // (the saved one is never shown), and typing replaces it.
+            PanelHit::StreamUrl if !self.is_editing() => {
+                self.editing = Some((
+                    edit::EditTarget::StreamUrl,
+                    edit::TextEdit::new(&self.stream_url_of),
+                ));
+            }
+            PanelHit::StreamKey if !self.is_editing() => {
+                self.editing = Some((edit::EditTarget::StreamKey, edit::TextEdit::new("")));
+            }
+            PanelHit::StreamUrl | PanelHit::StreamKey => {}
             PanelHit::Item(i) => {
                 if let Some(action) = self.items.get(i) {
                     // Whatever is answered, the question is over.

@@ -195,6 +195,18 @@ impl Core {
                 self.set_stream_key(&key);
                 return; // the key is not part of the settings
             }
+            Action::SetStreamFps(fps) => {
+                self.settings.stream.fps = fps.clamp(
+                    dockview_domain::stream_settings::MIN_FPS,
+                    dockview_domain::stream_settings::MAX_FPS,
+                );
+            }
+            Action::SetStreamKbps(kbps) => {
+                self.settings.stream.video_kbps = kbps.clamp(
+                    dockview_domain::stream_settings::MIN_KBPS,
+                    dockview_domain::stream_settings::MAX_KBPS,
+                );
+            }
             Action::SelectMonitor(index) => {
                 if let Some(monitor) = self.sources.monitors.get(index) {
                     let (handle, name) = (monitor.handle, monitor.device_name.clone());

@@ -84,6 +84,8 @@ impl Core {
             reconnects: stats.reconnects,
             has_key: self.stream.has_key(),
             address: self.settings.stream.url.clone(),
+            fps: self.settings.stream.fps,
+            video_kbps: self.settings.stream.video_kbps,
         }
     }
 }
