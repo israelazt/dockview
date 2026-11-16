@@ -74,6 +74,9 @@ pub struct Shell {
     last_video_shown: Instant,
     /// When the renderer was last rebuilt after losing the device.
     last_graphics_try: Instant,
+    /// The window was maximized when it went to full screen: it is maximized
+    /// again when it leaves.
+    maximized_before_fullscreen: bool,
     needs_redraw: bool,
     cursor_icon: CursorIcon,
     /// The layer editor over the picture, and the keys that modify its drags.
@@ -152,6 +155,7 @@ impl Shell {
             last_frame: Instant::now(),
             last_video_shown: Instant::now(),
             last_graphics_try: Instant::now(),
+            maximized_before_fullscreen: false,
             needs_redraw: true,
             cursor_icon: CursorIcon::Default,
             scene_editor: SceneEditor::new(),
@@ -305,18 +309,29 @@ impl Shell {
         report_startup_failure(self.core.lang(), failure, detail, silent);
     }
 
+    /// Enters or leaves full screen, taking care of the maximized state.
+    fn set_window_fullscreen(&mut self, on: bool) {
+        let Some(window) = &self.window else {
+            return;
+        };
+        let plan =
+            helpers::fullscreen_plan(on, window.is_maximized(), self.maximized_before_fullscreen);
+        self.maximized_before_fullscreen = plan.remember_maximized;
+        if plan.unmaximize_first {
+            window.set_maximized(false);
+        }
+        window.set_fullscreen(on.then_some(winit::window::Fullscreen::Borderless(None)));
+        if plan.maximize_after {
+            window.set_maximized(true);
+        }
+    }
+
     /// Does what the core asked of the window since the last call.
     fn apply_host_requests(&mut self) {
         let requests = std::mem::take(&mut self.host.borrow_mut().requests);
         for request in requests {
             match request {
-                HostRequest::Fullscreen(on) => {
-                    if let Some(window) = &self.window {
-                        window.set_fullscreen(
-                            on.then_some(winit::window::Fullscreen::Borderless(None)),
-                        );
-                    }
-                }
+                HostRequest::Fullscreen(on) => self.set_window_fullscreen(on),
                 HostRequest::Preset(preset) => {
                     if let Some(presenter) = self.presenter.as_mut() {
                         presenter.set_filter(filter_for(preset));
