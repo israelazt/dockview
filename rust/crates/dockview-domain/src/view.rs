@@ -197,6 +197,8 @@ pub struct Model {
     pub stats_open: bool,
     /// Studio mode: the side panel is open (it stays hidden in full screen).
     pub studio: bool,
+    /// The screenshot tool is on (see `snap::ENABLED`).
+    pub snip: bool,
     pub replay: ReplayView,
     pub mic: MicView,
     pub rec: RecView,
@@ -381,6 +383,7 @@ mod tests {
             video_mode: VideoModePref::Auto,
             stats_open: false,
             studio,
+            snip: true,
             replay: ReplayView::off("Ctrl+Alt+S"),
             mic: MicView::off(),
             rec: RecView::idle(),

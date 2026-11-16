@@ -19,6 +19,7 @@ fn tick(rig: &mut Rig) {
 }
 
 #[test]
+#[ignore = "the screenshot tool is off (snap::ENABLED)"]
 fn at_start_the_hotkey_is_registered_and_the_tray_is_shown_in_the_language() {
     let rig = Rig::new();
     let world = rig.resident.lock().unwrap();
@@ -33,6 +34,7 @@ fn at_start_the_hotkey_is_registered_and_the_tray_is_shown_in_the_language() {
 }
 
 #[test]
+#[ignore = "the screenshot tool is off (snap::ENABLED)"]
 fn the_hotkey_starts_a_capture_in_the_mode_chosen() {
     let mut rig = Rig::new();
     rig.resident.lock().unwrap().pressed = true;
@@ -52,6 +54,7 @@ fn the_hotkey_starts_a_capture_in_the_mode_chosen() {
 }
 
 #[test]
+#[ignore = "the screenshot tool is off (snap::ENABLED)"]
 fn what_the_user_does_with_the_icon_becomes_what_the_window_does() {
     let mut rig = Rig::new();
     rig.resident.lock().unwrap().tray_events = vec![
@@ -67,6 +70,7 @@ fn what_the_user_does_with_the_icon_becomes_what_the_window_does() {
 }
 
 #[test]
+#[ignore = "the screenshot tool is off (snap::ENABLED)"]
 fn a_new_hotkey_replaces_the_old_one_which_is_given_back_first() {
     let mut rig = Rig::new();
     let ctrl_f10 = HotkeySpec::parse("Ctrl+F10").unwrap();
@@ -86,6 +90,7 @@ fn a_new_hotkey_replaces_the_old_one_which_is_given_back_first() {
 }
 
 #[test]
+#[ignore = "the screenshot tool is off (snap::ENABLED)"]
 fn a_hotkey_another_program_has_is_said_once_and_not_retried_every_tick() {
     let mut rig = Rig::new();
     let taken = HotkeySpec::parse("Ctrl+F11").unwrap();
@@ -102,6 +107,7 @@ fn a_hotkey_another_program_has_is_said_once_and_not_retried_every_tick() {
 }
 
 #[test]
+#[ignore = "the screenshot tool is off (snap::ENABLED)"]
 fn a_key_the_system_keeps_is_registered_and_the_user_is_told_once() {
     let mut rig = Rig::new();
     let kept = HotkeySpec::parse("Ctrl+F12").unwrap();
@@ -115,6 +121,7 @@ fn a_key_the_system_keeps_is_registered_and_the_user_is_told_once() {
 }
 
 #[test]
+#[ignore = "the screenshot tool is off (snap::ENABLED)"]
 fn the_tray_comes_and_goes_with_the_setting_and_follows_the_language() {
     let mut rig = Rig::new();
     rig.core.settings.capture.keep_in_tray = false;
@@ -226,4 +233,32 @@ fn an_interface_preview_touches_no_hotkey_and_no_tray() {
     let world = rig.resident.lock().unwrap();
     assert!(world.registered.is_empty());
     assert_eq!(world.tray_alive, 0);
+}
+
+// -- With the screenshot tool off ---------------------------------------------
+
+#[test]
+fn with_the_tool_off_no_hotkey_is_taken_and_nothing_starts_a_screenshot() {
+    use dockview_domain::view::Action;
+    let mut rig = Rig::new();
+    assert!(rig.resident.lock().unwrap().registered.is_empty());
+    rig.resident.lock().unwrap().pressed = true;
+    tick(&mut rig);
+    rig.core.apply(Action::Capture);
+    assert!(rig.host.lock().unwrap().captures.is_empty());
+}
+
+#[test]
+fn with_the_tool_off_the_tray_menu_only_opens_and_quits() {
+    let rig = Rig::new();
+    let world = rig.resident.lock().unwrap();
+    assert_eq!(world.tray_shown.len(), 1, "the tray itself stays");
+    let entries = &world.tray_shown[0].menu;
+    assert!(entries.iter().all(|e| !matches!(
+        e,
+        MenuEntry::Heading(_) | MenuEntry::Item(_, TrayEvent::Capture(_))
+    )));
+    assert!(entries
+        .iter()
+        .any(|e| matches!(e, MenuEntry::Item(_, TrayEvent::Open))));
 }

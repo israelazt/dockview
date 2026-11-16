@@ -132,6 +132,7 @@ impl Core {
             video_mode: self.settings.video_mode,
             stats_open: self.view.stats_open,
             studio: self.settings.studio_open,
+            snip: dockview_domain::snap::ENABLED,
             replay: self.replay_view(),
             mic_devices: self.mic_device_names(self.lang_mode().resolve(self.view.system_lang)),
             mic_selected: Some(self.mic_selected()),
@@ -198,6 +199,9 @@ impl Core {
             }
             Action::ToggleHud => self.settings.hud = !self.settings.hud,
             Action::Capture => {
+                if !dockview_domain::snap::ENABLED {
+                    return;
+                }
                 self.host.start_capture(self.settings.capture.mode);
                 return;
             }

@@ -132,6 +132,7 @@ fn pictures_the_viewer_never_showed_are_a_rate_that_falls_back_to_zero() {
 }
 
 #[test]
+#[ignore = "the screenshot tool is off (snap::ENABLED)"]
 fn the_capture_button_starts_a_screenshot_in_the_chosen_mode() {
     use dockview_domain::select::Mode;
     let mut rig = Rig::new();

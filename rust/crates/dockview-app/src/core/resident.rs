@@ -44,7 +44,11 @@ impl Core {
         }
         for event in self.resident.poll(self.settings.capture.mode) {
             match event {
-                ResidentEvent::Capture(mode) => self.host.start_capture(mode),
+                ResidentEvent::Capture(mode) => {
+                    if dockview_domain::snap::ENABLED {
+                        self.host.start_capture(mode);
+                    }
+                }
                 ResidentEvent::OpenWindow => self.host.show_window(),
                 ResidentEvent::NotificationClicked => self.reveal_last_screenshot(),
                 ResidentEvent::Quit => self.host.quit(),

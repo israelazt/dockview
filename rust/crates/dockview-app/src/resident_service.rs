@@ -61,11 +61,13 @@ impl ResidentService {
     /// user should know (a hotkey somebody else has).
     pub fn sync(&mut self, settings: &CaptureSettings, lang: Lang) -> Vec<AppEvent> {
         let mut events = Vec::new();
-        if self.asked != Some(settings.hotkey) {
-            self.asked = Some(settings.hotkey);
+        // With the screenshot tool off, its hotkey is never taken.
+        let wanted = settings.hotkey.filter(|_| dockview_domain::snap::ENABLED);
+        if self.asked != Some(wanted) {
+            self.asked = Some(wanted);
             // The old combination is given back before the new one is taken.
             self.trigger = None;
-            if let Some(spec) = settings.hotkey {
+            if let Some(spec) = wanted {
                 match self.hotkeys.register(&spec) {
                     Ok(trigger) => {
                         self.trigger = Some(trigger);

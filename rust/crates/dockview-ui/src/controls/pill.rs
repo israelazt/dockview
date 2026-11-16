@@ -57,7 +57,13 @@ fn bar_metrics(ui: &mut Ui, m: &Model, room: f32) -> BarMetrics {
     };
     let record =
         |chips: bool| wide(12.0 + 8.0 + record_text + if chips { record_chip } else { 0.0 });
-    let capture_w = wide(ICON_SIZE - 2.0 + 8.0 + capture_label);
+    // The screenshot button is not there when the tool is off.
+    let capture_w = if m.snip {
+        wide(ICON_SIZE - 2.0 + 8.0 + capture_label)
+    } else {
+        0.0
+    };
+    let capture_gap = if m.snip { GAP } else { 0.0 };
     let volume = ICON_SIZE + 8.0 + SLIDER_WIDTH + 8.0 + percent_w;
     let sync = BUTTON + sync_value_w + BUTTON;
     let divider = DIVIDER_PAD * 2.0 + 1.0;
@@ -67,7 +73,7 @@ fn bar_metrics(ui: &mut Ui, m: &Model, room: f32) -> BarMetrics {
             + save(chips)
             + GAP
             + record(chips)
-            + GAP
+            + capture_gap
             + capture_w
             + divider
             + volume
@@ -139,8 +145,10 @@ impl Controls {
         };
         let mut x = pill.x + PAD_X;
         x = self.save_button(ui, m, &metrics, row, x) + GAP;
-        x = self.record_button(ui, m, &metrics, row, x) + GAP;
-        x = self.capture_button(ui, m, &metrics, row, x);
+        x = self.record_button(ui, m, &metrics, row, x);
+        if m.snip {
+            x = self.capture_button(ui, m, &metrics, row, x + GAP);
+        }
         x = divider_at(ui, t, x, cy);
         x = self.pill_volume(ui, m, &metrics, row, x);
         if metrics.show_sync {

@@ -620,3 +620,17 @@ fn the_pointer_is_over_the_controls_on_the_pill_and_its_buttons_only() {
     rig.move_to(20.0, 20.0);
     assert!(!rig.controls.over_controls(), "on the picture");
 }
+
+#[test]
+fn with_the_screenshot_tool_off_the_pill_has_no_capture_button_and_is_narrower() {
+    let mut on = Rig::new(true);
+    on.frame(0.016);
+    let with = on.controls.rect_of(Hit::Pill).w;
+    assert!(on.controls.hits.iter().any(|(h, _)| *h == Hit::Capture));
+
+    let mut off = Rig::new(true);
+    off.model.snip = false;
+    off.frame(0.016);
+    assert!(off.controls.hits.iter().all(|(h, _)| *h != Hit::Capture));
+    assert!(off.controls.rect_of(Hit::Pill).w < with);
+}

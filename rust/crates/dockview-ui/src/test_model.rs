@@ -27,6 +27,7 @@ pub(crate) fn model() -> Model {
         video_mode: VideoModePref::Auto,
         stats_open: false,
         studio: false,
+        snip: true,
         replay: ReplayView::off("Ctrl+Alt+S"),
         mic: MicView::off(),
         rec: RecView::idle(),

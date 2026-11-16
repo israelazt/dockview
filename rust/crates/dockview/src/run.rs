@@ -56,6 +56,10 @@ pub fn run() {
     }
     // A screenshot from the command line: take it and leave, with no window.
     if let Some(job) = &cli.snap {
+        if !dockview_domain::snap::ENABLED {
+            dockview_domain::log_error!("snap: the screenshot tool is turned off");
+            std::process::exit(2);
+        }
         std::process::exit(crate::snap::run(job));
     }
 

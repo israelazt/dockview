@@ -5,6 +5,11 @@
 use std::path::PathBuf;
 
 use crate::desktop::PxRect;
+
+/// Whether the screenshot tool is on: the «Captura» button, its global hotkey,
+/// the tray menu's capture entries and `--snap`. Off for now; the code stays,
+/// so turning it back on is changing this one value.
+pub const ENABLED: bool = false;
 use crate::select::Mode;
 use crate::sources::WindowInfo;
 
