@@ -179,6 +179,8 @@ impl Shell {
         let source_picker = &mut self.source_picker;
         // The readouts show in the viewer: no panel, not in full screen.
         let hud_show = model.hud && !model.mode.shows_panel() && !model.fullscreen;
+        // The pill and the statistics over the picture are of the viewer.
+        let viewer_only = model.mode == dockview_domain::navigation::AppMode::Viewer;
         let navbar = &mut self.navbar;
         let rail = &mut self.rail;
         let strip = &mut self.strip;
@@ -263,7 +265,12 @@ impl Shell {
                     } else {
                         float_pointer
                     };
-                    controls.frame(ui, &model, &bar_pointer, dt);
+                    // The pill is of the viewer: it is not in the Studio.
+                    if model.mode == dockview_domain::navigation::AppMode::Viewer {
+                        controls.frame(ui, &model, &bar_pointer, dt);
+                    } else {
+                        controls.hide();
+                    }
                     let hud_h =
                         hud.frame(ui, &model, stats, &float_pointer, hud_show, dt, animations);
                     if hud.take_source_click() {
@@ -281,7 +288,7 @@ impl Shell {
                         model.lang,
                         stats,
                         &float_pointer,
-                        stats_open,
+                        stats_open && viewer_only,
                         dt,
                         animations,
                     );

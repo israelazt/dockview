@@ -133,6 +133,15 @@ impl Controls {
         self.is_visible() && self.hovered.is_some_and(Hit::is_widget)
     }
 
+    /// The controls are not part of the mode that is on: they vanish at once
+    /// and nothing under the pointer belongs to them any more.
+    pub fn hide(&mut self) {
+        self.visibility = 0.0;
+        self.hits.clear();
+        self.hovered = None;
+        self.pressed = None;
+    }
+
     /// Runs one frame: input, then drawing.
     pub fn frame(&mut self, ui: &mut Ui, model: &Model, pointer: &Pointer, dt: f32) {
         self.dt = dt;

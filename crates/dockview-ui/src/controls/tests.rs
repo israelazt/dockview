@@ -634,3 +634,18 @@ fn with_the_screenshot_tool_off_the_pill_has_no_capture_button_and_is_narrower()
     assert!(off.controls.hits.iter().all(|(h, _)| *h != Hit::Capture));
     assert!(off.controls.rect_of(Hit::Pill).w < with);
 }
+
+#[test]
+fn hiding_the_controls_takes_them_off_at_once_and_leaves_nothing_under_the_pointer() {
+    let mut rig = Rig::new(true);
+    let (x, y) = rig.controls.rect_of(Hit::Fullscreen).center();
+    rig.move_to(x, y);
+    assert!(rig.controls.over_controls() && rig.controls.wants_pointer());
+    rig.controls.hide();
+    assert!(!rig.controls.is_visible());
+    assert!(!rig.controls.over_controls() && !rig.controls.wants_pointer());
+    // A press now reaches nothing: there is nothing to press.
+    rig.pointer.press();
+    rig.controls.hide();
+    assert!(rig.actions().is_empty());
+}
