@@ -95,6 +95,8 @@ pub struct Ui {
     clip: Option<ClipRect>,
     /// The width [`Ui::logical_size`] reports, when less than the window's.
     width_limit: Option<f32>,
+    /// The height [`Ui::logical_size`] reports, when less than the window's.
+    height_limit: Option<f32>,
     /// Room kept free at the top (the title bar): everything drawn is pushed
     /// down by it and [`Ui::logical_size`] is that much shorter.
     inset_top: f32,
@@ -113,6 +115,7 @@ impl Ui {
             offset: (0.0, 0.0),
             clip: None,
             width_limit: None,
+            height_limit: None,
             inset_top: 0.0,
             inset_left: 0.0,
         }
@@ -128,6 +131,7 @@ impl Ui {
         self.offset = (0.0, 0.0);
         self.clip = None;
         self.width_limit = None;
+        self.height_limit = None;
         self.inset_top = 0.0;
         self.inset_left = 0.0;
     }
@@ -152,6 +156,13 @@ impl Ui {
     /// to the whole window. Drawing itself is not clipped.
     pub fn limit_width(&mut self, width: Option<f32>) {
         self.width_limit = width;
+    }
+
+    /// Like [`Ui::limit_width`] for the height: whatever anchors to the bottom
+    /// (the pill) anchors to the bottom of the video, not of the window, so it
+    /// does not draw over a bar under the video.
+    pub fn limit_height(&mut self, height: Option<f32>) {
+        self.height_limit = height;
     }
 
     /// Keeps `height` logical pixels free at the top (for the title bar): what
@@ -184,9 +195,10 @@ impl Ui {
     /// Viewport size in logical pixels (narrowed by [`Ui::limit_width`]).
     pub fn logical_size(&self) -> (f32, f32) {
         let width = (self.viewport.0 as f32 / self.scale - self.inset_left).max(0.0);
+        let height = (self.viewport.1 as f32 / self.scale - self.inset_top).max(0.0);
         (
             self.width_limit.map_or(width, |limit| limit.min(width)),
-            (self.viewport.1 as f32 / self.scale - self.inset_top).max(0.0),
+            self.height_limit.map_or(height, |limit| limit.min(height)),
         )
     }
 
@@ -449,6 +461,13 @@ mod tests {
         ui.limit_width(Some(100.0));
         ui.begin((1280, 720), 1.0);
         assert_eq!(ui.logical_size(), (1280.0, 720.0), "reset by a new frame");
+        ui.limit_height(Some(500.0));
+        assert_eq!(ui.logical_size(), (1280.0, 500.0));
+        ui.limit_height(Some(5000.0));
+        assert_eq!(ui.logical_size().1, 720.0, "never taller than the window");
+        ui.limit_height(Some(100.0));
+        ui.begin((1280, 720), 1.0);
+        assert_eq!(ui.logical_size().1, 720.0, "reset by a new frame");
     }
 
     #[test]

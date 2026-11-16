@@ -219,6 +219,9 @@ impl Shell {
                 ui.set_inset_left(rail_l + vl.x);
                 ui.set_inset_top(top_l + vl.y);
                 ui.limit_width(Some(place.video_width));
+                // The pill anchors to the bottom of the video, above the
+                // transition bar, not to the window's.
+                ui.limit_height(Some(vl.h));
                 // Under the list the bar must not take the pointer either.
                 let bar_pointer = if source_picker.covers(float_pointer.pos) {
                     Pointer {
@@ -238,6 +241,7 @@ impl Shell {
                 }
                 // What anchors to the top sits under the readouts.
                 ui.set_inset_top(top_l + vl.y + hud_h);
+                ui.limit_height(Some((vl.h - hud_h).max(0.0)));
                 stats_panel.frame(
                     ui,
                     &model.theme,
@@ -260,11 +264,13 @@ impl Shell {
                 toasts.frame(ui, &model.theme, dt, animations);
                 // The list of sources, over the rest of what floats.
                 ui.set_inset_top(top_l + vl.y);
+                ui.limit_height(Some(vl.h));
                 source_picker.frame(ui, &model, &float_pointer, hud.source_card());
                 ui.set_inset_top(top_l);
                 ui.set_inset_left(rail_l);
                 // The panel and the left column, on top, in the room they took.
                 ui.limit_width(None);
+                ui.limit_height(None);
                 side.frame(
                     ui,
                     &model,
