@@ -12,9 +12,32 @@ fn workspace() -> PathBuf {
         .unwrap()
 }
 
+/// Where a crate lives: the libraries under `crates/`, the programs under
+/// `apps/` (the program is still called `dockview`; its folder is `luminifex`).
+fn crate_dir(krate: &str) -> PathBuf {
+    if krate == "dockview" {
+        return workspace().join("apps").join("luminifex");
+    }
+    let app = workspace().join("apps").join(krate);
+    if app.is_dir() {
+        app
+    } else {
+        workspace().join("crates").join(krate)
+    }
+}
+
+/// Every folder with Rust sources of the workspace.
+fn source_roots() -> Vec<PathBuf> {
+    ["crates", "apps"]
+        .iter()
+        .map(|d| workspace().join(d))
+        .filter(|d| d.is_dir())
+        .collect()
+}
+
 /// Names of the crates a manifest depends on (all `[*dependencies]` tables).
 fn dependencies_of(krate: &str) -> Vec<String> {
-    let manifest = workspace().join("crates").join(krate).join("Cargo.toml");
+    let manifest = crate_dir(krate).join("Cargo.toml");
     let text = fs::read_to_string(&manifest).unwrap();
     let mut in_dependencies = false;
     let mut names = Vec::new();
@@ -115,7 +138,9 @@ fn no_source_file_is_too_big() {
     const LIMIT: usize = 400;
     const TESTS_LIMIT: usize = 1000;
     let mut files = Vec::new();
-    rust_files(&workspace().join("crates"), &mut files);
+    for root in source_roots() {
+        rust_files(&root, &mut files);
+    }
     let mut too_big = Vec::new();
     for path in files {
         let relative = path.strip_prefix(workspace()).unwrap().to_path_buf();
@@ -170,7 +195,7 @@ fn before_the_tests_module(text: &str) -> &str {
 /// which reaches the file and, when there is one, the console.
 const PRINT_EXCEPTIONS: [(&str, &str); 4] = [
     (
-        "dockview/src/shell/window.rs",
+        "luminifex/src/shell/window.rs",
         "`--screenshot` reports the file it saved on the standard output, for scripts",
     ),
     (
@@ -178,7 +203,7 @@ const PRINT_EXCEPTIONS: [(&str, &str); 4] = [
         "the log's own mirror to the console",
     ),
     (
-        "dockview/build.rs",
+        "luminifex/build.rs",
         "a build script talks to cargo by printing `cargo:` lines",
     ),
     (
@@ -190,7 +215,9 @@ const PRINT_EXCEPTIONS: [(&str, &str); 4] = [
 #[test]
 fn production_code_logs_instead_of_printing() {
     let mut files = Vec::new();
-    rust_files(&workspace().join("crates"), &mut files);
+    for root in source_roots() {
+        rust_files(&root, &mut files);
+    }
     let mut offenders = Vec::new();
     for path in files {
         let relative = path.strip_prefix(workspace()).unwrap().to_path_buf();

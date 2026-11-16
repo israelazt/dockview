@@ -7,10 +7,10 @@ license.workspace = true
 # The program: the window and the event loop, and the wiring of the real
 # adapters into the application. No logic. See ARCHITECTURE.md.
 [dependencies]
-dockview-domain = { path = "../dockview-domain" }
-dockview-platform = { path = "../dockview-platform" }
-dockview-ui = { path = "../dockview-ui" }
-dockview-app = { path = "../dockview-app" }
+dockview-domain = { path = "../../crates/dockview-domain" }
+dockview-platform = { path = "../../crates/dockview-platform" }
+dockview-ui = { path = "../../crates/dockview-ui" }
+dockview-app = { path = "../../crates/dockview-app" }
 winit.workspace = true
 png = "0.18"
 
