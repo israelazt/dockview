@@ -6,9 +6,9 @@ on:
   push:
     branches: [main, migration/rust]
     paths:
-      - "rust/installer/**"
-      - "rust/tools/build_installer.ps1"
-      - "rust/tools/test_installer.ps1"
+      - "installer/**"
+      - "tools/build_installer.ps1"
+      - "tools/test_installer.ps1"
       - ".github/workflows/installer.yml"
   workflow_dispatch:
 
@@ -22,15 +22,10 @@ env:
 jobs:
   installer:
     runs-on: windows-latest
-    defaults:
-      run:
-        working-directory: rust
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: rust
       - name: Build the installer and the portable download
         shell: pwsh
         run: ./tools/build_installer.ps1

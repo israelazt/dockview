@@ -4,7 +4,7 @@
 
 ## 1. Punto de partida
 
-**Fuente:** `rust/design/modo-estudio.png` y `rust/design/visor-directo.png` (dos pantallas de una maqueta con el nombre **Luminifex**) y `rust/design/skeleton.png`, el **esqueleto** que se repite en toda la aplicación (ver §2.1). Donde el esqueleto y las pantallas difieren, **manda el esqueleto**.
+**Fuente:** `design/modo-estudio.png` y `design/visor-directo.png` (dos pantallas de una maqueta con el nombre **Luminifex**) y `design/skeleton.png`, el **esqueleto** que se repite en toda la aplicación (ver §2.1). Donde el esqueleto y las pantallas difieren, **manda el esqueleto**.
 
 **Decisiones del autor (2026-11-14):**
 1. Es la dirección para **toda** la aplicación, no solo para dos pantallas.

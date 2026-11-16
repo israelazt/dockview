@@ -39,7 +39,7 @@ Una interfaz elegante y mínima que casi no se ve: el video ocupa toda la ventan
 ## Tareas
 
 ### U-0 · Spike de texto — HECHO
-- **U-0.1** ✅ Inter 4.1 (Regular, Medium, SemiBold) y Lucide (iconos) con sus licencias en `rust/crates/dockview-app/assets/fonts/`. Pendiente más adelante: recortar (subset) las fuentes para reducir ~2,7 MB a unos cientos de KB.
+- **U-0.1** ✅ Inter 4.1 (Regular, Medium, SemiBold) y Lucide (iconos) con sus licencias en `crates/dockview-app/assets/fonts/`. Pendiente más adelante: recortar (subset) las fuentes para reducir ~2,7 MB a unos cientos de KB.
 - **U-0.2** ✅ Comparación a 11/13/16 px. **Decisión: `cosmic-text`.** Aplica el kerning de Inter (`AVATAR`, `Toy`, `Ty` más ajustados), ligaduras (`fi`, `fl`), espaciado más uniforme y permite números tabulares con `font_features` (`tnum`), cosa que `fontdue` no hace. Coste: un binario de prueba de 3,5 MB con ambas librerías y las dos fuentes; asumible.
 
 ### U-1 · Capa de dibujo — HECHO
@@ -79,7 +79,7 @@ dockview.exe --ui-preview --studio-section settings  # con el panel Estudio abie
 dockview.exe --ui-preview --screenshot salida.png   # guarda la ventana y sale
 ```
 
-Las capturas de referencia están en `rust/ui-previews/`.
+Las capturas de referencia están en `ui-previews/`.
 
 ## Panel de estadísticas y diagnóstico
 

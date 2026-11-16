@@ -6,6 +6,6 @@ license.workspace = true
 
 # The application: `Core` holds the state, the services and what each action
 # does, and works only against the ports of the domain. No window, no Windows,
-# no interface. See rust/ARCHITECTURE.md.
+# no interface. See ARCHITECTURE.md.
 [dependencies]
 dockview-domain = { path = "../dockview-domain" }

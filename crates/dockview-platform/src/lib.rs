@@ -1,6 +1,6 @@
 //! Dockview platform: the Windows side. Capture, audio, the encoder, the GPU,
 //! the recorder and what is saved to disk. It implements the ports defined in
-//! `dockview-domain`. See `rust/ARCHITECTURE.md`.
+//! `dockview-domain`. See `ARCHITECTURE.md`.
 
 #[cfg(windows)]
 pub mod audio;

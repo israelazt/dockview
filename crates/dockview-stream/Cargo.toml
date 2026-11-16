@@ -7,7 +7,7 @@ license.workspace = true
 # Going live: the FLV packaging, the RTMP protocol and the service that keeps a
 # stream running, over a `Transport` port. No Windows and no threads of its own
 # beyond what the transport does, so it is written once for every system and
-# tested against a fake server. See rust/STREAMER_PLAN.md.
+# tested against a fake server. See docs/STREAMER_PLAN.md.
 [dependencies]
 dockview-domain = { path = "../dockview-domain" }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }

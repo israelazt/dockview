@@ -5,7 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 # The program: the window and the event loop, and the wiring of the real
-# adapters into the application. No logic. See rust/ARCHITECTURE.md.
+# adapters into the application. No logic. See ARCHITECTURE.md.
 [dependencies]
 dockview-domain = { path = "../dockview-domain" }
 dockview-platform = { path = "../dockview-platform" }

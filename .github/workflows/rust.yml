@@ -12,23 +12,18 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   # A hosted runner has no capture card, GPU encoder or screen: the tests that
-  # need them skip on purpose (see rust/crates/dockview-platform/src/test_support.rs).
+  # need them skip on purpose (see crates/dockview-platform/src/test_support.rs).
   DOCKVIEW_NO_HARDWARE: "1"
 
 jobs:
   check:
     runs-on: windows-latest
-    defaults:
-      run:
-        working-directory: rust
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: rust
       - name: Format
         run: cargo fmt --all -- --check
       - name: Clippy
@@ -42,17 +37,12 @@ jobs:
   # program builds too, with its system adapters answering "not available".
   linux:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: rust
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: rust
       - name: Clippy (portable layers)
         run: >
           cargo clippy -p dockview-domain -p dockview-stream -p dockview-app -p dockview-ui --all-targets -- -D warnings

@@ -1,10 +1,10 @@
-//! Guards of the architecture (see `rust/ARCHITECTURE.md`). They fail when
+//! Guards of the architecture (see `ARCHITECTURE.md`). They fail when
 //! someone breaks a rule the design depends on, so the rules do not rot.
 
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// The `rust/` folder of the workspace.
+/// The root folder of the workspace.
 fn workspace() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")

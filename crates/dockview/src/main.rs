@@ -6,7 +6,7 @@
 //!
 //! This crate is only the window and the wiring: it creates the real adapters,
 //! hands them to the application (`dockview-app`) and draws what it asks to
-//! show. The decisions are not here. See `rust/ARCHITECTURE.md`.
+//! show. The decisions are not here. See `ARCHITECTURE.md`.
 
 // The release build is a window program: no console appears on a double click
 // (a terminal it was started from is attached to in `run`). Debug builds keep

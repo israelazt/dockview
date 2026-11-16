@@ -1,6 +1,6 @@
 # Arquitectura de Dockview
 
-Definida el 2026-11-12, después de desacoplar la app una vez (ver `ARCHITECTURE_REVIEW.md`). El objetivo es **no tener que volver a desacoplarla**: cada tipo de código tiene un sitio, y el compilador impide que una capa importe lo que no debe.
+Definida el 2026-11-12, después de desacoplar la app una vez (ver `docs/ARCHITECTURE_REVIEW.md`). El objetivo es **no tener que volver a desacoplarla**: cada tipo de código tiene un sitio, y el compilador impide que una capa importe lo que no debe.
 
 ## Los crates
 
@@ -84,8 +84,8 @@ Las flechas solo van hacia abajo. `ui`, `app` y `platform` no se ven entre sí: 
 - [x] Paso 8: `dockview-app` es una **biblioteca** que solo depende de `dockview-domain` (`Core`, con su API pública: `model`, `apply`, `on_key`, `tick`, `take_events`…), y el binario `dockview` es solo la ventana (`Shell`, el `Host` real y la raíz de composición `run`). Los cinco crates de la tabla existen y el compilador impone las dependencias.
 - [x] Paso 9: guardas automáticas (`crates/dockview-domain/tests/architecture.rs`): dependencias permitidas por crate y límite de 400 líneas de código por archivo (1000 en `tests.rs`). Se partieron `encode`, `compose`, `render`, `scene_runtime` y `controls/scenes`.
 
-- [x] Arnés de `Core` (bloque 1 de `HARDENING_PLAN.md`): `testing/` con dobles de `ReplayMachine`, `SourceMachine`, `SystemProbe`, `StatsSink` y `Host`, y `Rig` para construir un `Core` sobre ellos. Los tests de conjunto están en `core/tests.rs`.
+- [x] Arnés de `Core` (bloque 1 de `docs/HARDENING_PLAN.md`): `testing/` con dobles de `ReplayMachine`, `SourceMachine`, `SystemProbe`, `StatsSink` y `Host`, y `Rig` para construir un `Core` sobre ellos. Los tests de conjunto están en `core/tests.rs`.
 
-- [x] `Core` en servicios (bloque 8 de `HARDENING_PLAN.md`): `SourcesService`, `ScenesService` y `SettingsStorage` son dueños de su estado y tienen tests propios; `Core` pasó de 23 a 12 campos. La guarda de tamaño ahora corta solo en `#[cfg(test)] mod tests` (antes, un `#[cfg(test)] mod x;` arriba del archivo la dejaba sin contar casi nada).
+- [x] `Core` en servicios (bloque 8 de `docs/HARDENING_PLAN.md`): `SourcesService`, `ScenesService` y `SettingsStorage` son dueños de su estado y tienen tests propios; `Core` pasó de 23 a 12 campos. La guarda de tamaño ahora corta solo en `#[cfg(test)] mod tests` (antes, un `#[cfg(test)] mod x;` arriba del archivo la dejaba sin contar casi nada).
 
 Cada paso deja la app funcionando, con todos los tests, una prueba con la app real y la comparación de la interfaz píxel a píxel, y se commitea y sube por separado.
