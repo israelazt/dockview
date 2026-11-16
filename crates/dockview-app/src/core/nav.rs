@@ -7,9 +7,8 @@ use dockview_domain::view::ReplayState;
 use super::*;
 
 impl Core {
-    /// Goes to a tab. Until the Recordings and Settings tabs have screens of
-    /// their own they open the Studio panel (the section is chosen by the
-    /// interface, which also sees the click).
+    /// Goes to a tab. The Studio and Settings tabs open the Studio panel (the
+    /// section is chosen by the interface, which also sees the click).
     pub(super) fn go_to(&mut self, tab: NavTab) {
         if tab == NavTab::Viewer {
             if self.settings.studio_open {

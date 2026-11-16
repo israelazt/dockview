@@ -213,7 +213,6 @@ strings! {
     ToastStreamStopped => "Stream ended", "Emisión terminada";
     NavViewer => "Live view", "Visor directo";
     NavStudio => "Studio mode", "Modo Estudio";
-    NavRecordings => "Recordings", "Grabaciones";
     NavSettings => "Settings", "Ajustes";
     NavEncoderReady => "READY", "LISTO";
     NavEncoderActive => "ACTIVE", "ACTIVO";

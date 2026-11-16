@@ -1,4 +1,4 @@
-//! The navigation row under the title bar: the four tabs and the status on its
+//! The navigation row under the title bar: the three tabs and the status on its
 //! right. Plain data and the words for it; what draws it is `dockview-ui`.
 
 use crate::broadcast::StreamState;
@@ -11,19 +11,17 @@ pub enum NavTab {
     #[default]
     Viewer,
     Studio,
-    Recordings,
     Settings,
 }
 
 impl NavTab {
-    pub const ALL: [NavTab; 4] = [Self::Viewer, Self::Studio, Self::Recordings, Self::Settings];
+    pub const ALL: [NavTab; 3] = [Self::Viewer, Self::Studio, Self::Settings];
 
     /// The words on the tab.
     pub fn title(self) -> Key {
         match self {
             Self::Viewer => Key::NavViewer,
             Self::Studio => Key::NavStudio,
-            Self::Recordings => Key::NavRecordings,
             Self::Settings => Key::NavSettings,
         }
     }

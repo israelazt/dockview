@@ -183,7 +183,6 @@ impl NavBar {
                 if pressed == over {
                     self.actions.push(Action::GoTo(over));
                     self.section = match over {
-                        NavTab::Recordings => Some(StudioSection::Recording),
                         NavTab::Settings => Some(StudioSection::Settings),
                         _ => None,
                     };
@@ -322,15 +321,21 @@ mod tests {
     }
 
     #[test]
-    fn recordings_and_settings_ask_for_their_section_of_the_panel() {
+    fn settings_asks_for_its_section_of_the_panel_and_only_once() {
         let m = model();
         let mut bar = NavBar::new();
-        click(&mut bar, &m, centre_of(&m, NavTab::Recordings));
-        assert_eq!(bar.take_actions(), [Action::GoTo(NavTab::Recordings)]);
-        assert_eq!(bar.take_studio_request(), Some(StudioSection::Recording));
-        assert_eq!(bar.take_studio_request(), None, "asked once");
         click(&mut bar, &m, centre_of(&m, NavTab::Settings));
+        assert_eq!(bar.take_actions(), [Action::GoTo(NavTab::Settings)]);
         assert_eq!(bar.take_studio_request(), Some(StudioSection::Settings));
+        assert_eq!(bar.take_studio_request(), None, "asked once");
+    }
+
+    #[test]
+    fn the_row_has_exactly_three_tabs_viewer_studio_and_settings() {
+        assert_eq!(
+            NavTab::ALL,
+            [NavTab::Viewer, NavTab::Studio, NavTab::Settings]
+        );
     }
 
     #[test]

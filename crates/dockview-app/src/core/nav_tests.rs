@@ -33,12 +33,10 @@ fn the_studio_tab_opens_the_panel_and_the_viewer_tab_closes_it() {
 }
 
 #[test]
-fn recordings_and_settings_open_the_panel_and_stay_the_tab_that_is_on() {
+fn settings_opens_the_panel_and_stays_the_tab_that_is_on() {
     let mut rig = Rig::new();
-    rig.core.apply(Action::GoTo(NavTab::Recordings));
-    assert!(rig.core.model().studio);
-    assert_eq!(tab(&rig), NavTab::Recordings);
     rig.core.apply(Action::GoTo(NavTab::Settings));
+    assert!(rig.core.model().studio);
     assert_eq!(tab(&rig), NavTab::Settings);
     rig.core.apply(Action::GoTo(NavTab::Studio));
     assert_eq!(tab(&rig), NavTab::Studio);
