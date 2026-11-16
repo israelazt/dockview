@@ -68,9 +68,35 @@ pub struct NavView {
     pub encoder: EncoderState,
     /// The short name of the encoder (see [`encoder_badge`]); empty when unknown.
     pub encoder_name: String,
-    /// Pictures lost this session.
-    pub drops: u64,
+    /// Pictures the viewer lost per second, over the last second measured.
+    pub drops_per_sec: f32,
     pub stream: StreamState,
+}
+
+/// Below this many lost pictures per second the figure reads as zero.
+const DROPS_SHOWN_FROM: f32 = 0.05;
+
+impl NavView {
+    /// Pictures are being lost right now.
+    pub fn is_dropping(&self) -> bool {
+        self.drops_per_sec >= DROPS_SHOWN_FROM
+    }
+
+    /// The rate as written in the interface: `0`, `0.5` or `0,5`, `12`.
+    pub fn drops_text(&self, lang: crate::i18n::Lang) -> String {
+        let r = self.drops_per_sec;
+        let text = if r < DROPS_SHOWN_FROM {
+            "0".to_string()
+        } else if r < 10.0 {
+            format!("{r:.1}")
+        } else {
+            format!("{r:.0}")
+        };
+        match lang {
+            crate::i18n::Lang::Es => text.replace('.', ","),
+            _ => text,
+        }
+    }
 }
 
 /// The short name of a hardware encoder, from the name Windows gives it, in
@@ -111,5 +137,33 @@ mod tests {
         assert_eq!(encoder_badge("AMD Radeon H264 Encoder"), "AMF");
         assert_eq!(encoder_badge("Some Other Encoder"), "H.264");
         assert_eq!(encoder_badge(""), "H.264");
+    }
+}
+
+#[cfg(test)]
+mod drops_tests {
+    use super::*;
+    use crate::i18n::Lang;
+
+    fn nav(rate: f32) -> NavView {
+        NavView {
+            drops_per_sec: rate,
+            ..NavView::default()
+        }
+    }
+
+    #[test]
+    fn the_rate_is_written_the_way_the_language_does() {
+        assert_eq!(nav(0.0).drops_text(Lang::En), "0");
+        assert_eq!(nav(0.04).drops_text(Lang::En), "0", "too small to show");
+        assert_eq!(nav(0.5).drops_text(Lang::En), "0.5");
+        assert_eq!(nav(0.5).drops_text(Lang::Es), "0,5");
+        assert_eq!(nav(12.4).drops_text(Lang::En), "12");
+    }
+
+    #[test]
+    fn only_a_rate_that_shows_counts_as_dropping() {
+        assert!(!nav(0.0).is_dropping() && !nav(0.04).is_dropping());
+        assert!(nav(0.05).is_dropping() && nav(30.0).is_dropping());
     }
 }

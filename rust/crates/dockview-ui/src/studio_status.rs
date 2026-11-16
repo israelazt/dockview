@@ -56,7 +56,7 @@ pub fn data(m: &Model, stats: &Stats) -> StatusData {
         Some(ms) => (format!("{ms:.1}"), tier_color(t, latency_tier(ms))),
         None => ("…".to_string(), t.text_dim),
     };
-    let drops = m.nav.drops;
+    let dropping = m.nav.is_dropping();
     StatusData {
         scene,
         dot: status_color(t, m.status),
@@ -72,9 +72,9 @@ pub fn data(m: &Model, stats: &Stats) -> StatusData {
                 color: latency_color,
             },
             Figure {
-                value: drops.to_string(),
+                value: m.nav.drops_text(m.lang),
                 label: tr(m.lang, Key::HudDrops).to_string(),
-                color: if drops > 0 { t.warn } else { t.text },
+                color: if dropping { t.warn } else { t.text },
             },
         ],
     }
@@ -145,7 +145,7 @@ mod tests {
     #[test]
     fn it_gives_frames_delay_and_losses_in_that_order() {
         let mut m = model();
-        m.nav.drops = 3;
+        m.nav.drops_per_sec = 3.0;
         let figures = data(&m, &measured()).figures;
         let shown: Vec<_> = figures
             .iter()
@@ -153,7 +153,7 @@ mod tests {
             .collect();
         assert_eq!(shown[0], ("60", "fps"));
         assert_eq!(shown[1], ("12.3", "ms"));
-        assert_eq!(shown[2].0, "3");
+        assert_eq!(shown[2].0, "3.0");
         assert_eq!(figures[2].color, m.theme.warn, "losses stand out");
     }
 

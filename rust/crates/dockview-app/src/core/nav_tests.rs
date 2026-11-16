@@ -105,9 +105,10 @@ fn the_stream_counts_as_using_the_encoder_and_is_reported() {
 }
 
 #[test]
-fn pictures_the_viewer_never_showed_are_counted_as_lost() {
-    let rig = Rig::new();
-    assert_eq!(rig.core.model().nav.drops, 0);
+fn pictures_the_viewer_never_showed_are_a_rate_that_falls_back_to_zero() {
+    use std::time::Duration;
+    let mut rig = Rig::new();
+    assert_eq!(rig.core.model().nav.drops_per_sec, 0.0);
     let slot = rig.core.output_slot().clone();
     let picture = || Frame {
         width: 2,
@@ -121,7 +122,13 @@ fn pictures_the_viewer_never_showed_are_counted_as_lost() {
     };
     slot.publish(picture());
     slot.publish(picture()); // replaces the first one before it was shown
-    assert_eq!(rig.core.model().nav.drops, 1);
+    rig.advance(Duration::from_millis(1100));
+    let rate = rig.core.model().nav.drops_per_sec;
+    assert!(rate > 0.5 && rate < 1.2, "about one per second: {rate}");
+    // Nothing more is lost in the next second: the figure goes back down
+    // instead of staying at the total.
+    rig.advance(Duration::from_millis(1100));
+    assert_eq!(rig.core.model().nav.drops_per_sec, 0.0);
 }
 
 #[test]

@@ -64,7 +64,7 @@ impl Core {
             tab,
             encoder,
             encoder_name: encoder_name.to_string(),
-            drops: self.slot.dropped() + self.stream.stats().dropped_frames,
+            drops_per_sec: self.measures.stats.dropped_per_sec,
             stream: self.stream.stats().state,
         }
     }

@@ -218,7 +218,7 @@ strings! {
     NavEncoderReady => "READY", "LISTO";
     NavEncoderActive => "ACTIVE", "ACTIVO";
     NavEncoderNone => "NO ENCODER", "SIN CODIFICADOR";
-    NavDrops => "DROPS", "PÉRDIDAS";
+    NavDrops => "DROPS/s", "PÉRDIDAS/s";
     NavOffline => "Offline", "Sin emitir";
     NavConnecting => "Connecting", "Conectando";
     NavLive => "LIVE", "EN DIRECTO";
@@ -239,7 +239,7 @@ strings! {
     HudReplayOff => "REPLAY OFF", "REPLAY APAGADO";
     HudReplayNone => "NO REPLAY", "SIN REPLAY";
     HudHealth => "Pipeline health", "Salud del pipeline";
-    HudDrops => "drops", "pérdidas";
+    HudDrops => "drops/s", "pérdidas/s";
     BarSave => "Save clip", "Guardar clip";
     BarRecord => "Record", "Grabar";
     BarCapture => "Screenshot", "Captura";

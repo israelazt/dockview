@@ -366,7 +366,7 @@ mod tests {
         m.replay.state = ReplayState::Recording;
         m.replay.keep_seconds = 30;
         m.replay.hotkey = "Ctrl+Alt+S".into();
-        m.nav.drops = 2;
+        m.nav.drops_per_sec = 2.0;
         let texts = texts_of(&cards(&m, &measured()));
         for want in [
             "HDMI 1: Elgato 4K60 Pro",
@@ -374,7 +374,7 @@ mod tests {
             "1.2 ms",
             "ULTRA LOW",
             "60 fps",
-            "2",
+            "2.0",
             "52 MB",
             "1.2%",
             "0.08 ms",

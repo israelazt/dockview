@@ -113,9 +113,9 @@ pub(super) fn cards(m: &Model, stats: &Stats) -> Vec<Card> {
         ),
         Piece::Divider,
         Piece::Stack(
-            format!("{}", m.nav.drops),
+            m.nav.drops_text(lang),
             tr(lang, Key::HudDrops).to_string(),
-            if m.nav.drops > 0 { t.warn } else { t.text },
+            if m.nav.is_dropping() { t.warn } else { t.text },
         ),
         Piece::Divider,
         Piece::Stack(format!("{:.0} MB", stats.memory_mb), "RAM".into(), t.text),

@@ -83,8 +83,8 @@ fn items(theme: &Theme, lang: Lang, nav: &NavView) -> Vec<Item> {
         }
     }
     out.push(Item {
-        text: format!("{} {}", nav.drops, word(Key::NavDrops)),
-        color: if nav.drops > 0 {
+        text: format!("{} {}", nav.drops_text(lang), word(Key::NavDrops)),
+        color: if nav.is_dropping() {
             theme.warn
         } else {
             theme.text
@@ -390,20 +390,20 @@ mod tests {
         let nav = NavView {
             encoder: EncoderState::Active,
             encoder_name: "NVENC".into(),
-            drops: 3,
+            drops_per_sec: 3.0,
             stream: StreamState::Live,
             ..NavView::default()
         };
         let list = items(&theme, Lang::En, &nav);
         let texts: Vec<&str> = list.iter().map(|i| i.text.as_str()).collect();
-        assert_eq!(texts, ["NVENC ACTIVE", "3 DROPS", "LIVE"]);
+        assert_eq!(texts, ["NVENC ACTIVE", "3.0 DROPS/s", "LIVE"]);
         assert_eq!(list[1].color, theme.warn, "lost pictures stand out");
         assert_eq!(list[2].color, theme.error, "live is red");
         let quiet = items(&theme, Lang::Es, &NavView::default());
         let texts: Vec<&str> = quiet.iter().map(|i| i.text.as_str()).collect();
         assert_eq!(
             texts,
-            ["0 PÉRDIDAS", "Sin emitir"],
+            ["0 PÉRDIDAS/s", "Sin emitir"],
             "an unknown encoder is not shown"
         );
     }
