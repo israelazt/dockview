@@ -46,6 +46,7 @@ impl Core {
                 rendered: 0,
                 video_size: (0, 0),
                 fullscreen: false,
+                exclusion: None,
                 system_appearance: Appearance::Dark,
                 system_lang,
                 stats_open: show_stats,

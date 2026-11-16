@@ -28,6 +28,7 @@ impl Core {
         self.maintain_audio(now);
         self.maintain_overlays(now);
         self.tick_transition();
+        self.refresh_exclusion();
         if sources_open && self.sources.lists_are_stale(now, SOURCES_REFRESH) {
             self.refresh_sources();
         }

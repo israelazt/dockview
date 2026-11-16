@@ -339,6 +339,7 @@ impl Shell {
         if let Some(window) = &self.window {
             let size = window.inner_size();
             shared.window_size = (size.width, size.height);
+            shared.monitor_name = window.current_monitor().and_then(|m| m.name());
             shared.monitor_hz = window
                 .current_monitor()
                 .and_then(|m| m.refresh_rate_millihertz())

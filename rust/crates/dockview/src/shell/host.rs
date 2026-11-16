@@ -34,6 +34,8 @@ pub struct HostShared {
     /// The window's native handle, once it exists.
     pub native: Option<NativeWindow>,
     pub window_size: (u32, u32),
+    /// The monitor the window is on, by the system's name.
+    pub monitor_name: Option<String>,
     pub monitor_hz: Option<f32>,
     pub gpu_ms: Option<f32>,
     /// What the application asked for, in order, until the shell does it.
@@ -77,6 +79,10 @@ impl Host for ShellHost {
 
     fn window_size(&self) -> (u32, u32) {
         self.shared.borrow().window_size
+    }
+
+    fn window_monitor(&self) -> Option<String> {
+        self.shared.borrow().monitor_name.clone()
     }
 
     fn monitor_hz(&self) -> Option<f32> {

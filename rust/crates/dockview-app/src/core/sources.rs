@@ -12,7 +12,8 @@ impl Core {
 
     /// Hides Dockview's own window from the capture, so a captured screen does
     /// not show the viewer inside itself.
-    pub(super) fn set_capture_exclusion(&self, on: bool) {
+    pub(super) fn set_capture_exclusion(&mut self, on: bool) {
+        self.view.exclusion = Some(on);
         self.host.exclude_from_capture(on);
     }
 
@@ -24,7 +25,9 @@ impl Core {
         self.sources.release(); // releases the capture card
         self.sources.stop_audio(); // the card's sound is not needed
         self.view.video_size = (0, 0);
-        self.set_capture_exclusion(true);
+        // Decided before the first picture, with the kind already known.
+        self.sources.source_kind = kind;
+        self.set_capture_exclusion(self.wants_exclusion());
         self.sources.open_screen(target, kind);
         self.route_audio();
     }

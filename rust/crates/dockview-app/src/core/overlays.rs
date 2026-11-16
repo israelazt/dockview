@@ -147,10 +147,39 @@ impl Core {
     }
 
     /// Whether Dockview's own window must stay out of the captured picture:
-    /// whenever any layer is a screen.
+    /// only when a monitor being captured is the one the window is on (else
+    /// the picture would show itself inside itself). A window being captured
+    /// cannot show the viewer, and excluding the window needlessly breaks
+    /// other programs' captures of it (the Xbox Game Bar gives an empty file).
     pub fn wants_exclusion(&self) -> bool {
-        self.sources.source_kind != SourceKind::Capture
-            || self.scenes.leaving_has_screen()
-            || self.scenes.has_screen_overlay()
+        let mut captured = self.scenes.captured_monitors();
+        if let SourceKind::Monitor(handle) = self.sources.source_kind {
+            // A monitor that is not in the list any more is taken as the worst
+            // case (an empty name stands for "could be any").
+            captured.push(
+                self.sources
+                    .monitors
+                    .iter()
+                    .find(|m| m.handle == handle)
+                    .map(|m| m.device_name.clone())
+                    .unwrap_or_default(),
+            );
+        }
+        if captured.is_empty() {
+            return false;
+        }
+        match self.host.window_monitor() {
+            None => true,
+            Some(own) => captured.iter().any(|c| c.is_empty() || *c == own),
+        }
+    }
+
+    /// Follows the window from one monitor to another: the exclusion is only
+    /// asked of the system when what it should be has changed.
+    pub(super) fn refresh_exclusion(&mut self) {
+        let wanted = self.wants_exclusion();
+        if self.view.exclusion != Some(wanted) {
+            self.set_capture_exclusion(wanted);
+        }
     }
 }

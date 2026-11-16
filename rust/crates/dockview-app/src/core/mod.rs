@@ -155,6 +155,8 @@ struct ViewState {
     /// The size of the last picture shown.
     video_size: (u32, u32),
     fullscreen: bool,
+    /// What the window's exclusion from captures was last set to.
+    exclusion: Option<bool>,
     /// The system's light or dark setting, which `auto` follows.
     system_appearance: Appearance,
     system_lang: Lang,

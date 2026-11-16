@@ -132,13 +132,31 @@ impl ScenesService {
     }
 
     /// Whether any overlay shows a screen or a window.
+    #[cfg(test)]
     pub fn has_screen_overlay(&self) -> bool {
         self.overlays
             .iter()
             .any(|o| matches!(o.running, OverlayRunning::Screen(_)))
     }
 
+    /// The monitors the screen layers capture right now, by the system's name
+    /// (the old scene's included while it fades out). Windows being captured
+    /// are not in the list: they cannot show the viewer inside themselves.
+    pub fn captured_monitors(&self) -> Vec<String> {
+        let leaving = self.transition.iter().flat_map(|t| t.leaving.iter());
+        self.overlays
+            .iter()
+            .chain(leaving)
+            .filter(|o| matches!(o.running, OverlayRunning::Screen(_)))
+            .filter_map(|o| match &o.layer.source {
+                SourceRef::Monitor { device_name } => Some(device_name.clone()),
+                _ => None,
+            })
+            .collect()
+    }
+
     /// Whether the sources of the old scene still run, and one is a screen.
+    #[cfg(test)]
     pub fn leaving_has_screen(&self) -> bool {
         self.transition.as_ref().is_some_and(|t| {
             t.leaving

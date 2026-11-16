@@ -86,9 +86,4 @@ impl Core {
             self.set_capture_exclusion(self.wants_exclusion());
         }
     }
-
-    /// Whether the sources of the old scene still run.
-    pub fn leaving_has_screen(&self) -> bool {
-        self.scenes.leaving_has_screen()
-    }
 }

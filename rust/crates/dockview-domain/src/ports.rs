@@ -219,6 +219,9 @@ pub trait Host {
     fn pick_folder(&self, start: &Path) -> Option<PathBuf>;
     /// Size of the window's drawing area, in physical pixels.
     fn window_size(&self) -> (u32, u32);
+    /// The system's name for the monitor the window is on (for example
+    /// `\\.\DISPLAY1`), when it is known.
+    fn window_monitor(&self) -> Option<String>;
     /// Refresh rate of the monitor the window is on, in Hz.
     fn monitor_hz(&self) -> Option<f32>;
     /// Time the GPU takes to draw a frame, in milliseconds.
@@ -249,6 +252,9 @@ impl Host for NullHost {
     }
     fn window_size(&self) -> (u32, u32) {
         (0, 0)
+    }
+    fn window_monitor(&self) -> Option<String> {
+        None
     }
     fn monitor_hz(&self) -> Option<f32> {
         None

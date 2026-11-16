@@ -51,6 +51,8 @@ pub struct HostWorld {
     pub fullscreen: Vec<bool>,
     pub presets: Vec<RenderPreset>,
     pub exclusions: Vec<bool>,
+    /// The monitor the window is on (`None`: not known).
+    pub monitor: Option<String>,
     pub redraws: u32,
     pub picked_folder: Option<PathBuf>,
     pub window_size: (u32, u32),
@@ -72,6 +74,7 @@ impl Default for HostWorld {
             fullscreen: Vec::new(),
             presets: Vec::new(),
             exclusions: Vec::new(),
+            monitor: None,
             redraws: 0,
             picked_folder: None,
             window_size: (1280, 720),
@@ -102,6 +105,9 @@ impl Host for RecordingHost {
     }
     fn pick_folder(&self, _: &Path) -> Option<PathBuf> {
         self.0.lock().unwrap().picked_folder.clone()
+    }
+    fn window_monitor(&self) -> Option<String> {
+        self.0.lock().unwrap().monitor.clone()
     }
     fn window_size(&self) -> (u32, u32) {
         self.0.lock().unwrap().window_size

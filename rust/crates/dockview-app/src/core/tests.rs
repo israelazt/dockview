@@ -785,3 +785,66 @@ fn the_command_line_can_start_with_the_studio_panel_open() {
     let closed = Rig::new();
     assert!(!closed.core.model().studio, "closed unless it is asked for");
 }
+
+// -- The window is only hidden from captures when it would be seen ------------
+
+fn rig_capturing_display(own: Option<&str>, captured: usize) -> Rig {
+    use dockview_domain::sources::MonitorInfo;
+    let mut rig = Rig::new();
+    rig.sources.lock().unwrap().monitors = [r"\.\DISPLAY1", r"\.\DISPLAY2"]
+        .iter()
+        .enumerate()
+        .map(|(i, name)| MonitorInfo {
+            handle: i as isize + 1,
+            device_name: (*name).into(),
+            width: 1920,
+            height: 1080,
+            primary: i == 0,
+        })
+        .collect();
+    rig.host.lock().unwrap().monitor = own.map(str::to_owned);
+    rig.core.refresh_sources();
+    rig.core.apply(Action::SelectMonitor(captured));
+    rig
+}
+
+#[test]
+fn the_window_is_hidden_when_it_is_on_the_monitor_being_captured() {
+    let rig = rig_capturing_display(Some(r"\.\DISPLAY1"), 0);
+    assert_eq!(rig.host.lock().unwrap().exclusions.last(), Some(&true));
+}
+
+#[test]
+fn the_window_stays_visible_to_other_programs_when_it_is_on_another_monitor() {
+    let rig = rig_capturing_display(Some(r"\.\DISPLAY1"), 1);
+    assert_eq!(rig.host.lock().unwrap().exclusions.last(), Some(&false));
+}
+
+#[test]
+fn when_the_monitor_of_the_window_is_not_known_it_is_hidden_to_be_safe() {
+    let rig = rig_capturing_display(None, 1);
+    assert_eq!(rig.host.lock().unwrap().exclusions.last(), Some(&true));
+}
+
+#[test]
+fn moving_the_window_to_or_from_the_captured_monitor_changes_it_once() {
+    let mut rig = rig_capturing_display(Some(r"\.\DISPLAY1"), 1);
+    let count = |rig: &Rig| rig.host.lock().unwrap().exclusions.len();
+    let steady = count(&rig);
+    rig.advance(std::time::Duration::from_millis(50));
+    rig.advance(std::time::Duration::from_millis(50));
+    assert_eq!(count(&rig), steady, "nothing is asked again while it holds");
+    rig.host.lock().unwrap().monitor = Some(r"\.\DISPLAY2".into());
+    rig.advance(std::time::Duration::from_millis(50));
+    assert_eq!(rig.host.lock().unwrap().exclusions.last(), Some(&true));
+    assert_eq!(count(&rig), steady + 1);
+    rig.host.lock().unwrap().monitor = Some(r"\.\DISPLAY1".into());
+    rig.advance(std::time::Duration::from_millis(50));
+    assert_eq!(rig.host.lock().unwrap().exclusions.last(), Some(&false));
+}
+
+#[test]
+fn a_capture_card_never_hides_the_window() {
+    let rig = Rig::new();
+    assert_ne!(rig.host.lock().unwrap().exclusions.last(), Some(&true));
+}

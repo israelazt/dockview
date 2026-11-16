@@ -339,3 +339,44 @@ fn overlays_that_leave_keep_running_until_the_change_ends() {
             .alive
     );
 }
+
+#[test]
+fn only_monitors_that_are_captured_are_listed_and_window_captures_are_not() {
+    use dockview_domain::scene::SourceRef;
+    let world = World::new();
+    let mut service = ScenesService::new();
+    running_with_base(&mut service);
+    assert!(service.captured_monitors().is_empty());
+
+    let mut on_monitor = world.screen_overlay(1, "a");
+    on_monitor.layer.source = SourceRef::Monitor {
+        device_name: r"\.\DISPLAY2".into(),
+    };
+    let mut on_window = world.screen_overlay(2, "b");
+    on_window.layer.source = SourceRef::Window {
+        title: "Game".into(),
+    };
+    service.overlays.push(on_monitor);
+    service.overlays.push(on_window);
+    service.overlays.push(world.card_overlay(3, "card"));
+    assert_eq!(service.captured_monitors(), [r"\.\DISPLAY2".to_string()]);
+}
+
+#[test]
+fn a_monitor_of_the_old_scene_still_counts_while_it_fades_out() {
+    use dockview_domain::scene::SourceRef;
+    let world = World::new();
+    let mut service = ScenesService::new();
+    running_with_base(&mut service);
+    let mut old = Scene::with_base("old", source("main"));
+    old.add_layer(source("gone"));
+    let new = Scene::with_base("new", source("main"));
+    let mut leaving = world.screen_overlay(1, "gone");
+    leaving.layer.source = SourceRef::Monitor {
+        device_name: r"\.\DISPLAY1".into(),
+    };
+    service.begin_transition(&old, &new, vec![leaving], DEFAULT_DURATION);
+    assert_eq!(service.captured_monitors(), [r"\.\DISPLAY1".to_string()]);
+    service.finish_transition(&world.env());
+    assert!(service.captured_monitors().is_empty());
+}
