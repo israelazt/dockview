@@ -5,7 +5,7 @@
 
 use dockview_domain::broadcast::StreamState;
 use dockview_domain::i18n::{tr, Key, Lang};
-use dockview_domain::navigation::{EncoderState, NavTab, NavView};
+use dockview_domain::navigation::{AppMode, EncoderState, NavView};
 use dockview_domain::theme::{Color, Theme};
 use dockview_domain::view::{Action, Model};
 use dockview_domain::window_chrome::NAV_HEIGHT;
@@ -110,8 +110,8 @@ pub struct NavBar {
     actions: Vec<Action>,
     section: Option<StudioSection>,
     /// The tab the left button went down on.
-    pressed: Option<NavTab>,
-    hover: Option<NavTab>,
+    pressed: Option<AppMode>,
+    hover: Option<AppMode>,
 }
 
 impl NavBar {
@@ -155,7 +155,7 @@ impl NavBar {
         let tabs = Rect::new(MARGIN, tabs_top, last + TABS_PAD - MARGIN, TABS_H);
         ui.panel(tabs, TABS_H / 2.0, theme.chip, theme.chip_line, 1.0);
         for (tab, rect) in &rects {
-            self.draw_tab(ui, theme, model.lang, *tab, *rect, model.nav.tab);
+            self.draw_tab(ui, theme, model.lang, *tab, *rect, model.mode);
         }
 
         // The status, on the right, as much of it as fits.
@@ -183,7 +183,7 @@ impl NavBar {
                 if pressed == over {
                     self.actions.push(Action::GoTo(over));
                     self.section = match over {
-                        NavTab::Settings => Some(StudioSection::Settings),
+                        AppMode::Settings => Some(StudioSection::Settings),
                         _ => None,
                     };
                 }
@@ -192,10 +192,10 @@ impl NavBar {
         }
     }
 
-    fn tab_rects(&self, ui: &mut Ui, lang: Lang, _width: f32) -> Vec<(NavTab, Rect)> {
+    fn tab_rects(&self, ui: &mut Ui, lang: Lang, _width: f32) -> Vec<(AppMode, Rect)> {
         let mut x = MARGIN + TABS_PAD;
         let top = (NAV_HEIGHT - TAB_H) / 2.0;
-        NavTab::ALL
+        AppMode::ALL
             .into_iter()
             .map(|tab| {
                 let w = ui.measure(tr(lang, tab.title()), TAB_STYLE).0 + TAB_PAD * 2.0;
@@ -206,7 +206,7 @@ impl NavBar {
             .collect()
     }
 
-    fn draw_tab(&self, ui: &mut Ui, theme: &Theme, lang: Lang, tab: NavTab, r: Rect, on: NavTab) {
+    fn draw_tab(&self, ui: &mut Ui, theme: &Theme, lang: Lang, tab: AppMode, r: Rect, on: AppMode) {
         let active = tab == on;
         let hovered = self.hover == Some(tab);
         if active {
@@ -279,7 +279,7 @@ mod tests {
     }
 
     /// The centre of the tab, as the row lays it out.
-    fn centre_of(m: &Model, tab: NavTab) -> (f32, f32) {
+    fn centre_of(m: &Model, tab: AppMode) -> (f32, f32) {
         let mut ui = Ui::new();
         ui.begin((1280, 400), 1.0);
         let rects = NavBar::new().tab_rects(&mut ui, m.lang, 1280.0);
@@ -313,19 +313,19 @@ mod tests {
         let mut m = model();
         m.lang = Lang::En;
         let mut bar = NavBar::new();
-        click(&mut bar, &m, centre_of(&m, NavTab::Studio));
-        assert_eq!(bar.take_actions(), [Action::GoTo(NavTab::Studio)]);
+        click(&mut bar, &m, centre_of(&m, AppMode::Studio));
+        assert_eq!(bar.take_actions(), [Action::GoTo(AppMode::Studio)]);
         assert_eq!(bar.take_studio_request(), None);
-        click(&mut bar, &m, centre_of(&m, NavTab::Viewer));
-        assert_eq!(bar.take_actions(), [Action::GoTo(NavTab::Viewer)]);
+        click(&mut bar, &m, centre_of(&m, AppMode::Viewer));
+        assert_eq!(bar.take_actions(), [Action::GoTo(AppMode::Viewer)]);
     }
 
     #[test]
     fn settings_asks_for_its_section_of_the_panel_and_only_once() {
         let m = model();
         let mut bar = NavBar::new();
-        click(&mut bar, &m, centre_of(&m, NavTab::Settings));
-        assert_eq!(bar.take_actions(), [Action::GoTo(NavTab::Settings)]);
+        click(&mut bar, &m, centre_of(&m, AppMode::Settings));
+        assert_eq!(bar.take_actions(), [Action::GoTo(AppMode::Settings)]);
         assert_eq!(bar.take_studio_request(), Some(StudioSection::Settings));
         assert_eq!(bar.take_studio_request(), None, "asked once");
     }
@@ -333,8 +333,8 @@ mod tests {
     #[test]
     fn the_row_has_exactly_three_tabs_viewer_studio_and_settings() {
         assert_eq!(
-            NavTab::ALL,
-            [NavTab::Viewer, NavTab::Studio, NavTab::Settings]
+            AppMode::ALL,
+            [AppMode::Viewer, AppMode::Studio, AppMode::Settings]
         );
     }
 
@@ -342,8 +342,8 @@ mod tests {
     fn a_click_that_ends_on_another_tab_or_nowhere_does_nothing() {
         let m = model();
         let mut bar = NavBar::new();
-        let a = centre_of(&m, NavTab::Studio);
-        let b = centre_of(&m, NavTab::Settings);
+        let a = centre_of(&m, AppMode::Studio);
+        let b = centre_of(&m, AppMode::Settings);
         let mut p = pointer_at(a.0, a.1);
         draw(&mut bar, &m, 1280, &p);
         p.press();
@@ -362,7 +362,7 @@ mod tests {
     fn hovering_a_tab_asks_for_the_hand_cursor() {
         let m = model();
         let mut bar = NavBar::new();
-        let a = centre_of(&m, NavTab::Studio);
+        let a = centre_of(&m, AppMode::Studio);
         draw(&mut bar, &m, 1280, &pointer_at(a.0, a.1));
         assert!(bar.wants_pointer());
         draw(&mut bar, &m, 1280, &pointer_at(900.0, 5.0));
@@ -372,7 +372,7 @@ mod tests {
     #[test]
     fn the_tab_that_is_on_is_filled_with_the_brand_colour() {
         let mut m = model();
-        m.nav.tab = NavTab::Studio;
+        m.mode = AppMode::Studio;
         let ui = draw(&mut NavBar::new(), &m, 1280, &Pointer::default());
         let c = m.theme.brand;
         let filled = |ui: &Ui| {
@@ -384,7 +384,7 @@ mod tests {
         };
         assert!(filled(&ui));
         // Both of the tabs (and the status) differ when the tab changes.
-        m.nav.tab = NavTab::Settings;
+        m.mode = AppMode::Settings;
         let other = draw(&mut NavBar::new(), &m, 1280, &Pointer::default());
         assert_ne!(ui.vertices(), other.vertices());
     }
@@ -397,7 +397,6 @@ mod tests {
             encoder_name: "NVENC".into(),
             drops_per_sec: 3.0,
             stream: StreamState::Live,
-            ..NavView::default()
         };
         let list = items(&theme, Lang::En, &nav);
         let texts: Vec<&str> = list.iter().map(|i| i.text.as_str()).collect();

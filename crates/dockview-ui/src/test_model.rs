@@ -26,7 +26,7 @@ pub(crate) fn model() -> Model {
         lang_mode: LangMode::Auto,
         video_mode: VideoModePref::Auto,
         stats_open: false,
-        studio: false,
+        mode: dockview_domain::navigation::AppMode::Viewer,
         snip: true,
         replay: ReplayView::off("Ctrl+Alt+S"),
         mic: MicView::off(),

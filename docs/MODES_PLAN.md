@@ -42,7 +42,7 @@ Barra de título, fila de pestañas con el estado de la derecha (codificador, p�
 ## Cómo se impone en el código
 
 1. **Un modo, un módulo, un modelo, una acción.** `Model` se parte en lo compartido (`ShellView`: tema, idioma, modo, pantalla completa, estado) y una vista por modo (`ViewerView`, `StudioView`, `SettingsView`). `Action` se parte en `Action::{Viewer, Studio, Settings, App}` con un enum por modo; `App` lleva lo del marco (cambiar de modo, pantalla completa, salir).
-2. **Un modo es el estado, no un `bool`.** `Mode::{Viewer, Studio, Settings}` sustituye a `studio: bool` + `nav_tab` + `settings` suelto.
+2. **Un modo es el estado, no un `bool`.** `AppMode::{Viewer, Studio, Settings}` (se llama `AppMode` porque `Mode` ya son los modos de recorte de pantallazo) sustituye a `studio: bool` + `nav_tab` + `settings` suelto.
 3. **En `ui`:** carpetas `viewer/`, `studio/`, `settings/` y `shell/` (el marco). Un modo **no importa** a otro; solo ve su vista y lo compartido.
 4. **En `app`:** el reparto de acciones en `core/` también se parte por modo (`core/viewer.rs`, `core/studio/`, `core/settings.rs`); los servicios (replay, fuentes, escenas…) siguen siendo de `Core` y **no pertenecen a ningún modo**: los modos piden, los servicios hacen.
 5. **Guarda automática** (`tests/architecture.rs`): un archivo de `ui/viewer` no puede nombrar `studio` ni `settings`, ni al revés; y en `app`, `core/viewer` no puede tocar lo de `core/studio`. Falla con un mensaje que dice qué importó quién.
@@ -55,9 +55,9 @@ Igual que el resto: tarea atómica (cambio pequeño con tests; `fmt`, `clippy -D
 
 | Tarea | Qué | Listo cuando |
 |---|---|---|
-| A-1 | `domain`: `Mode::{Viewer, Studio, Settings}` y su transición (qué abre cada pestaña, qué hace `Esc`, `Tab`); sustituye `NavTab` y el `studio: bool` del modelo | Tests de las transiciones; la app se ve igual |
-| A-2 | `Core`: el modo vive en un solo sitio (`view.mode`); `studio_open` de los ajustes guardados se mantiene por compatibilidad (restaura Estudio) | Los tests del arnés en verde |
-| A-3 | La interfaz lee `model.mode`; el panel de Estudio deja de abrirse para Ajustes (Ajustes muestra una vista vacía por ahora) | Capturas de Visor y Estudio idénticas |
+| A-1 ✅ | `domain`: `AppMode::{Viewer, Studio, Settings}` (antes `NavTab`) y `Model.mode` en lugar de `studio: bool` y `nav.tab` | Tests de las transiciones; la app se ve igual |
+| A-2 ✅ | `Core`: el modo vive en un solo sitio (`view.mode`, con `last_panel` para `Tab`); `studio_open` de los ajustes guardados se mantiene por compatibilidad (restaura Estudio) | Los tests del arnés en verde |
+| A-3 ✅ | La interfaz lee `model.mode` (la fila de pestañas, el HUD y el panel). **Cambio respecto a lo previsto:** Ajustes sigue usando el panel de Estudio hasta el bloque B, para que la app siga siendo usable; `AppMode::shows_panel` lo dice | Tests y la app se ven igual |
 
 **Pausa A.**
 

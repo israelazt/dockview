@@ -4,9 +4,10 @@
 use crate::broadcast::StreamState;
 use crate::i18n::Key;
 
-/// The tabs, left to right.
+/// The three modes of the app, which are also the tabs, left to right: only
+/// one is on at a time.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-pub enum NavTab {
+pub enum AppMode {
     /// The picture, with the controls over it (the Studio panel closed).
     #[default]
     Viewer,
@@ -14,8 +15,8 @@ pub enum NavTab {
     Settings,
 }
 
-impl NavTab {
-    pub const ALL: [NavTab; 3] = [Self::Viewer, Self::Studio, Self::Settings];
+impl AppMode {
+    pub const ALL: [AppMode; 3] = [Self::Viewer, Self::Studio, Self::Settings];
 
     /// The words on the tab.
     pub fn title(self) -> Key {
@@ -26,8 +27,9 @@ impl NavTab {
         }
     }
 
-    /// Whether the tab shows the Studio panel.
-    pub fn opens_panel(self) -> bool {
+    /// Whether the mode shows the Studio panel (Settings does too until it has a
+    /// view of its own).
+    pub fn shows_panel(self) -> bool {
         self != Self::Viewer
     }
 }
@@ -61,8 +63,6 @@ pub enum EncoderInfo {
 /// What the status on the right of the row shows.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct NavView {
-    /// The tab that is on: `Viewer` while the panel is closed.
-    pub tab: NavTab,
     pub encoder: EncoderState,
     /// The short name of the encoder (see [`encoder_badge`]); empty when unknown.
     pub encoder_name: String,
@@ -118,10 +118,10 @@ mod tests {
 
     #[test]
     fn the_tabs_are_in_order_and_only_the_viewer_has_no_panel() {
-        assert_eq!(NavTab::ALL[0], NavTab::Viewer);
-        assert!(!NavTab::Viewer.opens_panel());
-        assert!(NavTab::ALL[1..].iter().all(|t| t.opens_panel()));
-        assert_eq!(NavTab::default(), NavTab::Viewer);
+        assert_eq!(AppMode::ALL[0], AppMode::Viewer);
+        assert!(!AppMode::Viewer.shows_panel());
+        assert!(AppMode::ALL[1..].iter().all(|t| t.shows_panel()));
+        assert_eq!(AppMode::default(), AppMode::Viewer);
     }
 
     #[test]

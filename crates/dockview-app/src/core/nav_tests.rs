@@ -4,57 +4,57 @@ use std::time::Instant;
 
 use dockview_domain::broadcast::StreamState;
 use dockview_domain::frame::{ColorInfo, Frame, PixelFormat};
-use dockview_domain::navigation::{EncoderInfo, EncoderState, NavTab};
+use dockview_domain::navigation::{AppMode, EncoderInfo, EncoderState};
 use dockview_domain::recording::RecorderStatus;
 use dockview_domain::view::Action;
 
 use crate::testing::rig::Rig;
 
-fn tab(rig: &Rig) -> NavTab {
-    rig.core.model().nav.tab
+fn tab(rig: &Rig) -> AppMode {
+    rig.core.model().mode
 }
 
 #[test]
 fn it_starts_on_the_viewer_with_the_panel_closed() {
     let rig = Rig::new();
-    assert_eq!(tab(&rig), NavTab::Viewer);
-    assert!(!rig.core.model().studio);
+    assert_eq!(tab(&rig), AppMode::Viewer);
+    assert!(!rig.core.model().mode.shows_panel());
 }
 
 #[test]
 fn the_studio_tab_opens_the_panel_and_the_viewer_tab_closes_it() {
     let mut rig = Rig::new();
-    rig.core.apply(Action::GoTo(NavTab::Studio));
-    assert!(rig.core.model().studio);
-    assert_eq!(tab(&rig), NavTab::Studio);
-    rig.core.apply(Action::GoTo(NavTab::Viewer));
-    assert!(!rig.core.model().studio);
-    assert_eq!(tab(&rig), NavTab::Viewer);
+    rig.core.apply(Action::GoTo(AppMode::Studio));
+    assert!(rig.core.model().mode.shows_panel());
+    assert_eq!(tab(&rig), AppMode::Studio);
+    rig.core.apply(Action::GoTo(AppMode::Viewer));
+    assert!(!rig.core.model().mode.shows_panel());
+    assert_eq!(tab(&rig), AppMode::Viewer);
 }
 
 #[test]
 fn settings_opens_the_panel_and_stays_the_tab_that_is_on() {
     let mut rig = Rig::new();
-    rig.core.apply(Action::GoTo(NavTab::Settings));
-    assert!(rig.core.model().studio);
-    assert_eq!(tab(&rig), NavTab::Settings);
-    rig.core.apply(Action::GoTo(NavTab::Studio));
-    assert_eq!(tab(&rig), NavTab::Studio);
+    rig.core.apply(Action::GoTo(AppMode::Settings));
+    assert!(rig.core.model().mode.shows_panel());
+    assert_eq!(tab(&rig), AppMode::Settings);
+    rig.core.apply(Action::GoTo(AppMode::Studio));
+    assert_eq!(tab(&rig), AppMode::Studio);
 }
 
 #[test]
-fn the_panel_comes_back_on_the_last_tab_and_full_screen_is_the_viewer() {
+fn the_panel_comes_back_on_the_last_mode_and_full_screen_hides_it_without_leaving_it() {
     let mut rig = Rig::new();
-    rig.core.apply(Action::GoTo(NavTab::Settings));
-    rig.core.apply(Action::GoTo(NavTab::Viewer));
+    rig.core.apply(Action::GoTo(AppMode::Settings));
+    rig.core.apply(Action::GoTo(AppMode::Viewer));
     rig.core.apply(Action::ToggleStudio);
-    assert_eq!(tab(&rig), NavTab::Settings, "the tab it was on");
+    assert_eq!(tab(&rig), AppMode::Settings, "the tab it was on");
     rig.core.apply(Action::ToggleFullscreen);
-    assert_eq!(
-        tab(&rig),
-        NavTab::Viewer,
+    assert!(
+        !rig.core.model().studio_visible(),
         "the panel is hidden in full screen"
     );
+    assert_eq!(tab(&rig), AppMode::Settings, "but the mode is still on");
 }
 
 fn encoder(rig: &Rig) -> (EncoderState, String) {

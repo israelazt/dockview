@@ -53,6 +53,7 @@ use dockview_domain::diagnostics::{diagnose, Finding, Snapshot, VideoState};
 use dockview_domain::events::AppEvent;
 use dockview_domain::frame::FrameSlot;
 use dockview_domain::i18n::{self, Lang, LangModeExt};
+use dockview_domain::navigation::AppMode;
 use dockview_domain::ports::{
     CaptureHotkeys, Host, ReplayMachine, SourceMachine, StatsSink, SystemProbe,
 };
@@ -162,7 +163,11 @@ struct ViewState {
     system_lang: Lang,
     stats_open: bool,
     /// The tab chosen in the navigation row while the panel is open.
-    nav_tab: dockview_domain::navigation::NavTab,
+    /// The mode that is on (the Studio panel is open in every mode but the
+    /// viewer).
+    mode: dockview_domain::navigation::AppMode,
+    /// The mode the panel comes back to when it is opened again (Tab, the pill).
+    last_panel: dockview_domain::navigation::AppMode,
     /// The layer of the active scene the editor works on.
     layer_selected: Option<usize>,
     /// The layer editor is on, over the picture.

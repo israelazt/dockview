@@ -4,7 +4,7 @@
 
 use dockview_domain::design::{RADIUS_CHIP, RADIUS_CONTROL};
 use dockview_domain::i18n::{tr, Key};
-use dockview_domain::navigation::NavTab;
+use dockview_domain::navigation::AppMode;
 use dockview_domain::theme::Theme;
 use dockview_domain::view::{Action, Model};
 use dockview_domain::window_chrome::RAIL_WIDTH;
@@ -172,7 +172,7 @@ impl Rail {
                 if pressed == over {
                     match over {
                         RailItem::Section(section) => {
-                            self.actions.push(Action::GoTo(NavTab::Studio));
+                            self.actions.push(Action::GoTo(AppMode::Studio));
                             self.section = Some(section);
                         }
                         RailItem::Log => self.log = true,
@@ -289,7 +289,7 @@ mod tests {
             &m,
             centre(RailItem::Section(StudioSection::Audio)),
         );
-        assert_eq!(rail.take_actions(), [Action::GoTo(NavTab::Studio)]);
+        assert_eq!(rail.take_actions(), [Action::GoTo(AppMode::Studio)]);
         assert_eq!(rail.take_studio_request(), Some(StudioSection::Audio));
         assert_eq!(rail.take_studio_request(), None, "asked once");
         assert!(!rail.take_log_request());

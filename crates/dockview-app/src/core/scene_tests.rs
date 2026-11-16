@@ -313,11 +313,11 @@ fn escape_closes_the_layer_editor_before_anything_else() {
     rig.core.on_key(KeyCommand::Escape);
     assert!(!rig.core.model().scenes.editing);
     assert!(
-        rig.core.model().studio,
+        rig.core.model().mode.shows_panel(),
         "the panel stays until the next Esc"
     );
     rig.core.on_key(KeyCommand::Escape);
-    assert!(!rig.core.model().studio);
+    assert!(!rig.core.model().mode.shows_panel());
 }
 
 #[test]

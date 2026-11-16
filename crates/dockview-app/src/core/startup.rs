@@ -36,6 +36,11 @@ impl Core {
         if cli.open_studio {
             settings.studio_open = true;
         }
+        let start_mode = if settings.studio_open {
+            AppMode::Studio
+        } else {
+            AppMode::Viewer
+        };
         let mut app = Self {
             slot,
             scenes: ScenesService::new(),
@@ -50,7 +55,8 @@ impl Core {
                 system_appearance: Appearance::Dark,
                 system_lang,
                 stats_open: show_stats,
-                nav_tab: dockview_domain::navigation::NavTab::Studio,
+                mode: start_mode,
+                last_panel: dockview_domain::navigation::AppMode::Studio,
                 layer_selected: cli.edit_layers.then_some(1),
                 scene_editing: cli.edit_layers,
                 window_hidden: false,

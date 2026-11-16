@@ -27,23 +27,6 @@ impl Core {
         self.settings_changed();
     }
 
-    /// Opens or closes the Studio panel, and remembers it.
-    pub(super) fn toggle_studio(&mut self) {
-        self.settings.studio_open = !self.settings.studio_open;
-        self.settings_changed();
-    }
-
-    /// Opens the Studio panel if it is closed, leaving full screen (where it
-    /// is hidden) so that it shows.
-    pub(super) fn open_studio(&mut self) {
-        if self.view.fullscreen {
-            self.set_fullscreen(false);
-        }
-        if !self.settings.studio_open {
-            self.toggle_studio();
-        }
-    }
-
     /// Enters or leaves full screen.
     pub fn set_fullscreen(&mut self, on: bool) {
         self.view.fullscreen = on;
@@ -131,7 +114,7 @@ impl Core {
             lang_mode: self.lang_mode(),
             video_mode: self.settings.video_mode,
             stats_open: self.view.stats_open,
-            studio: self.settings.studio_open,
+            mode: self.view.mode,
             snip: dockview_domain::snap::ENABLED,
             replay: self.replay_view(),
             mic_devices: self.mic_device_names(self.lang_mode().resolve(self.view.system_lang)),
@@ -369,8 +352,8 @@ impl Core {
                     self.view.scene_editing = false;
                 } else if self.view.fullscreen {
                     self.set_fullscreen(false);
-                } else if self.settings.studio_open {
-                    self.toggle_studio();
+                } else if self.view.mode.shows_panel() {
+                    self.set_mode(AppMode::Viewer);
                 }
             }
             KeyCommand::ToggleStudio => self.toggle_studio(),

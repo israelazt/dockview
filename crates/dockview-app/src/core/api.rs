@@ -80,7 +80,7 @@ impl Core {
 
     /// Whether the Studio panel is open (it stays hidden in full screen).
     pub fn studio_panel_open(&self) -> bool {
-        self.settings.studio_open
+        self.view.mode.shows_panel()
     }
 
     pub fn fullscreen(&self) -> bool {

@@ -61,7 +61,7 @@ impl Shell {
         // its room; the pointer belongs to the video or to the panel.
         // The panel closes as full screen is asked for (animated while the
         // window has not changed yet) and opens as it is left.
-        let panel_visible = model.studio && !model.fullscreen;
+        let panel_visible = model.studio_visible();
         let instant = self.motion.layout_fullscreen();
         self.studio.update(panel_visible, instant, dt);
         self.side.update(panel_visible, instant, dt);
@@ -177,7 +177,7 @@ impl Shell {
         let hud = &mut self.hud;
         let source_picker = &mut self.source_picker;
         // The readouts show in the viewer: no panel, not in full screen.
-        let hud_show = model.hud && !model.studio && !model.fullscreen;
+        let hud_show = model.hud && !model.mode.shows_panel() && !model.fullscreen;
         let navbar = &mut self.navbar;
         let rail = &mut self.rail;
         let strip = &mut self.strip;

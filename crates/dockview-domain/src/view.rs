@@ -195,8 +195,9 @@ pub struct Model {
     pub lang_mode: LangMode,
     pub video_mode: VideoModePref,
     pub stats_open: bool,
-    /// Studio mode: the side panel is open (it stays hidden in full screen).
-    pub studio: bool,
+    /// The mode that is on. Full screen shows only the picture without
+    /// leaving the mode.
+    pub mode: crate::navigation::AppMode,
     /// The screenshot tool is on (see `snap::ENABLED`).
     pub snip: bool,
     pub replay: ReplayView,
@@ -213,7 +214,7 @@ pub struct Model {
 impl Model {
     /// Whether the Studio panel is on screen: full screen shows only the video.
     pub fn studio_visible(&self) -> bool {
-        self.studio && !self.fullscreen
+        self.mode.shows_panel() && !self.fullscreen
     }
 }
 
@@ -258,7 +259,7 @@ pub enum Action {
     /// Take a screenshot in the mode chosen in the settings.
     Capture,
     /// Go to a tab of the navigation row.
-    GoTo(crate::navigation::NavTab),
+    GoTo(crate::navigation::AppMode),
     /// The server address the stream goes to.
     SetStreamUrl(String),
     /// The stream key, which is kept apart from the settings.
@@ -363,6 +364,7 @@ mod tests {
     use super::*;
 
     fn model(studio: bool, fullscreen: bool) -> Model {
+        use crate::navigation::AppMode;
         Model {
             theme: Theme::dark(),
             lang: Lang::En,
@@ -382,7 +384,11 @@ mod tests {
             lang_mode: LangMode::Auto,
             video_mode: VideoModePref::Auto,
             stats_open: false,
-            studio,
+            mode: if studio {
+                AppMode::Studio
+            } else {
+                AppMode::Viewer
+            },
             snip: true,
             replay: ReplayView::off("Ctrl+Alt+S"),
             mic: MicView::off(),
@@ -405,6 +411,6 @@ mod tests {
     fn full_screen_hides_the_studio_panel_without_closing_it() {
         let m = model(true, true);
         assert!(!m.studio_visible());
-        assert!(m.studio, "leaving full screen brings it back");
+        assert!(m.mode.shows_panel(), "leaving full screen brings it back");
     }
 }

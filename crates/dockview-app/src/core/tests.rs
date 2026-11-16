@@ -28,14 +28,14 @@ fn settings_with(video: &str, audio: &str) -> AppSettings {
 #[test]
 fn toggling_the_studio_mode_flips_it_and_saves_it() {
     let mut rig = Rig::new();
-    assert!(!rig.core.model().studio);
+    assert!(!rig.core.model().mode.shows_panel());
 
     rig.core.apply(Action::ToggleStudio);
-    assert!(rig.core.model().studio);
+    assert!(rig.core.model().mode.shows_panel());
     assert!(rig.saved_soon().expect("saved").studio_open);
 
     rig.core.apply(Action::ToggleStudio);
-    assert!(!rig.core.model().studio);
+    assert!(!rig.core.model().mode.shows_panel());
     assert!(!rig.saved_soon().expect("saved").studio_open);
 }
 
@@ -43,9 +43,12 @@ fn toggling_the_studio_mode_flips_it_and_saves_it() {
 fn opening_the_studio_opens_it_once_and_leaves_full_screen() {
     let mut rig = Rig::new();
     rig.core.apply(Action::OpenStudio);
-    assert!(rig.core.model().studio);
+    assert!(rig.core.model().mode.shows_panel());
     rig.core.apply(Action::OpenStudio);
-    assert!(rig.core.model().studio, "opening twice does not close it");
+    assert!(
+        rig.core.model().mode.shows_panel(),
+        "opening twice does not close it"
+    );
 
     rig.core.set_fullscreen(true);
     rig.core.apply(Action::OpenStudio);
@@ -61,7 +64,7 @@ fn the_studio_mode_comes_back_when_the_settings_say_so() {
             ..AppSettings::default()
         })
         .build();
-    assert!(rig.core.model().studio);
+    assert!(rig.core.model().mode.shows_panel());
 }
 
 // -- Starting ------------------------------------------------------------
@@ -712,11 +715,11 @@ fn tab_opens_and_closes_the_studio_panel_and_remembers_it() {
     use crate::keys::KeyCommand;
     let mut rig = Rig::new();
     rig.core.on_key(KeyCommand::ToggleStudio);
-    assert!(rig.core.model().studio);
+    assert!(rig.core.model().mode.shows_panel());
     assert!(rig.saved_soon().expect("saved").studio_open);
 
     rig.core.on_key(KeyCommand::ToggleStudio);
-    assert!(!rig.core.model().studio);
+    assert!(!rig.core.model().mode.shows_panel());
     assert!(!rig.saved_soon().expect("saved").studio_open);
 }
 
@@ -729,15 +732,15 @@ fn escape_closes_the_studio_panel_when_nothing_else_is_open() {
             ..AppSettings::default()
         })
         .build();
-    assert!(rig.core.model().studio);
+    assert!(rig.core.model().mode.shows_panel());
 
     rig.core.on_key(KeyCommand::Escape);
-    assert!(!rig.core.model().studio);
+    assert!(!rig.core.model().mode.shows_panel());
     assert!(!rig.saved_soon().expect("saved").studio_open);
 
     // With the panel closed, Escape does nothing at all.
     rig.core.on_key(KeyCommand::Escape);
-    assert!(!rig.core.model().studio);
+    assert!(!rig.core.model().mode.shows_panel());
     assert!(rig.host.lock().unwrap().fullscreen.is_empty());
 }
 
@@ -768,9 +771,9 @@ fn escape_in_full_screen_leaves_full_screen_and_keeps_the_panel_for_afterwards()
 fn the_panels_close_button_and_the_pills_button_do_the_same_as_tab() {
     let mut rig = Rig::new();
     rig.core.apply(Action::ToggleStudio);
-    assert!(rig.core.model().studio);
+    assert!(rig.core.model().mode.shows_panel());
     rig.core.apply(Action::ToggleStudio);
-    assert!(!rig.core.model().studio);
+    assert!(!rig.core.model().mode.shows_panel());
 }
 
 #[test]
@@ -781,9 +784,12 @@ fn the_command_line_can_start_with_the_studio_panel_open() {
             ..crate::cli::Cli::default()
         })
         .build();
-    assert!(rig.core.model().studio);
+    assert!(rig.core.model().mode.shows_panel());
     let closed = Rig::new();
-    assert!(!closed.core.model().studio, "closed unless it is asked for");
+    assert!(
+        !closed.core.model().mode.shows_panel(),
+        "closed unless it is asked for"
+    );
 }
 
 // -- The window is only hidden from captures when it would be seen ------------
