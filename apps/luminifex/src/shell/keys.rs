@@ -39,6 +39,18 @@ pub fn command_with(key: &Key, ctrl: bool) -> Option<KeyCommand> {
     }
 }
 
+/// Whether `key` is Ctrl+V, which pastes into a text field.
+pub fn is_paste(key: &Key, ctrl: bool) -> bool {
+    ctrl && matches!(key, Key::Character(c) if c.eq_ignore_ascii_case("v"))
+}
+
+/// What pasting `clipboard` types: its first line without the spaces and line
+/// breaks around it (a copied key often comes with them), or nothing.
+pub fn paste_key(clipboard: &str) -> Option<TextKey> {
+    let line = clipboard.lines().next().unwrap_or("").trim();
+    (!line.is_empty()).then(|| TextKey::Text(line.to_owned()))
+}
+
 /// What `key` does in a text field, given the text the key types (the
 /// keyboard layout and the modifiers have already been applied to it).
 pub fn text_key_for(key: &Key, text: Option<&str>) -> Option<TextKey> {
@@ -60,6 +72,42 @@ pub fn text_key_for(key: &Key, text: Option<&str>) -> Option<TextKey> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ctrl_v_pastes_and_v_alone_does_not() {
+        let v = Key::Character("v".into());
+        assert!(is_paste(&v, true));
+        assert!(is_paste(&Key::Character("V".into()), true));
+        assert!(!is_paste(&v, false));
+        assert!(!is_paste(&Key::Character("c".into()), true));
+    }
+
+    #[test]
+    fn a_pasted_key_loses_the_spaces_and_the_line_breaks_around_it() {
+        assert_eq!(
+            paste_key(
+                "  live_123_abc 
+"
+            ),
+            Some(TextKey::Text("live_123_abc".into()))
+        );
+        assert_eq!(
+            paste_key(
+                "first
+second"
+            ),
+            Some(TextKey::Text("first".into())),
+            "only one line is a key"
+        );
+        assert_eq!(
+            paste_key(
+                " 
+ "
+            ),
+            None
+        );
+        assert_eq!(paste_key(""), None);
+    }
 
     #[test]
     fn a_text_field_gets_editing_keys_and_typed_text_only() {

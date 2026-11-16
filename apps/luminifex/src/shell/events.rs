@@ -151,7 +151,13 @@ impl ApplicationHandler for Shell {
                     // A name is being typed: the keys are for the field and not
                     // for the shortcuts (F, Tab, the arrows...).
                     let text = event.text.as_deref();
-                    if let Some(key) = text_key_for(&event.logical_key, text) {
+                    let key = if super::keys::is_paste(&event.logical_key, self.ctrl) {
+                        // Ctrl+V: the clipboard goes in (a stream key is pasted).
+                        crate::os::clipboard_text().and_then(|t| super::keys::paste_key(&t))
+                    } else {
+                        text_key_for(&event.logical_key, text)
+                    };
+                    if let Some(key) = key {
                         if self.side.is_editing() {
                             self.side.key(key);
                         } else {

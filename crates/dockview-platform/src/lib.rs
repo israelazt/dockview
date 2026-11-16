@@ -9,6 +9,8 @@ pub mod capture;
 #[cfg(windows)]
 pub mod capture_hotkey;
 #[cfg(windows)]
+pub mod clipboard_text;
+#[cfg(windows)]
 pub mod clips;
 #[cfg(windows)]
 pub mod compose;

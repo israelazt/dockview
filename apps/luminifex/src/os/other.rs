@@ -36,6 +36,11 @@ pub fn system_animations_enabled() -> bool {
 
 pub fn exclude_from_capture(_: NativeWindow, _: bool) {}
 
+/// The text on the clipboard (nothing is read on this system yet).
+pub fn clipboard_text() -> Option<String> {
+    None
+}
+
 pub fn pick_folder(_: Option<NativeWindow>, _: &Path) -> Option<PathBuf> {
     None
 }

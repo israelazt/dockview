@@ -103,6 +103,11 @@ pub fn exclude_from_capture(window: NativeWindow, on: bool) {
     }
 }
 
+/// The text on the clipboard, for pasting.
+pub fn clipboard_text() -> Option<String> {
+    dockview_platform::clipboard_text::read()
+}
+
 /// Lets the user pick a folder, starting at `start`.
 pub fn pick_folder(owner: Option<NativeWindow>, start: &Path) -> Option<PathBuf> {
     clips::pick_folder(owner.map(hwnd_of), start)
