@@ -16,7 +16,7 @@ impl Controls {
         if pointer.just_released {
             if let (Some(pressed), Some(hovered)) = (self.pressed, self.hovered) {
                 if pressed == hovered {
-                    self.activate(pressed, model);
+                    self.activate(pressed);
                 }
             }
             self.pressed = None;
@@ -39,9 +39,7 @@ impl Controls {
         }
     }
 
-    pub(super) fn activate(&mut self, hit: Hit, model: &Model) {
-        let sync =
-            |delta: i32| (model.sync_ms + delta).clamp(-MAX_AUDIO_OFFSET_MS, MAX_AUDIO_OFFSET_MS);
+    pub(super) fn activate(&mut self, hit: Hit) {
         let action = match hit {
             Hit::ReplaySave => Action::SaveReplay,
             Hit::Record => Action::ToggleRecord,
@@ -49,8 +47,6 @@ impl Controls {
             Hit::Mic => Action::ToggleMic,
             Hit::Hud => Action::ToggleHud,
             Hit::Fullscreen => Action::ToggleFullscreen,
-            Hit::SyncMinus => Action::SetSync(sync(-SYNC_STEP_MS)),
-            Hit::SyncPlus => Action::SetSync(sync(SYNC_STEP_MS)),
             Hit::Pill | Hit::Volume => return,
         };
         self.actions.push(action);

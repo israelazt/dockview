@@ -171,20 +171,6 @@ fn scrolling_away_from_the_controls_does_nothing() {
 }
 
 #[test]
-fn sync_buttons_step_by_ten_and_clamp() {
-    let mut rig = Rig::new(true);
-    rig.click_on(Hit::SyncPlus);
-    assert_eq!(rig.actions(), vec![Action::SetSync(10)]);
-    rig.click_on(Hit::SyncMinus);
-    assert_eq!(rig.actions(), vec![Action::SetSync(-10)]);
-
-    rig.model.sync_ms = MAX_AUDIO_OFFSET_MS;
-    rig.frame(0.016);
-    rig.click_on(Hit::SyncPlus);
-    assert_eq!(rig.actions(), vec![Action::SetSync(MAX_AUDIO_OFFSET_MS)]);
-}
-
-#[test]
 fn every_control_has_a_tooltip_in_both_languages_with_nothing_left_to_fill_in() {
     let hits = [
         Hit::ReplaySave,
@@ -194,8 +180,6 @@ fn every_control_has_a_tooltip_in_both_languages_with_nothing_left_to_fill_in() 
         Hit::Hud,
         Hit::Fullscreen,
         Hit::Volume,
-        Hit::SyncMinus,
-        Hit::SyncPlus,
     ];
     for lang in [Lang::En, Lang::Es] {
         let mut m = model();
@@ -373,7 +357,6 @@ fn pill_width_does_not_change_when_numbers_change() {
     let mut rig = Rig::new(true);
     let before = rig.controls.rect_of(Hit::Pill);
     rig.model.volume = 1.0;
-    rig.model.sync_ms = -150;
     rig.model.resolution = "720p · 30 fps".into();
     rig.frame(0.016);
     assert_eq!(rig.controls.rect_of(Hit::Pill), before);
@@ -562,7 +545,7 @@ fn the_record_button_shows_the_time_while_recording() {
 }
 
 #[test]
-fn a_bar_that_does_not_fit_the_video_area_drops_the_sync_then_the_hotkeys() {
+fn a_bar_that_does_not_fit_the_video_area_drops_the_hotkeys_and_shrinks_the_buttons() {
     let measure = |limit: f32| {
         let mut m = model();
         m.replay = ReplayView {
@@ -574,27 +557,17 @@ fn a_bar_that_does_not_fit_the_video_area_drops_the_sync_then_the_hotkeys() {
         rig.limit = Some(limit);
         rig.frame(0.016);
         let pill = rig.controls.rect_of(Hit::Pill);
-        (
-            pill,
-            rig.controls.hits.iter().any(|(h, _)| *h == Hit::SyncPlus),
-            rig.controls.rect_of(Hit::ReplaySave),
-        )
+        (pill, rig.controls.rect_of(Hit::ReplaySave))
     };
-    let (full, has_sync, save_full) = measure(1280.0);
-    assert!(has_sync);
-    // Room for everything but the sync block.
-    let (short, has_sync, save_short) = measure(full.w - 20.0);
-    assert!(!has_sync && short.w < full.w);
-    assert_eq!(save_short.w, save_full.w, "the hotkeys are still there");
-    // Room for less still: the hotkeys go too and the buttons shrink.
-    let (least, _, save_least) = measure(short.w - 20.0);
-    assert!(least.w < short.w && save_least.w < save_short.w);
-    for (pill, limit) in [(short, full.w - 20.0), (least, short.w - 20.0)] {
-        assert!(
-            pill.x >= 8.0 && pill.x + pill.w <= limit,
-            "{pill:?} in {limit}"
-        );
-    }
+    let (full, save_full) = measure(1280.0);
+    // Room for less: the hotkeys go and the buttons shrink.
+    let (short, save_short) = measure(full.w - 20.0);
+    assert!(short.w < full.w && save_short.w < save_full.w);
+    assert!(
+        short.x >= 8.0 && short.x + short.w <= full.w - 20.0,
+        "{short:?} in {}",
+        full.w - 20.0
+    );
 }
 
 #[test]

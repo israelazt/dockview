@@ -7,8 +7,6 @@ use super::super::TextStyle;
 pub const IDLE_HIDE_SECS: f32 = 3.0;
 /// Fade duration, in seconds.
 pub const FADE_SECS: f32 = 0.2;
-/// Audio sync change per click, in milliseconds.
-pub const SYNC_STEP_MS: i32 = 10;
 /// Volume change per scroll notch.
 pub const WHEEL_VOLUME_STEP: f32 = 0.05;
 /// Smoothing rate for hover fades (higher is faster; ~95% in 3/rate seconds).
@@ -30,8 +28,6 @@ pub(super) const PAD_X: f32 = 10.0;
 pub(super) const GAP: f32 = 8.0;
 /// Space on each side of a divider.
 pub(super) const DIVIDER_PAD: f32 = 12.0;
-/// Size of the small round buttons (sync steps).
-pub(super) const BUTTON: f32 = 32.0;
 /// Height of the wide buttons (save, record, screenshot) and size of the
 /// round ones (microphone, readouts, full screen).
 pub(super) const ITEM_H: f32 = 36.0;
@@ -42,8 +38,6 @@ pub(super) const SLIDER_WIDTH: f32 = 84.0;
 pub(super) const ICON_VOLUME_MUTE: char = '\u{e1ac}';
 pub(super) const ICON_VOLUME_LOW: char = '\u{e1aa}';
 pub(super) const ICON_VOLUME_HIGH: char = '\u{e1ab}';
-pub(super) const ICON_MINUS: char = '\u{e11c}';
-pub(super) const ICON_PLUS: char = '\u{e13d}';
 pub(super) const ICON_FULLSCREEN: char = '\u{e112}';
 pub(super) const ICON_EXIT_FULLSCREEN: char = '\u{e11a}';
 pub(super) const ICON_SAVE: char = '\u{e14d}';

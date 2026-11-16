@@ -1,5 +1,5 @@
-//! The floating bar: save a clip, record, take a screenshot, volume and sync,
-//! the microphone, the readouts and full screen.
+//! The floating bar of the viewer: save a clip, record, volume, the
+//! microphone, the readouts and full screen.
 
 use super::buttons::{chip_width, record_label};
 use super::*;
@@ -11,13 +11,10 @@ pub(super) struct BarMetrics {
     pub(super) record_w: f32,
     pub(super) capture_w: f32,
     percent_w: f32,
-    sync_value_w: f32,
     /// The whole bar.
     width: f32,
-    /// Whether the sync block is drawn. It is left out first when the bar does
+    /// Whether the hotkeys are written in the buttons. They go when the bar does
     /// not fit the room it has.
-    show_sync: bool,
-    /// Whether the hotkeys are written in the buttons. They go second.
     pub(super) show_chips: bool,
 }
 
@@ -49,7 +46,6 @@ fn bar_metrics(ui: &mut Ui, m: &Model, room: f32) -> BarMetrics {
     let save_chip = hotkey_w(ui, &m.replay.hotkey);
     let record_chip = hotkey_w(ui, &m.replay.record_hotkey);
     let percent_w = ui.measure("100%", value).0;
-    let sync_value_w = ui.measure("−300 ms", value).0;
 
     let wide = |content: f32| 14.0 + content + 14.0;
     let save = |chips: bool| {
@@ -65,10 +61,9 @@ fn bar_metrics(ui: &mut Ui, m: &Model, room: f32) -> BarMetrics {
     };
     let capture_gap = if m.snip { GAP } else { 0.0 };
     let volume = ICON_SIZE + 8.0 + SLIDER_WIDTH + 8.0 + percent_w;
-    let sync = BUTTON + sync_value_w + BUTTON;
     let divider = DIVIDER_PAD * 2.0 + 1.0;
     let round = ITEM_H * 3.0 + GAP * 2.0;
-    let width_of = |chips: bool, with_sync: bool| {
+    let width_of = |chips: bool| {
         PAD_X * 2.0
             + save(chips)
             + GAP
@@ -77,25 +72,16 @@ fn bar_metrics(ui: &mut Ui, m: &Model, room: f32) -> BarMetrics {
             + capture_w
             + divider
             + volume
-            + if with_sync { DIVIDER_PAD + sync } else { 0.0 }
             + divider
             + round
     };
-    let (show_chips, show_sync) = if width_of(true, true) <= room {
-        (true, true)
-    } else if width_of(true, false) <= room {
-        (true, false)
-    } else {
-        (false, false)
-    };
+    let show_chips = width_of(true) <= room;
     BarMetrics {
         save_w: save(show_chips),
         record_w: record(show_chips),
         capture_w,
         percent_w,
-        sync_value_w,
-        width: width_of(show_chips, show_sync),
-        show_sync,
+        width: width_of(show_chips),
         show_chips,
     }
 }
@@ -151,10 +137,6 @@ impl Controls {
         }
         x = divider_at(ui, t, x, cy);
         x = self.pill_volume(ui, m, &metrics, row, x);
-        if metrics.show_sync {
-            x += DIVIDER_PAD;
-            x = self.pill_sync(ui, m, &metrics, row, x);
-        }
         x = divider_at(ui, t, x, cy);
         self.pill_toggles(ui, m, row, x);
         pill
@@ -182,37 +164,6 @@ impl Controls {
         let percent = format!("{:.0}%", m.volume * 100.0);
         ui.text(&percent, x, row.text_y, BODY.tabular(), t.text_dim);
         x + met.percent_w
-    }
-
-    fn pill_sync(&mut self, ui: &mut Ui, m: &Model, met: &BarMetrics, row: Row, mut x: f32) -> f32 {
-        let t = &m.theme;
-        let value = BODY.tabular();
-        self.icon_button(
-            ui,
-            m,
-            Hit::SyncMinus,
-            ICON_MINUS,
-            x + BUTTON / 2.0,
-            row.cy,
-            14.0,
-            false,
-        );
-        x += BUTTON;
-        let sync_value = format!("{:+} ms", m.sync_ms).replace('-', "−");
-        let value_x = x + (met.sync_value_w - ui.measure(&sync_value, value).0) / 2.0;
-        ui.text(&sync_value, value_x, row.text_y, value, t.text);
-        x += met.sync_value_w;
-        self.icon_button(
-            ui,
-            m,
-            Hit::SyncPlus,
-            ICON_PLUS,
-            x + BUTTON / 2.0,
-            row.cy,
-            14.0,
-            false,
-        );
-        x + BUTTON
     }
 
     /// The round buttons at the right: microphone, readouts, full screen.

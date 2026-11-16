@@ -8,8 +8,6 @@
 use std::collections::HashMap;
 use std::f32::consts::TAU;
 
-use dockview_domain::settings::MAX_AUDIO_OFFSET_MS;
-
 mod buttons;
 mod consts;
 mod interaction;
@@ -21,7 +19,7 @@ mod tooltip;
 mod widgets;
 
 use consts::*;
-pub use consts::{IDLE_HIDE_SECS, SYNC_STEP_MS, WHEEL_VOLUME_STEP};
+pub use consts::{IDLE_HIDE_SECS, WHEEL_VOLUME_STEP};
 use dockview_domain::view::*;
 use math::*;
 
@@ -37,8 +35,6 @@ use dockview_domain::theme::{Color, Theme};
 pub(super) enum Hit {
     Pill,
     Volume,
-    SyncMinus,
-    SyncPlus,
     Fullscreen,
     /// Bar button that saves the replay.
     ReplaySave,

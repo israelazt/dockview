@@ -280,8 +280,6 @@ strings! {
     TipFullscreen => "Fullscreen (F)", "Pantalla completa (F)";
     TipExitFullscreen => "Leave fullscreen (Esc)", "Salir de pantalla completa (Esc)";
     TipVolume => "Volume (↑ ↓ or the mouse wheel)", "Volumen (↑ ↓ o la rueda del ratón)";
-    TipSyncEarlier => "Play the sound a little earlier (←)", "Adelantar un poco el sonido (←)";
-    TipSyncLater => "Delay the sound a little (→)", "Retrasar un poco el sonido (→)";
     SaveClip => "Save clip", "Guardar clip";
     OpenFolder => "Open folder", "Abrir carpeta";
     ToastClipSaved => "Clip saved", "Clip guardado";

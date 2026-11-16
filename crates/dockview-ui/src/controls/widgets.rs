@@ -3,30 +3,6 @@
 use super::*;
 
 impl Controls {
-    #[allow(clippy::too_many_arguments)]
-    pub(super) fn icon_button(
-        &mut self,
-        ui: &mut Ui,
-        m: &Model,
-        hit: Hit,
-        icon: char,
-        cx: f32,
-        cy: f32,
-        size: f32,
-        active: bool,
-    ) {
-        let rect = Rect::new(cx - BUTTON / 2.0, cy - BUTTON / 2.0, BUTTON, BUTTON);
-        self.register(hit, rect);
-        let (hover, press) = self.amounts(hit);
-        let strength = hover.max(if active { 1.0 } else { 0.0 });
-        let alpha = m.theme.hover.a * (strength + 0.9 * press);
-        if alpha > 0.002 {
-            ui.rect(rect, BUTTON / 2.0, m.theme.hover.with_alpha(alpha.min(1.0)));
-        }
-        // The icon dips slightly under the finger.
-        ui.icon(icon, cx, cy, size * (1.0 - 0.1 * press), m.theme.text);
-    }
-
     /// The soft highlight under a control while the pointer is over it or
     /// pressing it. `hover_weight` scales the hover part (rows use less than
     /// buttons). Returns the hover and press amounts for the caller to use.
