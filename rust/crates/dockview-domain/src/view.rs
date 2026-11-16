@@ -238,6 +238,10 @@ pub enum Action {
     SetSceneTransition(SceneTransition),
     /// How long a smooth scene change takes, in milliseconds.
     SetTransitionMs(u32),
+    /// Turn the layer editor's pull to edges and centres on or off.
+    ToggleCanvasSnap,
+    /// Show or hide the grid of the layer editor.
+    ToggleCanvasGrid,
     ToggleStats,
     /// Open or close the Studio side panel.
     ToggleStudio,
@@ -303,6 +307,8 @@ pub enum SceneAction {
     BeginEdit(usize),
     /// Put the last edited layer back where it was.
     Undo,
+    /// Stretch the chosen layer over the whole picture.
+    FitLayer,
 }
 
 /// What kind of source a layer shows.
@@ -344,6 +350,10 @@ pub struct ScenesView {
     pub transition: SceneTransition,
     /// How long a smooth change takes, in milliseconds.
     pub transition_ms: u32,
+    /// Layers are pulled to edges, centres and other layers while edited.
+    pub snap: bool,
+    /// The grid is shown and layers are pulled to its lines.
+    pub grid: bool,
 }
 
 #[cfg(test)]

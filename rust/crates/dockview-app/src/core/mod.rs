@@ -30,6 +30,8 @@ mod scene_actions;
 mod scene_runtime;
 #[cfg(test)]
 mod scene_tests;
+#[cfg(test)]
+mod scene_tools_tests;
 mod scene_transition;
 mod sources;
 mod startup;

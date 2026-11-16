@@ -311,6 +311,12 @@ impl Core {
                     dockview_domain::settings::MAX_TRANSITION_MS,
                 );
             }
+            Action::ToggleCanvasSnap => {
+                self.settings.canvas_snap = !self.settings.canvas_snap;
+            }
+            Action::ToggleCanvasGrid => {
+                self.settings.canvas_grid = !self.settings.canvas_grid;
+            }
             Action::SetVideoMode(mode) => {
                 self.settings.video_mode = mode;
                 // A deliberate choice ends any automatic switch and allows a

@@ -92,6 +92,8 @@ impl Core {
             editing: self.view.scene_editing && active.is_some(),
             transition: self.settings.scene_transition,
             transition_ms: self.settings.scene_transition_ms,
+            snap: self.settings.canvas_snap,
+            grid: self.settings.canvas_grid,
             layers,
         }
     }
@@ -108,6 +110,7 @@ impl Core {
             SceneAction::RemoveLayer(index) => self.remove_layer(index),
             SceneAction::SetLayerRect(index, units) => self.set_layer_rect(index, units),
             SceneAction::MoveLayer(index, delta) => self.move_layer(index, delta),
+            SceneAction::FitLayer => self.fit_layer(),
             SceneAction::BeginEdit(index) => {
                 self.begin_edit(index);
                 return;
@@ -314,6 +317,27 @@ impl Core {
         }
         self.commit_pending_edit(index);
         self.place_layer(index, rect);
+    }
+
+    /// Stretches the chosen layer over the whole picture (a locked one stays);
+    /// Undo puts it back.
+    fn fit_layer(&mut self) {
+        let Some(index) = self.view.layer_selected else {
+            return;
+        };
+        let whole = NormRect::new(0.0, 0.0, 1.0, 1.0);
+        let Some(layer) = self
+            .active_scene_mut()
+            .and_then(|scene| scene.layers.get(index))
+        else {
+            return;
+        };
+        if layer.locked || layer.rect == whole {
+            return;
+        }
+        self.begin_edit(index);
+        self.commit_pending_edit(index);
+        self.place_layer(index, whole);
     }
 
     /// Moves an overlay one step in the drawing order; the selection follows it.

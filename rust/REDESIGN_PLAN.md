@@ -254,7 +254,7 @@ Las partes 7 a 9 (escenas y capas, lienzo y transiciones, emisión) rellenan esa
 
 **Etapas** (cada una deja la app usable):
 1. **8.1 · Barra de transición (hecha, 2026-11-15; sin probar en la app).** Con el Estudio abierto, una tarjeta de 52 px bajo el vídeo (el vídeo cede esa franja; las columnas laterales conservan su altura) con el título «Transición», *Suave | Corte* y la duración *0,2 s | 0,4 s | 0,8 s* (apagada con Corte). Dato nuevo `scene_transition_ms` (guardado; por defecto 400; el núcleo lo acota a 100–2000 ms), acción `SetTransitionMs` y `ScenesView.transition_ms`. Datos puros en `canvas_bar.rs`. El selector de Ajustes sigue igual.
-2. **8.2 · Herramientas del lienzo.** Interruptor de imán (hoy siempre activo), guías visibles al pegarse (líneas sobre la imagen), cuadrícula opcional y «Ajustar» (la capa elegida a la imagen entera).
+2. **8.2 · Herramientas del lienzo — HECHO.** Tres interruptores en la barra bajo el vídeo: «Imán» (guardado; Alt lo anula al arrastrar), «Cuadrícula» (16×9 celdas cuadradas, guardada, dibujada tenue y con tirón a sus líneas) y «Ajustar» (la capa elegida ocupa la imagen entera; se deshace con Deshacer; apagado si no hay capa, está bloqueada o el editor está cerrado). Al pegarse, líneas guía sobre la imagen mientras se arrastra. Pendiente de revisión a mano: aspecto de las guías y la cuadrícula, barra en ventana estrecha (tres grupos pueden no caber).
 3. **8.3 · Zoom.** Aplazable: el renderizador solo pinta un rectángulo; hace falta decidir si el zoom es solo del editor o de la imagen.
 
 ## 6. Decisiones

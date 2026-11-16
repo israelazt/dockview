@@ -121,6 +121,9 @@ strings! {
     TransitionSmooth => "Smooth", "Suave";
     TransitionCut => "Cut", "Corte";
     TransitionBarTitle => "Transition", "Transición";
+    CanvasSnap => "Snap", "Imán";
+    CanvasGrid => "Grid", "Cuadrícula";
+    CanvasFit => "Fit", "Ajustar";
     ModeCompressed => "Compressed", "Comprimido";
     FindSwitched => "Switched to a compressed video mode because the USB port could not carry the uncompressed one. Use a USB 3 port and choose Auto in Settings to try again.", "Se cambió a un modo de video comprimido porque el puerto USB no podía con el modo sin comprimir. Usa un puerto USB 3 y elige «Automático» en Ajustes para volver a probar.";
     InstantReplay => "Instant replay", "Repetición instantánea";

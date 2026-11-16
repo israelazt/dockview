@@ -105,6 +105,8 @@ impl ApplicationHandler for Shell {
                 self.edit_mods = dockview_domain::layer_edit::Modifiers {
                     keep_aspect: state.shift_key(),
                     no_snap: state.alt_key(),
+                    // The grid is a setting; the editor adds it from the model.
+                    grid: false,
                 };
             }
             WindowEvent::CursorLeft { .. } => {

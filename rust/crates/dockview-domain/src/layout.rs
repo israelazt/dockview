@@ -152,7 +152,10 @@ mod tests {
         let l = studio_layout((1920, 1080), 1.0, 1.0);
         let side = l.side.expect("wide");
         assert_eq!((side.x, side.w), (0.0, SIDE_WIDTH));
-        assert_eq!((l.video.x, l.video.w), (SIDE_WIDTH, 1920.0 - 320.0 - SIDE_WIDTH));
+        assert_eq!(
+            (l.video.x, l.video.w),
+            (SIDE_WIDTH, 1920.0 - 320.0 - SIDE_WIDTH)
+        );
         assert_eq!(l.video.x + l.video.w, l.panel.unwrap().x);
     }
 

@@ -87,11 +87,7 @@ pub fn draw(ui: &mut Ui, m: &Model, stats: &Stats, area: Rect) {
     ui.panel(area, RADIUS_CARD, t.surface_solid, t.border, 1.0);
     let cy = area.y + area.h / 2.0;
     let line = |ui: &mut Ui, style| ui.measure("Ag", style).1;
-    ui.rect(
-        Rect::new(area.x + PAD, cy - 3.5, 7.0, 7.0),
-        3.5,
-        d.dot,
-    );
+    ui.rect(Rect::new(area.x + PAD, cy - 3.5, 7.0, 7.0), 3.5, d.dot);
     let left = area.x + PAD + 7.0 + 8.0;
     // The scene name takes what the figures leave.
     let mut right = area.x + area.w - PAD;
@@ -111,7 +107,12 @@ pub fn draw(ui: &mut Ui, m: &Model, stats: &Stats, area: Rect) {
         ui.text(&fig.label, x + vw + 4.0, cy - lh / 2.0, LABEL, t.text_dim);
     }
     let nh = line(ui, NAME);
-    ui.set_clip(Some(Rect::new(left, area.y, (right - left).max(0.0), area.h)));
+    ui.set_clip(Some(Rect::new(
+        left,
+        area.y,
+        (right - left).max(0.0),
+        area.h,
+    )));
     ui.text(&d.scene, left, cy - nh / 2.0, NAME, t.text);
     ui.set_clip(None);
 }

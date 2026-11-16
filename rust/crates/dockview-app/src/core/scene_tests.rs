@@ -8,7 +8,7 @@ use crate::testing::rig::Rig;
 
 // -- Renaming a scene ----------------------------------------------------
 
-fn rig_with_scenes(names: &[&str]) -> Rig {
+pub(super) fn rig_with_scenes(names: &[&str]) -> Rig {
     use dockview_domain::scene::{Scene, SourceRef};
     let scenes = names
         .iter()
@@ -56,7 +56,7 @@ use dockview_domain::scene::{NormRect, Scene, SourceRef};
 use dockview_domain::view::SceneAction;
 
 /// A rig whose active scene has a base and two layers over it.
-fn rig_editing() -> Rig {
+pub(super) fn rig_editing() -> Rig {
     let mut scene = Scene::with_base(
         "Edit",
         SourceRef::Window {
@@ -176,7 +176,7 @@ fn layers_move_up_and_down_but_the_base_stays_at_the_bottom() {
     assert_eq!(names(&rig), ["Base", "One", "Two"]);
 }
 
-fn rect_of_layer(rig: &Rig, i: usize) -> NormRect {
+pub(super) fn rect_of_layer(rig: &Rig, i: usize) -> NormRect {
     rig.core.model().scenes.layers[i].rect
 }
 

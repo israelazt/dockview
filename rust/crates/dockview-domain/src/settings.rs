@@ -126,6 +126,10 @@ fn default_transition_ms() -> u32 {
     DEFAULT_TRANSITION_MS
 }
 
+fn default_true() -> bool {
+    true
+}
+
 /// Quality of the video the replay buffer and recordings are encoded at. One
 /// encoder serves both, so it is one choice.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -271,6 +275,12 @@ pub struct AppSettings {
     /// How long a smooth scene change takes, in milliseconds.
     #[serde(default = "default_transition_ms")]
     pub scene_transition_ms: u32,
+    /// The layer editor pulls layers to edges, centres and other layers.
+    #[serde(default = "default_true")]
+    pub canvas_snap: bool,
+    /// The layer editor shows a grid and pulls layers to its lines.
+    #[serde(default)]
+    pub canvas_grid: bool,
     /// What the user chose about screenshots.
     #[serde(skip_serializing_if = "CaptureSettings::is_default")]
     pub capture: CaptureSettings,
@@ -318,6 +328,8 @@ impl Default for AppSettings {
             video_mode: VideoModePref::default(),
             scene_transition: SceneTransition::default(),
             scene_transition_ms: DEFAULT_TRANSITION_MS,
+            canvas_snap: true,
+            canvas_grid: false,
             capture: CaptureSettings::default(),
             stream: StreamSettings::default(),
             replay_enabled: true,
@@ -496,6 +508,8 @@ mod tests {
             video_mode: VideoModePref::Compressed,
             scene_transition: SceneTransition::Cut,
             scene_transition_ms: 800,
+            canvas_snap: false,
+            canvas_grid: true,
             capture: CaptureSettings {
                 copy: false,
                 folder: Some(r"D:\shots".into()),
@@ -577,6 +591,8 @@ mod tests {
         assert_eq!(old.video_mode, VideoModePref::Auto);
         assert_eq!(old.scene_transition, SceneTransition::Smooth);
         assert_eq!(old.scene_transition_ms, DEFAULT_TRANSITION_MS);
+        // Files from before the canvas tools: snapping on, no grid.
+        assert!(old.canvas_snap && !old.canvas_grid);
         let cut = AppSettings {
             scene_transition: SceneTransition::Cut,
             ..AppSettings::default()

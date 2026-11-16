@@ -6,6 +6,7 @@ const AREA: (f32, f32, f32, f32) = (0.0, 0.0, 1920.0, 1080.0);
 const NO_SNAP: Modifiers = Modifiers {
     keep_aspect: false,
     no_snap: true,
+    grid: false,
 };
 
 struct Rig {
@@ -40,6 +41,7 @@ impl Rig {
             can_add: true,
             selected: Some(1),
             editing: true,
+            snap: true,
             ..ScenesView::default()
         };
         Self {
@@ -247,6 +249,90 @@ fn snapping_pulls_a_move_to_the_centre_unless_it_is_turned_off() {
     };
     // The layer is 0.3 wide: centred it starts at 0.35.
     assert_eq!(&units[..2], &[3500, 3500]);
+}
+
+/// The corner layer moved so its centre is 3 px past the picture's centre;
+/// the first (and only) rectangle asked for.
+fn drag_near_the_centre(rig: &mut Rig) -> [i32; 4] {
+    rig.press(Rig::at(0.75, 0.75));
+    rig.move_to((
+        0.75 * 1920.0 - 0.25 * 1920.0 + 3.0,
+        0.75 * 1080.0 - 0.25 * 1080.0 + 3.0,
+    ));
+    let [Action::Scene(SceneAction::SetLayerRect(_, units))] = &rig.actions()[..] else {
+        panic!("one rect expected");
+    };
+    *units
+}
+
+#[test]
+fn the_snap_switch_in_the_bar_turns_the_pull_off() {
+    let mut rig = Rig::new();
+    rig.mods = Modifiers::default();
+    rig.model.scenes.snap = false;
+    let units = drag_near_the_centre(&mut rig);
+    // 3 px of 1920 and 1080 past 0.35, unpulled.
+    assert_eq!(units[0], 3516);
+    assert_eq!(units[1], 3528);
+}
+
+#[test]
+fn the_grid_pulls_a_move_to_its_lines() {
+    let mut rig = Rig::new();
+    rig.mods = Modifiers::default();
+    rig.model.scenes.snap = true;
+    rig.model.scenes.grid = true;
+    // The corner layer starts at x = 0.6. Its left edge goes to 4 px past
+    // 7/16 = 0.4375, a line only the grid has (nothing else is near).
+    rig.press(Rig::at(0.75, 0.75));
+    let target_left = 0.4375 * 1920.0 + 4.0;
+    let grab = 0.75 * 1920.0;
+    let dx = target_left - 0.6 * 1920.0;
+    rig.move_to((grab + dx, 0.75 * 1080.0));
+    let [Action::Scene(SceneAction::SetLayerRect(_, units))] = &rig.actions()[..] else {
+        panic!("one rect expected");
+    };
+    assert_eq!(units[0], 4375, "the left edge lands on 7/16");
+}
+
+/// What one plain rectangle adds to the drawing.
+fn rect_vertices() -> usize {
+    let mut ui = Ui::new();
+    ui.begin((100, 100), 1.0);
+    let before = ui.vertices().len();
+    ui.rect(
+        Rect::new(0.0, 0.0, 10.0, 1.0),
+        0.0,
+        dockview_domain::theme::Color::hex(0xFFFFFF, 1.0),
+    );
+    ui.vertices().len() - before
+}
+
+#[test]
+fn the_grid_is_drawn_only_when_it_is_on() {
+    let mut rig = Rig::new();
+    rig.frame();
+    let without = rig.ui.vertices().len();
+    rig.model.scenes.grid = true;
+    rig.frame();
+    // 17 + 10 lines.
+    assert_eq!(rig.ui.vertices().len(), without + 27 * rect_vertices());
+}
+
+#[test]
+fn guides_show_while_a_layer_sits_on_a_line_and_go_when_the_drag_ends() {
+    let mut rig = Rig::new();
+    rig.mods = Modifiers::default();
+    rig.frame();
+    let plain = rig.ui.vertices().len();
+    // Pulled to the picture's centre on both axes: two guides.
+    drag_near_the_centre(&mut rig);
+    rig.frame();
+    assert_eq!(rig.ui.vertices().len(), plain + 2 * rect_vertices());
+    rig.release();
+    rig.model.scenes.layers[1].rect = NormRect::new(0.35, 0.35, 0.3, 0.3);
+    rig.frame();
+    assert_eq!(rig.ui.vertices().len(), plain, "no guides at rest");
 }
 
 #[test]

@@ -4,7 +4,8 @@
 //! draws what it is doing.
 
 use dockview_domain::layer_edit::{
-    drag_to, handle_at, pick_layer, to_units, Drag, Handle, Modifiers, Picture,
+    drag_to, grid_lines, guides, handle_at, pick_layer, to_units, Drag, Guides, Handle, Modifiers,
+    Picture,
 };
 use dockview_domain::scene::NormRect;
 use dockview_domain::view::{Action, Model, SceneAction};
@@ -85,8 +86,15 @@ impl SceneEditor {
             return;
         }
         let picture = Picture::fitted(area, PICTURE_SIZE);
+        // What is held down (Alt, Shift) and what the user switched on in the
+        // bar: Alt or the Snap switch off turns the pull off; the grid adds lines.
+        let mods = Modifiers {
+            no_snap: mods.no_snap || !s.snap,
+            grid: s.grid,
+            ..mods
+        };
         self.interact(m, &picture, pointer, mods);
-        self.draw(ui, m, &picture);
+        self.draw(ui, m, &picture, mods);
     }
 
     /// The rectangle of layer `i`: where it is being dragged to, else where the
@@ -202,10 +210,41 @@ impl SceneEditor {
         });
     }
 
-    fn draw(&self, ui: &mut Ui, m: &Model, picture: &Picture) {
+    /// The guides to show: the lines the layer being dragged sits on right now.
+    fn active_guides(&self, m: &Model, mods: Modifiers) -> Guides {
+        let layers = &m.scenes.layers;
+        match self.drag {
+            Some(held) if held.moved && held.layer < layers.len() => {
+                let others: Vec<NormRect> = (0..layers.len())
+                    .filter(|i| *i != held.layer && layers[*i].visible)
+                    .map(|i| self.rect_of(m, i))
+                    .collect();
+                guides(self.rect_of(m, held.layer), &others, mods)
+            }
+            _ => Guides::default(),
+        }
+    }
+
+    /// The grid over the picture, faint enough to leave the picture readable.
+    fn draw_grid(ui: &mut Ui, m: &Model, picture: &Picture) {
+        let color = m.theme.text.with_alpha(0.16);
+        for x in grid_lines(true) {
+            let sx = picture.x + x * picture.w;
+            ui.rect(Rect::new(sx - 0.5, picture.y, 1.0, picture.h), 0.0, color);
+        }
+        for y in grid_lines(false) {
+            let sy = picture.y + y * picture.h;
+            ui.rect(Rect::new(picture.x, sy - 0.5, picture.w, 1.0), 0.0, color);
+        }
+    }
+
+    fn draw(&self, ui: &mut Ui, m: &Model, picture: &Picture, mods: Modifiers) {
         let t = &m.theme;
         let layers = &m.scenes.layers;
         let selected = m.scenes.selected.filter(|i| *i < layers.len());
+        if m.scenes.grid {
+            Self::draw_grid(ui, m, picture);
+        }
         for (i, layer) in layers.iter().enumerate() {
             if !layer.visible || Some(i) == selected {
                 continue;
@@ -243,6 +282,17 @@ impl SceneEditor {
             let (cx, cy) = (x + ax * w, y + ay * h);
             let spot = Rect::new(cx - HANDLE / 2.0, cy - HANDLE / 2.0, HANDLE, HANDLE);
             ui.panel(spot, 2.5, t.text, t.accent, 1.5);
+        }
+        // Guides across the whole picture, on top of everything else.
+        let g = self.active_guides(m, mods);
+        let line = t.accent.with_alpha(0.9);
+        for x in g.x {
+            let sx = picture.x + x * picture.w;
+            ui.rect(Rect::new(sx - 0.5, picture.y, 1.0, picture.h), 0.0, line);
+        }
+        for y in g.y {
+            let sy = picture.y + y * picture.h;
+            ui.rect(Rect::new(picture.x, sy - 0.5, picture.w, 1.0), 0.0, line);
         }
     }
 }

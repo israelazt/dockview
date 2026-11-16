@@ -209,6 +209,19 @@ pub struct Modifiers {
     pub keep_aspect: bool,
     /// Do not pull to edges and the centre.
     pub no_snap: bool,
+    /// Also pull to the lines of the grid.
+    pub grid: bool,
+}
+
+/// The grid divides the picture into this many columns and rows (square cells
+/// on a 16:9 picture).
+pub const GRID_COLUMNS: u32 = 16;
+pub const GRID_ROWS: u32 = 9;
+
+/// The lines of the grid along one axis, the picture's edges included.
+pub fn grid_lines(horizontal: bool) -> Vec<f32> {
+    let n = if horizontal { GRID_COLUMNS } else { GRID_ROWS };
+    (0..=n).map(|i| i as f32 / n as f32).collect()
 }
 
 /// The lines a layer is pulled to along one axis: the picture's edges and
@@ -220,6 +233,54 @@ fn snap_lines(others: &[NormRect], horizontal: bool) -> Vec<f32> {
         lines.extend([start, start + len / 2.0, start + len]);
     }
     lines
+}
+
+/// What a layer is pulled to along one axis under `mods`; `None` when snapping
+/// is off.
+fn pull_lines(others: &[NormRect], horizontal: bool, mods: Modifiers) -> Option<Vec<f32>> {
+    (!mods.no_snap).then(|| {
+        let mut lines = snap_lines(others, horizontal);
+        if mods.grid {
+            lines.extend(grid_lines(horizontal));
+        }
+        lines
+    })
+}
+
+/// The lines a rectangle sits on right now, to draw as guides: positions along
+/// each axis, in the picture's `0..1`.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct Guides {
+    /// Vertical lines (positions along x).
+    pub x: Vec<f32>,
+    /// Horizontal lines (positions along y).
+    pub y: Vec<f32>,
+}
+
+/// How close an edge must be to a line to count as sitting on it.
+const ON_LINE: f32 = 1e-3;
+
+/// The picture's edges and centre and the other layers' edges and centres that
+/// an edge or the centre of `rect` sits on. Empty when snapping is off (the
+/// grid is drawn on its own, not as guides).
+pub fn guides(rect: NormRect, others: &[NormRect], mods: Modifiers) -> Guides {
+    if mods.no_snap {
+        return Guides::default();
+    }
+    let on = |points: [f32; 3], horizontal: bool| {
+        let mut found: Vec<f32> = Vec::new();
+        for line in snap_lines(others, horizontal) {
+            let hit = points.iter().any(|p| (p - line).abs() <= ON_LINE);
+            if hit && !found.iter().any(|f| (f - line).abs() <= ON_LINE) {
+                found.push(line);
+            }
+        }
+        found
+    };
+    Guides {
+        x: on([rect.x, rect.x + rect.w / 2.0, rect.x + rect.w], true),
+        y: on([rect.y, rect.y + rect.h / 2.0, rect.y + rect.h], false),
+    }
 }
 
 /// The shift that brings the closest of `points` onto the closest of `lines`,
@@ -251,8 +312,8 @@ pub fn drag_to(
     let (px, py) = picture.to_norm(x, y);
     let (dx, dy) = (px - drag.origin.0, py - drag.origin.1);
     let s = drag.start;
-    let snap_x = (!mods.no_snap).then(|| snap_lines(others, true));
-    let snap_y = (!mods.no_snap).then(|| snap_lines(others, false));
+    let snap_x = pull_lines(others, true, mods);
+    let snap_y = pull_lines(others, false, mods);
     let (tx, ty) = (SNAP_PX / picture.w.max(1.0), SNAP_PX / picture.h.max(1.0));
 
     if drag.handle == Handle::Move {
@@ -392,6 +453,7 @@ mod tests {
     const NO_SNAP: Modifiers = Modifiers {
         keep_aspect: false,
         no_snap: true,
+        grid: false,
     };
 
     #[test]
@@ -547,6 +609,7 @@ mod tests {
         let keep = Modifiers {
             keep_aspect: true,
             no_snap: true,
+            grid: false,
         };
         let start = rect(0.2, 0.2, 0.4, 0.2); // 2:1 in the picture
         let r = drag(Handle::BottomRight, start, (900.0, 350.0), keep);
@@ -591,6 +654,66 @@ mod tests {
         // Alt (no snap) leaves it where the pointer put it.
         let alt = drag_to(&d, &p, (203.0, 150.0), &[], NO_SNAP);
         assert!((alt.x - 0.003).abs() < 1e-4, "{alt:?}");
+    }
+
+    #[test]
+    fn the_grid_pulls_only_when_it_is_on() {
+        let p = picture();
+        let start = rect(0.1, 0.1, 0.2, 0.2);
+        let d = Drag::begin(Handle::Move, start, &p, 300.0, 150.0);
+        // A column of the grid is 1/16 = 62.5 px wide here; 3 px past the
+        // second line (0.125 → x = 125 px) the layer lands on it.
+        let at = (300.0 + (0.125 - 0.1) * 1000.0 + 3.0, 150.0);
+        let plain = drag_to(&d, &p, at, &[], Modifiers::default());
+        assert!(
+            (plain.x - 0.128).abs() < 1e-4,
+            "no grid, no pull: {plain:?}"
+        );
+        let gridded = Modifiers {
+            grid: true,
+            ..Modifiers::default()
+        };
+        let pulled = drag_to(&d, &p, at, &[], gridded);
+        assert!((pulled.x - 0.125).abs() < 1e-5, "{pulled:?}");
+        // Alt still wins over the grid.
+        let alt = Modifiers {
+            no_snap: true,
+            ..gridded
+        };
+        assert!((drag_to(&d, &p, at, &[], alt).x - 0.128).abs() < 1e-4);
+    }
+
+    #[test]
+    fn the_grid_has_square_cells_on_a_16_9_picture() {
+        let xs = grid_lines(true);
+        let ys = grid_lines(false);
+        assert_eq!((xs.len(), ys.len()), (17, 10));
+        assert_eq!((xs[0], xs[16], ys[0], ys[9]), (0.0, 1.0, 0.0, 1.0));
+        assert!((xs[1] * 16.0 - ys[1] * 9.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn guides_are_the_lines_the_layer_sits_on() {
+        let other = rect(0.5, 0.5, 0.2, 0.2);
+        // Left edge on the picture's edge, bottom edge on the other's top.
+        let g = guides(rect(0.0, 0.3, 0.2, 0.2), &[other], Modifiers::default());
+        assert_eq!(g.x, [0.0]);
+        assert_eq!(g.y, [0.5]);
+        // Centred on the picture along x; nothing along y.
+        let g = guides(rect(0.4, 0.1, 0.2, 0.2), &[], Modifiers::default());
+        assert_eq!(g.x, [0.5]);
+        assert!(g.y.is_empty());
+        // Two edges on the same line give one guide.
+        let g = guides(rect(0.3, 0.1, 0.2, 0.2), &[other], Modifiers::default());
+        assert_eq!(g.x, [0.5]);
+    }
+
+    #[test]
+    fn no_guides_when_snapping_is_off_or_nothing_is_near() {
+        let r = rect(0.0, 0.0, 0.5, 0.5);
+        assert_eq!(guides(r, &[], NO_SNAP), Guides::default());
+        let g = guides(rect(0.13, 0.17, 0.2, 0.2), &[], Modifiers::default());
+        assert_eq!(g, Guides::default());
     }
 
     #[test]

@@ -6,7 +6,7 @@
 use dockview_domain::design::RADIUS_CARD;
 use dockview_domain::i18n::{tr, Key, Lang};
 use dockview_domain::settings::{SceneTransition, TRANSITION_CHOICES_MS};
-use dockview_domain::view::{Action, Model};
+use dockview_domain::view::{Action, Model, SceneAction};
 
 use super::input::Pointer;
 use super::text::Weight;
@@ -31,6 +31,9 @@ pub struct Choice {
     pub selected: bool,
     /// A choice that does not apply right now is shown dim and does nothing.
     pub enabled: bool,
+    /// An on/off switch: pressing it again turns it off, so the chosen one
+    /// still answers to a press.
+    pub toggle: bool,
 }
 
 /// The choices of the bar, in groups drawn left to right.
@@ -63,6 +66,7 @@ pub fn data(m: &Model) -> BarData {
             action: Action::SetSceneTransition(kind),
             selected: m.scenes.transition == kind,
             enabled: true,
+            toggle: false,
         })
         .collect();
     // The length only matters for a smooth change.
@@ -73,11 +77,41 @@ pub fn data(m: &Model) -> BarData {
             action: Action::SetTransitionMs(ms),
             selected: m.scenes.transition_ms == ms,
             enabled: smooth,
+            toggle: false,
         })
         .collect();
+    // Fitting needs a layer the editor may change.
+    let can_fit = m.scenes.editing
+        && m.scenes
+            .selected
+            .and_then(|i| m.scenes.layers.get(i))
+            .is_some_and(|l| !l.locked);
+    let tools_group = vec![
+        Choice {
+            label: tr(lang, Key::CanvasSnap).to_string(),
+            action: Action::ToggleCanvasSnap,
+            selected: m.scenes.snap,
+            enabled: true,
+            toggle: true,
+        },
+        Choice {
+            label: tr(lang, Key::CanvasGrid).to_string(),
+            action: Action::ToggleCanvasGrid,
+            selected: m.scenes.grid,
+            enabled: true,
+            toggle: true,
+        },
+        Choice {
+            label: tr(lang, Key::CanvasFit).to_string(),
+            action: Action::Scene(SceneAction::FitLayer),
+            selected: false,
+            enabled: can_fit,
+            toggle: false,
+        },
+    ];
     BarData {
         title: tr(lang, Key::TransitionBarTitle).to_string(),
-        groups: vec![kind_group, length_group],
+        groups: vec![kind_group, length_group, tools_group],
     }
 }
 
@@ -179,7 +213,7 @@ impl CanvasBar {
                 );
                 if over && choice.enabled {
                     self.hover = true;
-                    if pointer.just_pressed && !choice.selected {
+                    if pointer.just_pressed && (!choice.selected || choice.toggle) {
                         self.actions.push(choice.action.clone());
                     }
                 }
@@ -196,7 +230,7 @@ mod tests {
     #[test]
     fn it_offers_the_two_kinds_and_three_lengths() {
         let d = data(&model());
-        assert_eq!(d.groups.len(), 2);
+        assert_eq!(d.groups.len(), 3);
         let kinds: Vec<_> = d.groups[0].iter().map(|c| c.label.as_str()).collect();
         assert_eq!(kinds, ["Smooth", "Cut"]);
         let lengths: Vec<_> = d.groups[1].iter().map(|c| c.label.as_str()).collect();
@@ -229,6 +263,71 @@ mod tests {
         assert!(data(&m).groups[0].iter().all(|c| c.enabled));
         m.scenes.transition = SceneTransition::Smooth;
         assert!(data(&m).groups[1].iter().all(|c| c.enabled));
+    }
+
+    fn with_layer(locked: bool, editing: bool) -> Model {
+        use dockview_domain::scene::NormRect;
+        use dockview_domain::view::LayerView;
+        let mut m = model();
+        m.scenes.editing = editing;
+        m.scenes.selected = Some(0);
+        m.scenes.layers = vec![LayerView {
+            name: "Base".into(),
+            kind: Default::default(),
+            visible: true,
+            locked,
+            rect: NormRect::new(0.1, 0.1, 0.3, 0.3),
+        }];
+        m
+    }
+
+    #[test]
+    fn the_tools_show_snap_and_grid_as_switches() {
+        let mut m = model();
+        m.scenes.snap = true;
+        m.scenes.grid = false;
+        let tools = &data(&m).groups[2];
+        let labels: Vec<_> = tools.iter().map(|c| c.label.as_str()).collect();
+        assert_eq!(labels, ["Snap", "Grid", "Fit"]);
+        assert_eq!(
+            tools.iter().map(|c| c.selected).collect::<Vec<_>>(),
+            [true, false, false]
+        );
+        assert!(tools[0].toggle && tools[1].toggle && !tools[2].toggle);
+        // Switches work whether or not the editor is on.
+        assert!(tools[0].enabled && tools[1].enabled);
+    }
+
+    #[test]
+    fn fit_needs_a_chosen_layer_that_is_not_locked_in_the_editor() {
+        let fit = |m: &Model| data(m).groups[2][2].enabled;
+        assert!(fit(&with_layer(false, true)));
+        assert!(!fit(&with_layer(true, true)), "locked");
+        assert!(!fit(&with_layer(false, false)), "editor off");
+        let mut none = with_layer(false, true);
+        none.scenes.selected = None;
+        assert!(!fit(&none), "nothing chosen");
+        assert_eq!(
+            data(&with_layer(false, true)).groups[2][2].action,
+            Action::Scene(SceneAction::FitLayer)
+        );
+    }
+
+    #[test]
+    fn pressing_a_switch_that_is_on_turns_it_off() {
+        let mut m = model();
+        m.scenes.snap = true;
+        let area = Rect::new(20.0, 700.0, 900.0, BAR_H);
+        let (x, y) = centre_of(&m, area, 2, 0);
+        assert_eq!(
+            press_at(&mut CanvasBar::new(), &m, area, x, y),
+            [Action::ToggleCanvasSnap]
+        );
+        let (x, y) = centre_of(&m, area, 2, 1);
+        assert_eq!(
+            press_at(&mut CanvasBar::new(), &m, area, x, y),
+            [Action::ToggleCanvasGrid]
+        );
     }
 
     #[test]
