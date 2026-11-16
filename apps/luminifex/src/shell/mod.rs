@@ -35,6 +35,7 @@ use dockview_ui::input::Pointer;
 use dockview_ui::navbar::NavBar;
 use dockview_ui::rail::Rail;
 use dockview_ui::scene_editor::SceneEditor;
+use dockview_ui::source_picker::SourcePicker;
 use dockview_ui::strip::ShortcutStrip;
 use dockview_ui::studio::{Scope, StudioPanel, StudioSection};
 use dockview_ui::toast::{ToastHost, ToastKind};
@@ -114,6 +115,7 @@ pub struct Shell {
     /// The readouts over the picture in the viewer.
     hud: Hud,
     /// The list of sources that opens under the source card of the readouts.
+    source_picker: SourcePicker,
     /// The readouts are fading in or out (so frames keep being drawn).
     hud_moving: bool,
     /// How far the Studio panel was out when the frame was drawn.
@@ -190,6 +192,7 @@ impl Shell {
             rail: Rail::new(),
             strip: ShortcutStrip::new(),
             hud: Hud::new(),
+            source_picker: SourcePicker::new(),
             hud_moving: false,
             studio_openness: 0.0,
             toasts: ToastHost::new(),

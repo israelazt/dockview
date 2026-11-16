@@ -16,6 +16,7 @@ pub mod rec;
 pub mod scene_editor;
 pub mod settings;
 pub mod snip;
+pub mod source_picker;
 mod stats_data;
 pub mod strip;
 pub mod studio;

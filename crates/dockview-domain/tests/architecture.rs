@@ -275,7 +275,10 @@ fn c() {}
 /// the viewer, the Studio and Settings. What they share (the engine, the
 /// widgets, the texts, the options) is in none of these lists.
 const MODE_MODULES: [(&str, &[&str]); 3] = [
-    ("the viewer", &["controls", "hud", "hud_cards", "rec"]),
+    (
+        "the viewer",
+        &["controls", "hud", "hud_cards", "rec", "source_picker"],
+    ),
     (
         "the Studio",
         &[

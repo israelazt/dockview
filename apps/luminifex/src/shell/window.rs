@@ -176,6 +176,7 @@ impl Shell {
         let studio = &mut self.studio;
         let side = &mut self.side;
         let hud = &mut self.hud;
+        let source_picker = &mut self.source_picker;
         // The readouts show in the viewer: no panel, not in full screen.
         let hud_show = model.hud && !model.mode.shows_panel() && !model.fullscreen;
         let navbar = &mut self.navbar;
@@ -219,7 +220,12 @@ impl Shell {
                     // What floats over the video anchors to the video's room.
                     // The layer editor sits on the picture, under the controls; what
                     // the controls (the pill) use is not the editor's.
-                    let editor_pointer = if controls.over_controls() {
+                    let over_list = source_picker.covers(
+                        video_pointer
+                            .pos
+                            .map(|(x, y)| (x - place.video_logical.x, y - place.video_logical.y)),
+                    );
+                    let editor_pointer = if controls.over_controls() || over_list {
                         Pointer {
                             pos: None,
                             wheel: 0.0,
@@ -247,14 +253,29 @@ impl Shell {
                     // The pill anchors to the bottom of the video, above the
                     // transition bar, not to the window's.
                     ui.limit_height(Some(vl.h));
+                    // Under the list the bar must not take the pointer either.
+                    let bar_pointer = if source_picker.covers(float_pointer.pos) {
+                        Pointer {
+                            pos: None,
+                            ..float_pointer
+                        }
+                    } else {
+                        float_pointer
+                    };
                     // The pill is of the viewer: it is not in the Studio.
                     if model.mode == dockview_domain::navigation::AppMode::Viewer {
-                        controls.frame(ui, &model, &float_pointer, dt);
+                        controls.frame(ui, &model, &bar_pointer, dt);
                     } else {
                         controls.hide();
                     }
                     let hud_h =
                         hud.frame(ui, &model, stats, &float_pointer, hud_show, dt, animations);
+                    if hud.take_source_click() {
+                        source_picker.toggle();
+                    }
+                    if !hud_show {
+                        source_picker.close();
+                    }
                     // What anchors to the top sits under the readouts.
                     ui.set_inset_top(top_l + vl.y + hud_h);
                     ui.limit_height(Some((vl.h - hud_h).max(0.0)));
@@ -268,6 +289,10 @@ impl Shell {
                         );
                     }
                     toasts.frame(ui, &model.theme, dt, animations);
+                    // The list of sources, over the rest of what floats.
+                    ui.set_inset_top(top_l + vl.y);
+                    ui.limit_height(Some(vl.h));
+                    source_picker.frame(ui, &model, &float_pointer, hud.source_card());
                     ui.set_inset_top(top_l);
                     ui.set_inset_left(rail_l);
                     // The panel and the left column, on top, in the room they took.

@@ -17,6 +17,7 @@ use super::text::Weight;
 use super::{Rect, TextStyle, Ui};
 
 const ICON_HEALTH: char = '\u{e038}';
+const ICON_CHEVRON: char = '\u{e06d}';
 
 const MARGIN: f32 = 16.0;
 const TOP: f32 = 12.0;
@@ -76,6 +77,11 @@ pub struct Hud {
     progress: f32,
     hover: bool,
     pressed: bool,
+    /// Where the source card was drawn last, and what the pointer did on it.
+    source: Option<Rect>,
+    source_hover: bool,
+    source_pressed: bool,
+    source_clicked: bool,
 }
 
 impl Hud {
@@ -87,10 +93,19 @@ impl Hud {
         std::mem::take(&mut self.actions)
     }
 
-    /// Whether the pointer is over the statistics button (the rest of the row
-    /// only shows readings).
+    /// Whether the pointer is over the health button or the source card.
     pub fn wants_pointer(&self) -> bool {
-        self.hover && self.progress > 0.0
+        (self.hover || self.source_hover) && self.progress > 0.0
+    }
+
+    /// Where the source card is, when the row is shown (the list opens under it).
+    pub fn source_card(&self) -> Option<Rect> {
+        self.source.filter(|_| self.progress > 0.0)
+    }
+
+    /// Whether the source card was clicked since the last call.
+    pub fn take_source_click(&mut self) -> bool {
+        std::mem::take(&mut self.source_clicked)
     }
 
     /// Whether the row is moving (so the window keeps drawing frames).
@@ -126,6 +141,9 @@ impl Hud {
         if self.progress <= 0.0 {
             self.hover = false;
             self.pressed = false;
+            self.source = None;
+            self.source_hover = false;
+            self.source_pressed = false;
             return 0.0;
         }
         let eased = 1.0 - (1.0 - self.progress).powi(3);
@@ -154,19 +172,46 @@ impl Hud {
         let room = button.x - GAP - MARGIN;
         let shown = how_many_fit(&widths, room).max(1);
         let mut x = MARGIN;
-        for (card, w) in all.iter().zip(&widths).take(shown) {
+        self.source = None;
+        for (i, (card, w)) in all.iter().zip(&widths).take(shown).enumerate() {
             let w = w.min((room - x + MARGIN).max(40.0));
-            draw_card(ui, theme, card, Rect::new(x, TOP, w, CARD_H));
+            let rect = Rect::new(x, TOP, w, CARD_H);
+            draw_card(ui, theme, card, rect);
+            if i == 0 {
+                // The first card is the source: it opens the list of sources.
+                self.source = Some(rect);
+                self.source_hover = pointer.pos.is_some_and(|(px, py)| rect.contains(px, py));
+                if self.source_hover {
+                    ui.rect(rect, RADIUS_CONTROL + 2.0, theme.hover);
+                }
+            }
             x += w + GAP;
         }
-        self.draw_button(ui, theme, button);
+        if show {
+            if pointer.just_pressed {
+                self.source_pressed = self.source_hover;
+            }
+            if pointer.just_released {
+                if self.source_pressed && self.source_hover {
+                    self.source_clicked = true;
+                }
+                self.source_pressed = false;
+            }
+        }
+        self.draw_button(ui, theme, button, false);
         ui.set_offset(0.0, 0.0);
         ui.set_opacity(1.0);
         HEIGHT
     }
 
-    fn draw_button(&self, ui: &mut Ui, theme: &Theme, r: Rect) {
-        let (fill, border, icon) = if self.hover {
+    fn draw_button(&self, ui: &mut Ui, theme: &Theme, r: Rect, on: bool) {
+        let (fill, border, icon) = if on {
+            (
+                theme.brand.with_alpha(0.14),
+                theme.brand.with_alpha(0.4),
+                theme.brand,
+            )
+        } else if self.hover {
             (theme.segment_active, theme.border, theme.text)
         } else {
             (theme.surface, theme.border, theme.text_dim)
@@ -186,6 +231,7 @@ fn piece_width(ui: &mut Ui, p: &Piece) -> f32 {
         }
         Piece::Line(text, _) => ui.measure(text, LABEL).0 + 16.0,
         Piece::Divider => 1.0 + DIVIDER_GAP * 2.0,
+        Piece::Chevron => 8.0 + 14.0,
     }
 }
 
@@ -208,7 +254,7 @@ fn card_width(ui: &mut Ui, card: &Card, _lang: Lang) -> f32 {
                 first_text = false;
             }
             Piece::Divider => first_text = true,
-            Piece::Dot(_) => {}
+            Piece::Dot(_) | Piece::Chevron => {}
         }
         width += piece_width(ui, piece);
     }
@@ -257,6 +303,10 @@ fn draw_card(ui: &mut Ui, theme: &Theme, card: &Card, r: Rect) {
                 );
                 ui.text(text, chip.x + 8.0, chip.y + 4.0, LABEL, *color);
                 x += chip.w;
+            }
+            Piece::Chevron => {
+                ui.icon(ICON_CHEVRON, x + 8.0 + 7.0, mid, 14.0, theme.text_dim);
+                x += 8.0 + 14.0;
             }
             Piece::Divider => {
                 x += DIVIDER_GAP;
@@ -472,21 +522,48 @@ mod tests {
     }
 
     #[test]
-    fn the_source_card_is_only_a_reading_and_asks_for_nothing() {
+    fn the_source_card_opens_the_list_when_clicked() {
         let m = model();
         let mut hud = Hud::new();
+        assert!(hud.source_card().is_none(), "nothing before it is drawn");
         frame(&mut hud, &m, &measured(), 1280, &Pointer::default(), true);
+        let card = hud.source_card().expect("the first card");
+        assert_eq!((card.x, card.y), (MARGIN, TOP));
         let mut p = Pointer {
-            pos: Some((MARGIN + 30.0, TOP + CARD_H / 2.0)),
+            pos: Some(card.center()),
             ..Pointer::default()
         };
         frame(&mut hud, &m, &measured(), 1280, &p, true);
-        assert!(!hud.wants_pointer(), "no hand cursor over a reading");
+        assert!(hud.wants_pointer(), "the hand cursor over the card");
         p.press();
         frame(&mut hud, &m, &measured(), 1280, &p, true);
         p.end_frame();
         p.release();
         frame(&mut hud, &m, &measured(), 1280, &p, true);
-        assert!(hud.take_actions().is_empty());
+        assert!(hud.take_source_click());
+        assert!(!hud.take_source_click(), "once");
+        // A click on the second card is not the source card's.
+        let other = Pointer {
+            pos: Some((card.x + card.w + GAP + 30.0, TOP + 10.0)),
+            ..Pointer::default()
+        };
+        let mut p = other;
+        frame(&mut hud, &m, &measured(), 1280, &p, true);
+        p.press();
+        frame(&mut hud, &m, &measured(), 1280, &p, true);
+        p.end_frame();
+        p.release();
+        frame(&mut hud, &m, &measured(), 1280, &p, true);
+        assert!(!hud.take_source_click());
+    }
+
+    #[test]
+    fn the_source_card_is_gone_while_the_row_is_hidden() {
+        let m = model();
+        let mut hud = Hud::new();
+        frame(&mut hud, &m, &measured(), 1280, &Pointer::default(), true);
+        assert!(hud.source_card().is_some());
+        frame(&mut hud, &m, &measured(), 1280, &Pointer::default(), false);
+        assert!(hud.source_card().is_none());
     }
 }

@@ -78,7 +78,7 @@ Igual que el resto: tarea atómica (cambio pequeño con tests; `fmt`, `clippy -D
 | Tarea | Qué | Listo cuando |
 |---|---|---|
 | C-1 ✅ | La píldora sin sincronía de audio (la sincronía queda en la sección Audio del Estudio). **Pendiente:** carpeta `ui/viewer/` con `ViewerView` y `ViewerAction` | El visor solo emite sus acciones |
-| C-2 ✅ | El HUD deja de abrir la lista de fuentes; la tarjeta de fuente es solo lectura y `source_picker` se borró | Sin `source_picker` |
+| C-2 ↩ | **Revertida (2026-11-16, a petición del autor):** el HUD vuelve a abrir la lista de fuentes del visor (`source_picker`), porque cambiar de lo que se captura desde el Estudio no le sirve para mirar. El Estudio conserva también su lista «Capas y fuentes» | Dos sitios para elegir la fuente, ambos con las mismas acciones |
 | C-3 ✅ | El panel flotante de estadísticas se borró; el botón del pulso del HUD (`Action::OpenStats`) abre el Estudio en Estadísticas, y `--stats` también. No existía una tecla `I` | Tests |
 | C-4 ✅ | Teclas por modo: `V`, `A`, `←` `→`, `Ctrl+Z` solo en el Estudio; salir del Estudio termina la edición de capas; el volumen (`↑` `↓`) sigue en todos los modos | Tests |
 

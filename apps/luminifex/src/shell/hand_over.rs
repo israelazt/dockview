@@ -15,6 +15,7 @@ impl Shell {
         for action in actions
             .into_iter()
             .chain(self.hud.take_actions())
+            .chain(self.source_picker.take_actions())
             .chain(self.canvas_bar.take_actions())
             .chain(self.settings_page.take_actions())
             .chain(self.navbar.take_actions())
