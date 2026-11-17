@@ -51,22 +51,37 @@ pub(super) fn service_of(address: &str) -> usize {
 }
 
 /// What the platform recommends for the chosen bitrate, and whether the
-/// choice is within it; `None` for a service we have no advice for.
-pub(super) fn advice_sentence(m: &Model) -> Option<(String, Fit)> {
+/// choice is within it; `None` for a service we have no advice for. The
+/// verdict on the choice is a sentence apart, only when it is not fine.
+pub(super) fn advice_sentence(m: &Model) -> Option<(String, Option<String>, Fit)> {
     let (s, lang) = (&m.stream, m.lang);
     let platform = Platform::of_address(&s.address)?;
     let (min, max) = platform.recommended_kbps(s.fps);
-    let mut text = tr(lang, Key::StreamAdvice)
+    let text = tr(lang, Key::StreamAdvice)
         .replace("{service}", platform.name())
         .replace("{min}", &min.to_string())
         .replace("{max}", &max.to_string());
     let verdict = fit(platform, s.fps, s.video_kbps);
-    match verdict {
-        Fit::Low => text.push_str(&format!(" · {}", tr(lang, Key::StreamAdviceLow))),
-        Fit::High => text.push_str(&format!(" · {}", tr(lang, Key::StreamAdviceHigh))),
-        Fit::Fine => {}
-    }
-    Some((text, verdict))
+    let remark = match verdict {
+        Fit::Low => Some(tr(lang, Key::StreamAdviceLow).to_owned()),
+        Fit::High => Some(tr(lang, Key::StreamAdviceHigh).to_owned()),
+        Fit::Fine => None,
+    };
+    Some((text, remark, verdict))
+}
+
+/// The most lines the remark on the choice may take.
+const REMARK_LINES: usize = 2;
+
+/// How tall the advice is: its line and the lines of the remark, if any.
+fn advice_height(ui: &mut Ui, m: &Model, width: f32) -> f32 {
+    let Some((_, remark, _)) = advice_sentence(m) else {
+        return 0.0;
+    };
+    let lines = remark.map_or(0, |r| {
+        wrap_text(ui, &r, HINT, width).len().min(REMARK_LINES)
+    });
+    HINT_LINE * (1 + lines) as f32
 }
 
 /// The longest line of the hint the body leaves room for.
@@ -74,15 +89,11 @@ const HINT_LINES: f32 = 3.0;
 
 /// How tall the body is: the status line, five groups of a caption and a row,
 /// the button and the hint.
-pub fn body_height(_ui: &mut Ui, m: &Model, _width: f32) -> f32 {
+pub fn body_height(ui: &mut Ui, m: &Model, width: f32) -> f32 {
     PAD_TOP
         + STATUS_LINE
         + if shows_health(m) { HINT_LINE } else { 0.0 }
-        + if advice_sentence(m).is_some() {
-            HINT_LINE
-        } else {
-            0.0
-        }
+        + advice_height(ui, m, width - PAD * 2.0)
         + GAP
         + 5.0 * (LABEL_H + ROW_H + GAP)
         + BUTTON_H
@@ -244,15 +255,16 @@ impl StudioPanel {
             y,
             w,
         ) + GAP;
-        if let Some((text, verdict)) = advice_sentence(m) {
-            let color = if verdict == Fit::Fine {
-                t.text_dim
-            } else {
-                t.warn
-            };
+        if let Some((text, remark, _)) = advice_sentence(m) {
             let line = fit_text(ui, &text, HINT, w);
-            ui.text(&line, x, y - GAP + 2.0, HINT, color);
+            ui.text(&line, x, y - GAP + 2.0, HINT, t.text_dim);
             y += HINT_LINE;
+            if let Some(remark) = remark {
+                for line in wrap_text(ui, &remark, HINT, w).iter().take(REMARK_LINES) {
+                    ui.text(line, x, y - GAP + 2.0, HINT, t.warn);
+                    y += HINT_LINE;
+                }
+            }
         }
 
         // Go live or stop.

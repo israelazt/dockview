@@ -225,11 +225,13 @@ fn the_section_says_what_the_platform_recommends_and_whether_the_choice_fits() {
     model.stream.fps = 60;
     model.stream.video_kbps = 3000;
     model.lang = Lang::En;
-    let (text, fit) = advice_sentence(&model).unwrap();
+    let (text, remark, fit) = advice_sentence(&model).unwrap();
     assert_eq!(fit, Fit::Low);
     assert!(text.contains("YouTube recommends 4500–9000 kbps"), "{text}");
+    assert!(remark.unwrap().contains("low"));
     assert!(body_height(&mut rig.ui, &model, 300.0) > without);
 
     model.stream.video_kbps = 6000;
-    assert_eq!(advice_sentence(&model).unwrap().1, Fit::Fine);
+    let (_, remark, fit) = advice_sentence(&model).unwrap();
+    assert_eq!((fit, remark), (Fit::Fine, None));
 }
