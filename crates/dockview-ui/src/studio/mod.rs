@@ -27,6 +27,7 @@ mod sections;
 mod sources;
 mod stats;
 mod stream;
+mod stream_status;
 mod typing;
 mod widgets;
 
