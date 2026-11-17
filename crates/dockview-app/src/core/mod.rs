@@ -145,6 +145,11 @@ pub struct Core {
     stream: StreamService,
     /// Judges how the stream's connection is doing.
     stream_health: HealthMonitor,
+    /// The microphone Core picked by itself (the user had not chosen one),
+    /// to notice when Windows' default input changes.
+    mic_auto: Option<String>,
+    /// When the default input was last looked at.
+    mic_checked: Option<Instant>,
     /// Installed RAM, which caps the replay length.
     total_ram: u64,
     /// What happened since the last tick, to be shown (see `toast_for`).

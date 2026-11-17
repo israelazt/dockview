@@ -857,3 +857,77 @@ fn a_capture_card_never_hides_the_window() {
     let rig = Rig::new();
     assert_ne!(rig.host.lock().unwrap().exclusions.last(), Some(&true));
 }
+
+// -- The microphone follows Windows' default input --------------------------
+
+fn mic_ids(rig: &Rig) -> Vec<Option<String>> {
+    rig.replay.lock().unwrap().mics_opened.clone()
+}
+
+fn set_default_input(rig: &Rig, name: &str, id: &str) {
+    rig.sources.lock().unwrap().default_audio = Some(dockview_domain::device::AudioDevice {
+        friendly_name: name.into(),
+        device_id: id.into(),
+    });
+}
+
+#[test]
+fn an_unchosen_microphone_moves_to_the_new_default_input() {
+    let mut rig = Rig::builder()
+        .audio(&[
+            ("Game audio", "audio:game"),
+            ("Microphone (Desk)", "audio:desk"),
+            ("Headset Microphone", "audio:headset"),
+        ])
+        .build();
+    set_default_input(&rig, "Microphone (Desk)", "audio:desk");
+    rig.core.apply(Action::ToggleMic);
+    assert_eq!(mic_ids(&rig), vec![Some("audio:desk".to_owned())]);
+
+    // Nothing changed: it is not reopened.
+    rig.advance(Duration::from_secs(4));
+    assert_eq!(mic_ids(&rig).len(), 1);
+
+    // A headset becomes Windows' default: the microphone goes there.
+    set_default_input(&rig, "Headset Microphone", "audio:headset");
+    rig.advance(Duration::from_secs(4));
+    assert_eq!(
+        mic_ids(&rig),
+        vec![
+            Some("audio:desk".to_owned()),
+            Some("audio:headset".to_owned())
+        ]
+    );
+    rig.advance(Duration::from_secs(4));
+    assert_eq!(mic_ids(&rig).len(), 2, "once per change");
+}
+
+#[test]
+fn a_microphone_the_user_chose_does_not_follow_the_default() {
+    let mut rig = Rig::builder()
+        .audio(&[
+            ("Game audio", "audio:game"),
+            ("Microphone (Desk)", "audio:desk"),
+            ("Headset Microphone", "audio:headset"),
+        ])
+        .build();
+    set_default_input(&rig, "Microphone (Desk)", "audio:desk");
+    rig.core.apply(Action::ToggleMic);
+    rig.core.apply(Action::SelectMic(3)); // the headset, chosen by hand
+    let opened = mic_ids(&rig).len();
+    set_default_input(&rig, "Microphone (Desk)", "audio:desk");
+    rig.advance(Duration::from_secs(4));
+    set_default_input(&rig, "Headset Microphone", "audio:headset");
+    rig.advance(Duration::from_secs(4));
+    assert_eq!(mic_ids(&rig).len(), opened);
+}
+
+#[test]
+fn with_the_microphone_off_the_default_is_not_even_looked_at() {
+    let mut rig = Rig::builder()
+        .audio(&[("Microphone (Desk)", "audio:desk")])
+        .build();
+    set_default_input(&rig, "Microphone (Desk)", "audio:desk");
+    rig.advance(Duration::from_secs(10));
+    assert!(mic_ids(&rig).is_empty());
+}

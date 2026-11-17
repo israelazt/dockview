@@ -83,11 +83,15 @@ impl Core {
             self.emit(AppEvent::ReplayIsOff);
             return;
         }
-        let device = self
-            .settings
-            .last_mic_device_id
-            .clone()
-            .or_else(|| self.automatic_mic());
+        let chosen = self.settings.last_mic_device_id.clone();
+        let device = chosen.clone().or_else(|| self.automatic_mic());
+        // With no microphone chosen, the one picked here follows Windows'
+        // default input (see `follow_default_mic`).
+        self.mic_auto = if chosen.is_none() {
+            device.clone()
+        } else {
+            None
+        };
         dockview_domain::log_info!(
             "microphone: {}",
             device
@@ -102,6 +106,30 @@ impl Core {
                     .clone())
         );
         self.replay.open_mic(device);
+    }
+
+    /// How often the default input is looked at while the microphone follows it.
+    const MIC_FOLLOW_EVERY: Duration = Duration::from_secs(3);
+
+    /// While the microphone is on and the user has not chosen one, it follows
+    /// Windows: if the default input changes (a headset is plugged in), the
+    /// microphone moves to it. A microphone the user chose is left alone.
+    pub(super) fn follow_default_mic(&mut self, now: Instant) {
+        if !self.replay.mic_on() || self.settings.last_mic_device_id.is_some() {
+            return;
+        }
+        if self
+            .mic_checked
+            .is_some_and(|at| now.saturating_duration_since(at) < Self::MIC_FOLLOW_EVERY)
+        {
+            return;
+        }
+        self.mic_checked = Some(now);
+        let current = self.automatic_mic();
+        if current != self.mic_auto {
+            dockview_domain::log_info!("the default input changed: the microphone follows it");
+            self.set_mic(true);
+        }
     }
 
     /// The microphone to use when the user has not chosen one: Windows'

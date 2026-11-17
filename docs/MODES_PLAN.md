@@ -122,7 +122,7 @@ Bloques A, B, C, D y E hechos, con dos cosas aplazadas a propósito: partir `Mod
 1. **Prueba real de emisión** con la clave del autor: un directo corto a Twitch o YouTube para comprobar que conecta, que el audio llega sincronizado y que la reconexión funciona. Sigue al final por decisión del autor.
 2. **Micrófono en el directo (hallazgos leyendo el código, sin probar en hardware):**
    - El micrófono viaja en el búfer del replay: con la repetición instantánea apagada, el botón del micrófono no lo enciende (solo avisa).
-   - Un micrófono nuevo aparece en la lista en ~2 s, pero **no se elige solo**: se usa el último elegido o el predeterminado de Windows.
+   - ~~Un micrófono nuevo no se elige solo~~ **Hecho (2026-11-17):** mientras el micrófono está encendido y no se ha elegido uno a mano, sigue al dispositivo predeterminado de Windows (se mira cada 3 s); uno elegido a mano no se toca. Probado con dobles.
    - ~~Si el micrófono se desconecta no se reconecta solo~~ **Hecho (2026-11-17):** el servicio de replay avisa una vez («se desconectó: reconectando»), reabre el mismo dispositivo cada 3 s y avisa al volver. Probado con dobles; **sin probar con un micrófono real** (desenchufar y enchufar).
    - **Propuesto, sin hacer:** reconexión automática del mismo dispositivo con un aviso discreto; que siga al dispositivo predeterminado de Windows si cambia; y, opcional y mayor, permitir el micrófono sin replay.
 3. **Resolución de salida:** emite al tamaño de la imagen; no hay ajuste ni escalado.
