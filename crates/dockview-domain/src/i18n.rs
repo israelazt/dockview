@@ -185,6 +185,9 @@ strings! {
     StreamBitrate => "Video bitrate (kbps)", "Bitrate de vídeo (kbps)";
     StreamGoLive => "Go live", "Emitir";
     StreamStop => "Stop streaming", "Detener emisión";
+    StreamAdvice => "{service} recommends {min}–{max} kbps", "{service} recomienda {min}–{max} kbps";
+    StreamAdviceLow => "yours is low: the picture may look soft", "el tuyo es bajo: la imagen puede verse blanda";
+    StreamAdviceHigh => "yours is high: it may be refused or recompressed", "el tuyo es alto: puede rechazarse o recomprimirse";
     StreamHealthGood => "Connection stable", "Conexión estable";
     StreamHealthWeak => "Connection unstable: some pictures are being lost", "Conexión inestable: se están perdiendo imágenes";
     StreamHealthPoor => "Connection poor: lower the bitrate or check your network", "Conexión mala: baja el bitrate o revisa tu red";

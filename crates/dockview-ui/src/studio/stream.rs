@@ -6,6 +6,7 @@
 
 use dockview_domain::broadcast::StreamState;
 use dockview_domain::i18n::{tr, Key};
+use dockview_domain::stream_advice::{fit, Fit, Platform};
 use dockview_domain::stream_health::StreamHealth;
 use dockview_domain::theme::Theme;
 use dockview_domain::view::{Action, Model};
@@ -46,16 +47,26 @@ pub(super) const KBPS_CHOICES: [u32; 3] = [3000, 4500, 6000];
 /// Which service an address belongs to: the position in [`SERVICES`], or one
 /// past the end for any other.
 pub(super) fn service_of(address: &str) -> usize {
-    let a = address.to_ascii_lowercase();
-    if a.contains("twitch") {
-        0
-    } else if a.contains("youtube") {
-        1
-    } else if a.contains("kick") || a.contains("live-video.net") {
-        2
-    } else {
-        SERVICES.len()
+    Platform::of_address(address).map_or(SERVICES.len(), |p| p as usize)
+}
+
+/// What the platform recommends for the chosen bitrate, and whether the
+/// choice is within it; `None` for a service we have no advice for.
+pub(super) fn advice_sentence(m: &Model) -> Option<(String, Fit)> {
+    let (s, lang) = (&m.stream, m.lang);
+    let platform = Platform::of_address(&s.address)?;
+    let (min, max) = platform.recommended_kbps(s.fps);
+    let mut text = tr(lang, Key::StreamAdvice)
+        .replace("{service}", platform.name())
+        .replace("{min}", &min.to_string())
+        .replace("{max}", &max.to_string());
+    let verdict = fit(platform, s.fps, s.video_kbps);
+    match verdict {
+        Fit::Low => text.push_str(&format!(" · {}", tr(lang, Key::StreamAdviceLow))),
+        Fit::High => text.push_str(&format!(" · {}", tr(lang, Key::StreamAdviceHigh))),
+        Fit::Fine => {}
     }
+    Some((text, verdict))
 }
 
 /// The longest line of the hint the body leaves room for.
@@ -67,6 +78,11 @@ pub fn body_height(_ui: &mut Ui, m: &Model, _width: f32) -> f32 {
     PAD_TOP
         + STATUS_LINE
         + if shows_health(m) { HINT_LINE } else { 0.0 }
+        + if advice_sentence(m).is_some() {
+            HINT_LINE
+        } else {
+            0.0
+        }
         + GAP
         + 5.0 * (LABEL_H + ROW_H + GAP)
         + BUTTON_H
@@ -228,6 +244,16 @@ impl StudioPanel {
             y,
             w,
         ) + GAP;
+        if let Some((text, verdict)) = advice_sentence(m) {
+            let color = if verdict == Fit::Fine {
+                t.text_dim
+            } else {
+                t.warn
+            };
+            let line = fit_text(ui, &text, HINT, w);
+            ui.text(&line, x, y - GAP + 2.0, HINT, color);
+            y += HINT_LINE;
+        }
 
         // Go live or stop.
         self.live_button(

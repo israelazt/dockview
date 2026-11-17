@@ -43,6 +43,7 @@ pub mod snap;
 pub mod sources;
 pub mod stats;
 pub mod stream;
+pub mod stream_advice;
 pub mod stream_health;
 pub mod stream_settings;
 pub mod theme;

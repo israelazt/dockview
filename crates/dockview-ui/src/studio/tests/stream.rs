@@ -206,3 +206,30 @@ fn while_live_the_section_says_how_the_connection_is_and_makes_room_for_it() {
     assert_eq!(health, StreamHealth::Poor);
     assert!(text.contains("2 reconnections") || text.contains("2 reconexiones"));
 }
+
+#[test]
+fn the_section_says_what_the_platform_recommends_and_whether_the_choice_fits() {
+    use super::super::stream::{advice_sentence, body_height};
+    use dockview_domain::stream_advice::Fit;
+
+    let mut rig = stream_open();
+    let mut model = rig.model.clone();
+    model.stream.address = String::new();
+    assert!(
+        advice_sentence(&model).is_none(),
+        "no advice for another server"
+    );
+    let without = body_height(&mut rig.ui, &model, 300.0);
+
+    model.stream.address = SERVICES[1].1.to_owned(); // YouTube
+    model.stream.fps = 60;
+    model.stream.video_kbps = 3000;
+    model.lang = Lang::En;
+    let (text, fit) = advice_sentence(&model).unwrap();
+    assert_eq!(fit, Fit::Low);
+    assert!(text.contains("YouTube recommends 4500–9000 kbps"), "{text}");
+    assert!(body_height(&mut rig.ui, &model, 300.0) > without);
+
+    model.stream.video_kbps = 6000;
+    assert_eq!(advice_sentence(&model).unwrap().1, Fit::Fine);
+}
