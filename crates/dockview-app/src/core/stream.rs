@@ -2,6 +2,7 @@
 //! the user is told as the stream connects, drops and ends.
 
 use dockview_domain::pcm::AudioTap;
+use dockview_domain::stream_health::StreamHealth;
 use dockview_domain::view::StreamView;
 
 use super::*;
@@ -50,7 +51,7 @@ impl Core {
     }
 
     /// Tells the user what the stream did since the last tick.
-    pub(super) fn poll_stream(&mut self) {
+    pub(super) fn poll_stream(&mut self, now: Instant) {
         for event in self.stream.poll() {
             match event {
                 StreamEvent::WentLive => self.emit(AppEvent::StreamLive),
@@ -65,6 +66,15 @@ impl Core {
                     self.emit(AppEvent::StreamFailed);
                 }
             }
+        }
+        // The connection's health: told once each time it turns poor.
+        let before = self.stream_health.health();
+        let health =
+            self.stream_health
+                .update(now, &self.stream.stats(), self.settings.stream.video_kbps);
+        if health == StreamHealth::Poor && before != StreamHealth::Poor {
+            dockview_domain::log_warn!("the stream's connection is poor");
+            self.emit(AppEvent::StreamPoor);
         }
     }
 
@@ -82,6 +92,7 @@ impl Core {
             bitrate_kbps: stats.bitrate_bps / 1000,
             dropped_frames: stats.dropped_frames,
             reconnects: stats.reconnects,
+            health: self.stream_health.health(),
             has_key: self.stream.has_key(),
             address: self.settings.stream.url.clone(),
             fps: self.settings.stream.fps,

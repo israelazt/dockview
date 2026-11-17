@@ -95,6 +95,7 @@ pub fn toast_for(event: AppEvent) -> (Key, ToastKind) {
         AppEvent::StreamBadAddress => (Key::ToastStreamBadAddress, ToastKind::Info),
         AppEvent::StreamStartFailed => (Key::ToastStreamStartFailed, ToastKind::Error),
         AppEvent::StreamStopped => (Key::ToastStreamStopped, ToastKind::Info),
+        AppEvent::StreamPoor => (Key::ToastStreamPoor, ToastKind::Error),
     }
 }
 
@@ -159,6 +160,7 @@ mod tests {
             StreamBadAddress,
             StreamStartFailed,
             StreamStopped,
+            StreamPoor,
         ] {
             let (key, _) = toast_for(event);
             assert!(!i18n::tr(i18n::Lang::En, key).is_empty(), "{event:?}");

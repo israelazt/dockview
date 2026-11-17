@@ -65,6 +65,7 @@ use dockview_domain::settings::{
 use dockview_domain::sources::{CaptureOptions, CaptureTarget, ScreenOptions};
 use dockview_domain::stats::Stats;
 use dockview_domain::stream::StreamInfo;
+use dockview_domain::stream_health::HealthMonitor;
 use dockview_domain::theme::{Appearance, Theme, ThemeModeExt};
 use dockview_domain::tray::TrayHost;
 use dockview_domain::view::{Action, MicState, MicView, Model, RecState, RecView, ReplayState};
@@ -142,6 +143,8 @@ pub struct Core {
     resident: ResidentService,
     /// Going live (see `stream_service`).
     stream: StreamService,
+    /// Judges how the stream's connection is doing.
+    stream_health: HealthMonitor,
     /// Installed RAM, which caps the replay length.
     total_ram: u64,
     /// What happened since the last tick, to be shown (see `toast_for`).

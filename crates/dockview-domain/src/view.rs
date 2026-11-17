@@ -166,6 +166,8 @@ pub struct StreamView {
     pub bitrate_kbps: u32,
     pub dropped_frames: u64,
     pub reconnects: u32,
+    /// How the connection is doing (judged over the last few seconds).
+    pub health: crate::stream_health::StreamHealth,
     /// A stream key is saved (the key itself never reaches the interface).
     pub has_key: bool,
     /// The server address chosen.

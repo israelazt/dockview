@@ -186,3 +186,23 @@ fn the_body_is_as_tall_as_its_content() {
     let h = section_height(StudioSection::Stream, &m);
     assert!(h > 300.0 && h < 700.0, "{h}");
 }
+
+#[test]
+fn while_live_the_section_says_how_the_connection_is_and_makes_room_for_it() {
+    use super::super::stream::{body_height, shows_health};
+    use dockview_domain::stream_health::StreamHealth;
+
+    let mut rig = stream_open();
+    let mut model = rig.model.clone();
+    let offline = body_height(&mut rig.ui, &model, 300.0);
+    assert!(!shows_health(&model));
+
+    model.stream.state = StreamState::Live;
+    model.stream.health = StreamHealth::Poor;
+    model.stream.reconnects = 2;
+    assert!(shows_health(&model));
+    assert!(body_height(&mut rig.ui, &model, 300.0) > offline);
+    let (text, health) = super::super::stream::health_sentence(&model);
+    assert_eq!(health, StreamHealth::Poor);
+    assert!(text.contains("2 reconnections") || text.contains("2 reconexiones"));
+}

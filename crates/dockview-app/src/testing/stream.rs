@@ -19,6 +19,10 @@ pub struct StreamWorld {
     /// What running streams report.
     pub state: StreamState,
     pub error: Option<String>,
+    /// The counters running streams report.
+    pub sent_frames: u64,
+    pub dropped_frames: u64,
+    pub bitrate_bps: u32,
     /// Streams running now.
     pub alive: u32,
     /// The queues the last stream hands out for sound.
@@ -67,8 +71,12 @@ impl StreamMachine for FakeStream {
 
 impl StreamHandle for FakeHandle {
     fn stats(&self) -> StreamStats {
+        let world = self.world.lock().unwrap();
         StreamStats {
-            state: self.world.lock().unwrap().state,
+            state: world.state,
+            sent_frames: world.sent_frames,
+            dropped_frames: world.dropped_frames,
+            bitrate_bps: world.bitrate_bps,
             ..StreamStats::default()
         }
     }

@@ -73,6 +73,7 @@ impl Core {
             replay: ReplayService::new(ports.replay),
             resident: ResidentService::new(ports.capture_hotkeys, ports.tray),
             stream: StreamService::new(ports.stream, ports.secrets),
+            stream_health: HealthMonitor::default(),
             total_ram: system.total_ram_bytes(),
             events: Vec::new(),
         };

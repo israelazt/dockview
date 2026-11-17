@@ -6,6 +6,7 @@
 
 use dockview_domain::broadcast::StreamState;
 use dockview_domain::i18n::{tr, Key};
+use dockview_domain::stream_health::StreamHealth;
 use dockview_domain::theme::Theme;
 use dockview_domain::view::{Action, Model};
 
@@ -62,15 +63,37 @@ const HINT_LINES: f32 = 3.0;
 
 /// How tall the body is: the status line, five groups of a caption and a row,
 /// the button and the hint.
-pub fn body_height(_ui: &mut Ui, _m: &Model, _width: f32) -> f32 {
+pub fn body_height(_ui: &mut Ui, m: &Model, _width: f32) -> f32 {
     PAD_TOP
         + STATUS_LINE
+        + if shows_health(m) { HINT_LINE } else { 0.0 }
         + GAP
         + 5.0 * (LABEL_H + ROW_H + GAP)
         + BUTTON_H
         + 10.0
         + HINT_LINES * HINT_LINE
         + PAD_BOTTOM
+}
+
+/// Whether the line about the connection is shown: only while live.
+pub(super) fn shows_health(m: &Model) -> bool {
+    m.stream.state == StreamState::Live
+}
+
+/// What the connection is like, in a sentence, and how bad it is.
+pub(super) fn health_sentence(m: &Model) -> (String, StreamHealth) {
+    let (s, lang) = (&m.stream, m.lang);
+    let verdict = match s.health {
+        StreamHealth::Good => Key::StreamHealthGood,
+        StreamHealth::Weak => Key::StreamHealthWeak,
+        StreamHealth::Poor => Key::StreamHealthPoor,
+    };
+    let mut text = tr(lang, verdict).to_owned();
+    if s.reconnects > 0 {
+        text.push_str(" · ");
+        text.push_str(&tr(lang, Key::StreamReconnects).replace("{n}", &s.reconnects.to_string()));
+    }
+    (text, s.health)
 }
 
 /// What the stream is doing, in a sentence.
@@ -110,7 +133,19 @@ impl StudioPanel {
         ui.rect(Rect::new(x, y + 6.0, 8.0, 8.0), 4.0, dot);
         let sentence = fit_text(ui, &status_sentence(m), STATUS, w - 18.0);
         ui.text(&sentence, x + 16.0, y, STATUS, t.text);
-        y += STATUS_LINE + GAP;
+        y += STATUS_LINE;
+        if shows_health(m) {
+            let (text, health) = health_sentence(m);
+            let color = match health {
+                StreamHealth::Good => t.text_dim,
+                StreamHealth::Weak => t.warn,
+                StreamHealth::Poor => t.error,
+            };
+            let line = fit_text(ui, &text, HINT, w - 16.0);
+            ui.text(&line, x + 16.0, y, HINT, color);
+            y += HINT_LINE;
+        }
+        y += GAP;
 
         // The service.
         y += self.caption(ui, t, tr(lang, Key::StreamService), x, y);

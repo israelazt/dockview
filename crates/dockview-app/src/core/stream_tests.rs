@@ -162,3 +162,41 @@ fn the_view_of_the_stream_carries_what_the_section_shows() {
     assert_eq!(view.address, "rtmps://live.twitch.tv:443/app");
     assert!(view.has_key, "the key is there but its text never is");
 }
+
+#[test]
+fn a_connection_that_turns_poor_is_told_once_and_shown_in_the_view() {
+    use dockview_domain::stream_health::{StreamHealth, WINDOW};
+
+    let mut rig = ready();
+    rig.core.apply(Action::ToggleStream);
+    rig.stream.lock().unwrap().state = StreamState::Live;
+    tick(&mut rig);
+    rig.core.take_events();
+    assert_eq!(rig.core.model().stream.health, StreamHealth::Good);
+
+    // A window in which a tenth of the pictures were thrown away.
+    {
+        let mut w = rig.stream.lock().unwrap();
+        w.sent_frames = 270;
+        w.dropped_frames = 30;
+        w.bitrate_bps = 4_500_000;
+    }
+    rig.advance(WINDOW + Duration::from_millis(100));
+    assert_eq!(rig.core.take_events(), [AppEvent::StreamPoor]);
+    assert_eq!(rig.core.model().stream.health, StreamHealth::Poor);
+
+    // Still poor in the next window: not told again.
+    {
+        let mut w = rig.stream.lock().unwrap();
+        w.sent_frames += 270;
+        w.dropped_frames += 30;
+    }
+    rig.advance(WINDOW + Duration::from_millis(100));
+    assert!(rig.core.take_events().is_empty());
+
+    // Ending the stream clears the verdict.
+    rig.core.apply(Action::ToggleStream);
+    rig.core.take_events();
+    tick(&mut rig);
+    assert_eq!(rig.core.model().stream.health, StreamHealth::Good);
+}

@@ -185,6 +185,10 @@ strings! {
     StreamBitrate => "Video bitrate (kbps)", "Bitrate de vídeo (kbps)";
     StreamGoLive => "Go live", "Emitir";
     StreamStop => "Stop streaming", "Detener emisión";
+    StreamHealthGood => "Connection stable", "Conexión estable";
+    StreamHealthWeak => "Connection unstable: some pictures are being lost", "Conexión inestable: se están perdiendo imágenes";
+    StreamHealthPoor => "Connection poor: lower the bitrate or check your network", "Conexión mala: baja el bitrate o revisa tu red";
+    StreamReconnects => "{n} reconnections", "{n} reconexiones";
     StreamLiveDetails => "{kbps} kbps · {lost} lost", "{kbps} kbps · {lost} perdidos";
     StreamHint => "What the viewer shows is what goes out, with the sound of the game and the microphone. The key is kept encrypted for your Windows user.", "Se emite lo que ves en el visor, con el sonido del juego y del micrófono. La clave se guarda cifrada para tu usuario de Windows.";
     StudioStats => "Statistics", "Estadísticas";
@@ -224,6 +228,7 @@ strings! {
     ToastStreamNoKey => "Enter your stream key first", "Primero escribe tu clave de emisión";
     ToastStreamBadAddress => "Enter the server address (rtmp:// or rtmps://)", "Escribe la dirección del servidor (rtmp:// o rtmps://)";
     ToastStreamStartFailed => "The stream could not be started", "No se pudo iniciar la emisión";
+    ToastStreamPoor => "The connection is losing many pictures: lower the bitrate or check your network", "La conexión pierde muchas imágenes: baja el bitrate o revisa tu red";
     ToastStreamStopped => "Stream ended", "Emisión terminada";
     NavViewer => "Live view", "Visor directo";
     NavStudio => "Studio mode", "Modo Estudio";

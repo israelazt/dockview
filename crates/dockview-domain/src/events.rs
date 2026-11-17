@@ -77,6 +77,8 @@ pub enum AppEvent {
     StreamStartFailed,
     /// The stream ended because the user stopped it.
     StreamStopped,
+    /// The connection is losing many pictures: viewers see stutter.
+    StreamPoor,
 }
 
 /// What to tell the user when a recording (or one of its files) ends, if
