@@ -10,7 +10,7 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use dockview_domain::audio_status::AudioStatus;
 use dockview_domain::events::{outcome_event, AppEvent};
@@ -85,6 +85,9 @@ const METER_FALL_PER_SEC: f32 = 1.5;
 /// The longest step the meter is smoothed over, in seconds.
 const METER_MAX_STEP: f32 = 0.2;
 
+/// How long a lost microphone waits before the next try to open it again.
+const MIC_RETRY_EVERY: Duration = Duration::from_secs(3);
+
 /// The meter rises at once and falls smoothly.
 fn smooth_level(previous: f32, raw: f32, dt_secs: f32) -> f32 {
     let dt = dt_secs.clamp(0.0, METER_MAX_STEP);
@@ -108,6 +111,14 @@ pub struct ReplayService {
     /// Smoothed loudness for the meter.
     mic_level: f32,
     mic_level_at: Instant,
+    /// The device the user asked the microphone for (`None` is the Windows
+    /// default), kept to open it again if it goes away.
+    mic_device: Option<String>,
+    /// The microphone went away and has not been heard from since.
+    mic_lost: bool,
+    /// When to try to open a lost microphone again.
+    mic_retry_at: Option<Instant>,
+    mic_retry_every: Duration,
     events: Vec<AppEvent>,
 }
 
@@ -124,6 +135,10 @@ impl ReplayService {
             low_disk: LowDiskWarning::default(),
             mic_level: 0.0,
             mic_level_at: Instant::now(),
+            mic_device: None,
+            mic_lost: false,
+            mic_retry_at: None,
+            mic_retry_every: MIC_RETRY_EVERY,
             events: Vec::new(),
         }
     }
@@ -187,13 +202,13 @@ impl ReplayService {
     /// Starts the buffer over `slot`. The microphone rides on the recorder, so
     /// it closes first and the app reopens it if it wants it.
     pub fn start_buffer(&mut self, slot: Arc<FrameSlot>, settings: ReplaySettings) {
-        self.mic = None;
+        self.forget_mic();
         self.recorder = Some(self.machine.start_buffer(slot, settings));
     }
 
     /// Stops the buffer (and the microphone that rides on it).
     pub fn stop_buffer(&mut self) {
-        self.mic = None;
+        self.forget_mic();
         self.recorder = None;
     }
 
@@ -348,8 +363,16 @@ impl ReplayService {
         self.mic_level
     }
 
-    pub fn close_mic(&mut self) {
+    /// Drops the microphone and what is kept to bring it back.
+    fn forget_mic(&mut self) {
         self.mic = None;
+        self.mic_device = None;
+        self.mic_lost = false;
+        self.mic_retry_at = None;
+    }
+
+    pub fn close_mic(&mut self) {
+        self.forget_mic();
         if let Some(recorder) = &self.recorder {
             recorder.clear_mic();
         }
@@ -362,8 +385,47 @@ impl ReplayService {
         let Some(recorder) = &self.recorder else {
             return false;
         };
-        self.mic = Some(self.machine.open_mic(device, recorder.mic_tap()));
+        self.mic = Some(self.machine.open_mic(device.clone(), recorder.mic_tap()));
+        self.mic_device = device;
+        self.mic_lost = false;
+        self.mic_retry_at = None;
         true
+    }
+
+    /// Watches the microphone: when it goes away (unplugged, driver reset) it
+    /// says so once, then opens the same device again every few seconds until
+    /// it answers, and says so once more when it does.
+    fn watch_mic(&mut self, now: Instant) {
+        let Some(status) = self.mic_status() else {
+            return;
+        };
+        match status {
+            AudioStatus::Running => {
+                if self.mic_lost {
+                    self.mic_lost = false;
+                    self.emit(AppEvent::MicBack);
+                }
+                self.mic_retry_at = None;
+            }
+            AudioStatus::Disconnected(_) | AudioStatus::Failed(_) => {
+                if !self.mic_lost {
+                    self.mic_lost = true;
+                    self.emit(AppEvent::MicLost);
+                }
+                match self.mic_retry_at {
+                    None => self.mic_retry_at = Some(now + self.mic_retry_every),
+                    Some(at) if now >= at => {
+                        self.mic_retry_at = Some(now + self.mic_retry_every);
+                        if let Some(recorder) = &self.recorder {
+                            let device = self.mic_device.clone();
+                            self.mic = Some(self.machine.open_mic(device, recorder.mic_tap()));
+                        }
+                    }
+                    Some(_) => {}
+                }
+            }
+            AudioStatus::Starting | AudioStatus::Stopped => {}
+        }
     }
 
     // -- every tick -----------------------------------------------------
@@ -376,6 +438,7 @@ impl ReplayService {
         self.mic_level_at = now;
         let raw = self.mic.as_ref().map_or(0.0, |m| m.level());
         self.mic_level = smooth_level(self.mic_level, raw, dt);
+        self.watch_mic(now);
 
         if self.record_when_ready {
             self.begin_recording(folder);

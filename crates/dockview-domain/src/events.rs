@@ -45,6 +45,10 @@ pub enum AppEvent {
     AudioLost,
     /// The capture card's sound is playing again.
     AudioBack,
+    /// The microphone went away; it is being reconnected.
+    MicLost,
+    /// The microphone is working again after it went away.
+    MicBack,
     /// The settings could not be written to disk.
     SettingsNotSaved,
     /// The capture hotkey is already used by another program.

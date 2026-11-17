@@ -301,3 +301,63 @@ fn starting_the_buffer_closes_a_microphone_left_over() {
     assert!(!s.mic_on());
     assert_eq!(w.lock().unwrap().buffers_started, 2);
 }
+
+#[test]
+fn a_microphone_that_goes_away_is_reopened_on_the_same_device_and_announced_once() {
+    let (mut s, w) = running();
+    s.mic_retry_every = Duration::ZERO;
+    s.open_mic(Some("usb".into()));
+    s.take_events();
+
+    w.lock().unwrap().mic_status = Some(AudioStatus::Disconnected("unplugged".into()));
+    s.poll(folder()); // notices and schedules the retry
+    s.poll(folder()); // the retry is due
+    s.poll(folder());
+    assert_eq!(
+        s.take_events(),
+        vec![AppEvent::MicLost],
+        "told once, not per try"
+    );
+    let opened = w.lock().unwrap().mics_opened.clone();
+    assert!(opened.len() >= 2, "it tried again: {opened:?}");
+    assert!(
+        opened.iter().all(|d| d.as_deref() == Some("usb")),
+        "always the same device: {opened:?}"
+    );
+
+    w.lock().unwrap().mic_status = None; // plugged back in
+    s.poll(folder());
+    assert_eq!(s.take_events(), vec![AppEvent::MicBack]);
+    let tries = w.lock().unwrap().mics_opened.len();
+    s.poll(folder());
+    assert_eq!(w.lock().unwrap().mics_opened.len(), tries, "no more tries");
+    assert!(s.take_events().is_empty());
+}
+
+#[test]
+fn a_lost_microphone_waits_between_tries() {
+    let (mut s, w) = running();
+    s.open_mic(None); // the default wait of a few seconds
+    w.lock().unwrap().mic_status = Some(AudioStatus::Failed("gone".into()));
+    for _ in 0..5 {
+        s.poll(folder());
+    }
+    assert_eq!(w.lock().unwrap().mics_opened.len(), 1, "no hammering");
+    assert_eq!(s.take_events(), vec![AppEvent::MicLost]);
+}
+
+#[test]
+fn closing_the_microphone_stops_the_tries() {
+    let (mut s, w) = running();
+    s.mic_retry_every = Duration::ZERO;
+    s.open_mic(None);
+    w.lock().unwrap().mic_status = Some(AudioStatus::Disconnected("x".into()));
+    s.poll(folder());
+    s.close_mic();
+    s.take_events();
+    for _ in 0..3 {
+        s.poll(folder());
+    }
+    assert_eq!(w.lock().unwrap().mics_opened.len(), 1);
+    assert!(!s.mic_on() && s.take_events().is_empty());
+}

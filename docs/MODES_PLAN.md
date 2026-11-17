@@ -123,7 +123,7 @@ Bloques A, B, C, D y E hechos, con dos cosas aplazadas a propósito: partir `Mod
 2. **Micrófono en el directo (hallazgos leyendo el código, sin probar en hardware):**
    - El micrófono viaja en el búfer del replay: con la repetición instantánea apagada, el botón del micrófono no lo enciende (solo avisa).
    - Un micrófono nuevo aparece en la lista en ~2 s, pero **no se elige solo**: se usa el último elegido o el predeterminado de Windows.
-   - Si el micrófono se desconecta queda en «no disponible» y **no se reconecta solo** (el audio del juego sí).
+   - ~~Si el micrófono se desconecta no se reconecta solo~~ **Hecho (2026-11-17):** el servicio de replay avisa una vez («se desconectó: reconectando»), reabre el mismo dispositivo cada 3 s y avisa al volver. Probado con dobles; **sin probar con un micrófono real** (desenchufar y enchufar).
    - **Propuesto, sin hacer:** reconexión automática del mismo dispositivo con un aviso discreto; que siga al dispositivo predeterminado de Windows si cambia; y, opcional y mayor, permitir el micrófono sin replay.
 3. **Resolución de salida:** emite al tamaño de la imagen; no hay ajuste ni escalado.
 4. **Botón rápido «Emitir» en la píldora del visor** y un atajo global: no existen.

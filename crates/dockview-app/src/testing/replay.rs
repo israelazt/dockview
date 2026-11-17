@@ -30,6 +30,8 @@ pub struct World {
     pub mics_opened: Vec<Option<String>>,
     pub mic_cleared: u32,
     pub mic_level: f32,
+    /// What the microphone reports (`None` is running).
+    pub mic_status: Option<AudioStatus>,
     pub hotkeys: (bool, bool),
     /// The scene slot whose hotkey was pressed.
     pub scene_hotkey: Option<usize>,
@@ -175,7 +177,12 @@ impl ReplayBuffer for FakeBuffer {
 
 impl MicInput for FakeMic {
     fn status(&self) -> AudioStatus {
-        AudioStatus::Running
+        self.0
+            .lock()
+            .unwrap()
+            .mic_status
+            .clone()
+            .unwrap_or(AudioStatus::Running)
     }
     fn level(&self) -> f32 {
         self.0.lock().unwrap().mic_level

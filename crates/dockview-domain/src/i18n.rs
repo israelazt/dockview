@@ -195,6 +195,8 @@ strings! {
     StartupFailedGraphics => "Direct3D could not be started. Updating the graphics driver may fix it.", "No se pudo iniciar Direct3D. Actualizar el controlador de la tarjeta gráfica puede arreglarlo.";
     StartupFailedLog => "Details are in the log:", "Los detalles están en el registro:";
     ToastAudioBack => "The sound is back", "El sonido volvió";
+    ToastMicLost => "The microphone disconnected: reconnecting", "El micrófono se desconectó: reconectando";
+    ToastMicBack => "The microphone is back", "El micrófono volvió";
     ToastPipLost => "The corner source stopped and was taken off the picture", "La fuente de la esquina se detuvo y se quitó de la imagen";
     ToastSceneMissing => "Part of the scene is not available right now", "Una parte de la escena no está disponible ahora";
     ScenePlain => "Single source", "Fuente simple";
