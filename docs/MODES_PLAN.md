@@ -115,3 +115,33 @@ Bloques A, B, C, D y E hechos, con dos cosas aplazadas a propósito: partir `Mod
 **Para emitir por primera vez** (la prueba real contra un servidor sigue pendiente, por decisión del autor): abrir Luminifex, Modo Estudio, sección **Emisión**; elegir el servicio; pegar la clave de emisión (`Ctrl+V`) y pulsar Intro; ajustar imágenes por segundo y bitrate (30 fps y 4500 kbps por defecto sirven para Twitch); pulsar **Emitir**. La fila de pestañas muestra «Conectando…» y luego «En directo». La dirección de Kick cambia de vez en cuando: si no conecta, se edita a mano en el campo de la dirección.
 
 **Añadido (2026-11-16, a petición del autor):** la duración del clip se cambia desde el visor: una etiqueta junto a Guardar clip abre un mini selector con − y + (mismos escalones de 5 s a 15 min, misma acción `ReplayLength`). La configuración completa del replay sigue en la sección Grabación del Estudio.
+
+## Pendientes al parar (2026-11-16, fin del día)
+
+**Para emitir (lo más cercano a un directo real)**
+1. **Prueba real de emisión** con la clave del autor: un directo corto a Twitch o YouTube para comprobar que conecta, que el audio llega sincronizado y que la reconexión funciona. Sigue al final por decisión del autor.
+2. **Micrófono en el directo (hallazgos leyendo el código, sin probar en hardware):**
+   - El micrófono viaja en el búfer del replay: con la repetición instantánea apagada, el botón del micrófono no lo enciende (solo avisa).
+   - Un micrófono nuevo aparece en la lista en ~2 s, pero **no se elige solo**: se usa el último elegido o el predeterminado de Windows.
+   - Si el micrófono se desconecta queda en «no disponible» y **no se reconecta solo** (el audio del juego sí).
+   - **Propuesto, sin hacer:** reconexión automática del mismo dispositivo con un aviso discreto; que siga al dispositivo predeterminado de Windows si cambia; y, opcional y mayor, permitir el micrófono sin replay.
+3. **Resolución de salida:** emite al tamaño de la imagen; no hay ajuste ni escalado.
+4. **Botón rápido «Emitir» en la píldora del visor** y un atajo global: no existen.
+5. **La dirección de Kick** cambia de vez en cuando: está en `studio/stream.rs` (`SERVICES`) y el campo de la dirección se puede editar.
+
+**De la arquitectura de modos**
+- Partir `Model`/`Action` por modo (`ViewerView`/`ViewerAction`, `StudioView`/`StudioAction`); hoy solo Ajustes los tiene.
+- Guarda equivalente para `core` (la de `ui` ya existe).
+
+**Del plan Fexarium (en pausa, ver `FEXARIUM_PLAN.md`)**
+- Bloques 1 a 5: nombres de crates, datos en `%APPDATA%\Fexarium`, capa compartida, sacar Capifex y su app funcional, y Motifex. El monorepo (bloque 0) está hecho.
+- **No se ha visto correr la CI de GitHub** con las rutas nuevas del monorepo: revisarla primero.
+
+**Del rediseño y el rendimiento**
+- Parte 8.3 (zoom del lienzo): aplazada hasta decidir si es solo del editor o también de la imagen.
+- Línea base de rendimiento (`tools\measure.ps1`, ~16 min con la capturadora) y las pruebas manuales de los bloques 5 y 6 de `HARDENING_PLAN.md`.
+- Posible banda negra bajo la fila de pestañas con el tema claro: revisar a mano.
+
+**Restos locales** (no están en git): carpeta `rust/` vacía, `bin/`, `obj/`, `coverage/`, `Dockview.Tests/` y `Dockview.exe` del C# antiguo.
+
+**Verificación hecha hoy con la app real:** pantalla completa (arreglo de las franjas con la ventana maximizada y animación), Ajustes como vista propia, el visor y el Estudio sin mezclarse, el flujo de la tarjeta de fuente y la etiqueta de duración (en captura interna). **Sin ver aún en vivo:** la sección Emisión por dentro (solo en captura) y el selector de duración abierto.

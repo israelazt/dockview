@@ -30,11 +30,11 @@ Prioridad: **P0** = sin esto no es una app de streaming; **P1** = lo que hace co
 ### A. Emitir en directo — P0
 | # | Qué | Tamaño | Notas |
 |---|---|---|---|
-| A-1 | **Salida RTMP(S)** a Twitch, YouTube y Kick: clave de emisión, servidor, codificador de hardware en CBR, intervalo de keyframe de 2 s, audio AAC | L | Es lo más importante que falta. Hoy codificamos para MP4, no para red |
-| A-2 | Ajustes de emisión: resolución, FPS, bitrate, perfil, con **recomendaciones por plataforma** | M | Twitch/YouTube/Kick piden cosas distintas |
+| A-1 ✅ | **Salida RTMP(S)** a Twitch, YouTube y Kick: clave de emisión, servidor, codificador de hardware en CBR, intervalo de keyframe de 2 s, audio AAC | L | **Hecho (2026-11-14 a 16):** motor completo (`dockview-stream`, `live_stream`) y, desde el 16, la interfaz: sección Emisión del Estudio. Falta la prueba real contra un servidor |
+| A-2 ◐ | Ajustes de emisión: resolución, FPS, bitrate, perfil, con **recomendaciones por plataforma** | M | Hechos FPS (30/60) y bitrate (3000/4500/6000); faltan resolución y las recomendaciones por plataforma |
 | A-3 | Salud de la emisión: bitrate real, fotogramas perdidos, estado de la red, **reconexión automática**, bitrate adaptativo | M | Que un corte de red no tire el directo |
 | A-4 | Emitir y grabar a la vez (dos codificadores, o uno compartido) con coste medido | M | La mayoría graba mientras emite |
-| A-5 | Botón/atajo/estado de emisión en la píldora y el panel, cuenta atrás, aviso de «en directo» | S | |
+| A-5 ◐ | Botón/atajo/estado de emisión en la píldora y el panel, cuenta atrás, aviso de «en directo» | S | Hecho en el panel del Estudio y en la fila de pestañas; falta el botón en la píldora y el atajo |
 | A-6 | SRT y WHIP/WebRTC (menor latencia, mejor con redes malas) | M | Después de RTMP |
 | A-7 | Emisión múltiple a varias plataformas | L | P2 |
 
