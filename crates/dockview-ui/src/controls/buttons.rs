@@ -30,6 +30,70 @@ pub(super) fn clock(seconds: f32) -> String {
 }
 
 impl Controls {
+    /// The chip with the length of the clip, beside the save button: a click
+    /// opens the selector. Returns where it ends.
+    pub(super) fn length_chip_button(
+        &mut self,
+        ui: &mut Ui,
+        m: &Model,
+        met: &BarMetrics,
+        row: Row,
+        x: f32,
+    ) -> f32 {
+        let t = &m.theme;
+        let fill = if self.length_open {
+            t.brand.with_alpha(0.22)
+        } else {
+            t.segment_track
+        };
+        let rect = self.wide_button(ui, m, Hit::ReplayLength, (x, met.length_w, row.cy), fill);
+        self.length_chip = rect;
+        let label = super::pill::length_label(m.replay.keep_seconds);
+        let tabular = BODY.tabular();
+        let w = ui.measure(&label, tabular).0;
+        ui.text(
+            &label,
+            rect.x + (rect.w - w) / 2.0,
+            row.text_y,
+            tabular,
+            if self.length_open { t.text } else { t.text_dim },
+        );
+        rect.x + rect.w
+    }
+
+    /// The small selector over the chip: shorter, the length, longer.
+    pub(super) fn draw_length_selector(&mut self, ui: &mut Ui, m: &Model, pill: Rect) {
+        let t = &m.theme;
+        let (w, h) = (LENGTH_POPOVER_W, STEP_BUTTON + 12.0);
+        let chip = self.length_chip;
+        let x = (chip.x + chip.w / 2.0 - w / 2.0).clamp(pill.x, (pill.x + pill.w - w).max(pill.x));
+        let rect = Rect::new(x, pill.y - h - 10.0, w, h);
+        self.register(Hit::LengthPopover, rect);
+        ui.shadow(rect, 14.0, 18.0, t.shadow);
+        ui.panel(rect, 14.0, t.surface, t.border, 1.0);
+        let cy = rect.y + h / 2.0;
+        let buttons = [
+            (Hit::LengthLess, ICON_MINUS, rect.x + 6.0),
+            (Hit::LengthMore, ICON_PLUS, rect.x + w - 6.0 - STEP_BUTTON),
+        ];
+        for (hit, icon, bx) in buttons {
+            let button = Rect::new(bx, cy - STEP_BUTTON / 2.0, STEP_BUTTON, STEP_BUTTON);
+            self.register(hit, button);
+            self.wash(ui, m, hit, button, STEP_BUTTON / 2.0, 1.0);
+            ui.icon(icon, bx + STEP_BUTTON / 2.0, cy, 14.0, t.text);
+        }
+        let value = dockview_domain::i18n::duration_label(m.replay.keep_seconds);
+        let style = BUTTON_TEXT.tabular();
+        let (vw, vh) = ui.measure(&value, style);
+        ui.text(
+            &value,
+            rect.x + (w - vw) / 2.0,
+            cy - vh / 2.0,
+            style,
+            t.text,
+        );
+    }
+
     /// A wide pill-shaped button at `x`, `w` wide on the bar's centre line;
     /// returns its rectangle.
     fn wide_button(

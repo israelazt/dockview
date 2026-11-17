@@ -622,3 +622,89 @@ fn hiding_the_controls_takes_them_off_at_once_and_leaves_nothing_under_the_point
     rig.controls.hide();
     assert!(rig.actions().is_empty());
 }
+
+// -- The length of the clip, beside the save button ---------------------------
+
+#[test]
+fn the_length_of_a_clip_is_written_short() {
+    use super::pill::length_label;
+    assert_eq!(length_label(30), "30 s");
+    assert_eq!(length_label(120), "2 min");
+    assert_eq!(length_label(90), "1:30");
+    for step in dockview_domain::settings::REPLAY_STEPS {
+        assert!(length_label(step).chars().count() <= 6, "{step}");
+    }
+}
+
+#[test]
+fn the_chip_sits_between_the_save_and_record_buttons_and_opens_the_selector() {
+    let mut rig = Rig::new(true);
+    let save = rig.controls.rect_of(Hit::ReplaySave);
+    let chip = rig.controls.rect_of(Hit::ReplayLength);
+    let record = rig.controls.rect_of(Hit::Record);
+    assert!(save.x + save.w <= chip.x && chip.x + chip.w <= record.x);
+    assert!(!rig.controls.length_open);
+    rig.click_on(Hit::ReplayLength);
+    assert!(rig.controls.length_open);
+    rig.frame(0.016);
+    // The selector is over the bar, not over the buttons.
+    let pill = rig.controls.rect_of(Hit::Pill);
+    let popover = rig.controls.rect_of(Hit::LengthPopover);
+    assert!(popover.y + popover.h <= pill.y);
+    // A second click on the chip closes it.
+    rig.click_on(Hit::ReplayLength);
+    assert!(!rig.controls.length_open);
+}
+
+#[test]
+fn the_selector_buttons_ask_for_a_step_shorter_or_longer_and_stay_open() {
+    let mut rig = Rig::new(true);
+    rig.click_on(Hit::ReplayLength);
+    rig.frame(0.016);
+    rig.click_on(Hit::LengthMore);
+    assert_eq!(rig.actions(), vec![Action::ReplayLength(1)]);
+    rig.frame(0.016);
+    rig.click_on(Hit::LengthLess);
+    assert_eq!(rig.actions(), vec![Action::ReplayLength(-1)]);
+    assert!(rig.controls.length_open, "it stays for another step");
+}
+
+#[test]
+fn a_press_anywhere_else_closes_the_selector_and_asks_for_nothing() {
+    let mut rig = Rig::new(true);
+    rig.click_on(Hit::ReplayLength);
+    rig.frame(0.016);
+    rig.click(20.0, 20.0);
+    assert!(!rig.controls.length_open);
+    assert!(rig.actions().is_empty());
+}
+
+#[test]
+fn hiding_the_controls_closes_the_selector() {
+    let mut rig = Rig::new(true);
+    rig.click_on(Hit::ReplayLength);
+    rig.controls.hide();
+    assert!(!rig.controls.length_open);
+}
+
+#[test]
+fn the_bar_does_not_change_its_width_when_the_length_does() {
+    let mut rig = Rig::new(true);
+    let before = rig.controls.rect_of(Hit::Pill);
+    for seconds in [5, 90, 900] {
+        rig.model.replay.keep_seconds = seconds;
+        rig.frame(0.016);
+        assert_eq!(rig.controls.rect_of(Hit::Pill), before, "{seconds} s");
+    }
+}
+
+#[test]
+fn the_chip_has_a_tooltip_that_says_the_length() {
+    let mut m = model();
+    m.replay.keep_seconds = 120;
+    let tip = tooltip_for(Hit::ReplayLength, &m).expect("a tooltip");
+    assert!(tip.contains("2 min"), "{tip}");
+    m.lang = Lang::Es;
+    let tip = tooltip_for(Hit::ReplayLength, &m).expect("a tooltip");
+    assert!(tip.contains("Duración"), "{tip}");
+}

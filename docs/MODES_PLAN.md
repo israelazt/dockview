@@ -14,7 +14,7 @@ Decidido con el autor el 2026-11-16 (Ajustes: vista propia; grabar: botones ráp
 
 ### Visor directo — mirar
 - La imagen y la pantalla completa (`F`, `F11`, `Esc`).
-- La píldora de acciones rápidas: **Guardar clip**, **Grabar**, **volumen**, **silenciar el micrófono**, **mostrar u ocultar las lecturas**, **pantalla completa**.
+- La píldora de acciones rápidas: **Guardar clip** (con la **duración del clip** al lado, que se cambia con un mini selector − / +), **Grabar**, **volumen**, **silenciar el micrófono**, **mostrar u ocultar las lecturas**, **pantalla completa**.
 - Las **lecturas** (HUD): nombre de la fuente, latencia, fps mostrados, pérdidas por segundo, RAM, CPU, GPU, estado del replay. Solo se leen: **no abren la lista de fuentes**.
 - Teclas propias: volumen (`↑` `↓`).
 - (*) El panel flotante de estadísticas (`I`) sale del visor: lo detallado es del Estudio. `I` abre el Estudio en Estadísticas.
@@ -113,3 +113,5 @@ Igual que el resto: tarea atómica (cambio pequeño con tests; `fmt`, `clippy -D
 Bloques A, B, C, D y E hechos, con dos cosas aplazadas a propósito: partir `Model`/`Action` por modo (`ViewerView`/`ViewerAction`, `StudioView`/`StudioAction`) y la guarda de modos para `core`. Además se añadió lo necesario para **poder emitir**: la sección Emisión del Estudio y el pegado con `Ctrl+V` en los campos de texto del panel.
 
 **Para emitir por primera vez** (la prueba real contra un servidor sigue pendiente, por decisión del autor): abrir Luminifex, Modo Estudio, sección **Emisión**; elegir el servicio; pegar la clave de emisión (`Ctrl+V`) y pulsar Intro; ajustar imágenes por segundo y bitrate (30 fps y 4500 kbps por defecto sirven para Twitch); pulsar **Emitir**. La fila de pestañas muestra «Conectando…» y luego «En directo». La dirección de Kick cambia de vez en cuando: si no conecta, se edita a mano en el campo de la dirección.
+
+**Añadido (2026-11-16, a petición del autor):** la duración del clip se cambia desde el visor: una etiqueta junto a Guardar clip abre un mini selector con − y + (mismos escalones de 5 s a 15 min, misma acción `ReplayLength`). La configuración completa del replay sigue en la sección Grabación del Estudio.

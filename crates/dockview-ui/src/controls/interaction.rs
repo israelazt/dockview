@@ -6,6 +6,13 @@ impl Controls {
     pub(super) fn interact(&mut self, model: &Model, pointer: &Pointer) {
         if pointer.just_pressed {
             self.pressed = self.hovered;
+            // A press anywhere but on the length chip or its selector closes it.
+            if !matches!(
+                self.hovered,
+                Some(Hit::ReplayLength | Hit::LengthLess | Hit::LengthMore | Hit::LengthPopover)
+            ) {
+                self.length_open = false;
+            }
             if self.hovered == Some(Hit::Volume) {
                 self.drag_volume(model, pointer);
             }
@@ -47,7 +54,13 @@ impl Controls {
             Hit::Mic => Action::ToggleMic,
             Hit::Hud => Action::ToggleHud,
             Hit::Fullscreen => Action::ToggleFullscreen,
-            Hit::Pill | Hit::Volume => return,
+            Hit::ReplayLength => {
+                self.length_open = !self.length_open;
+                return;
+            }
+            Hit::LengthLess => Action::ReplayLength(-1),
+            Hit::LengthMore => Action::ReplayLength(1),
+            Hit::Pill | Hit::Volume | Hit::LengthPopover => return,
         };
         self.actions.push(action);
     }

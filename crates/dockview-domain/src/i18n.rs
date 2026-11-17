@@ -259,6 +259,7 @@ strings! {
     BarSave => "Save clip", "Guardar clip";
     BarRecord => "Record", "Grabar";
     BarCapture => "Screenshot", "Captura";
+    TipReplayLength => "Length of the clip: {seconds}. Click to change it", "Duración del clip: {seconds}. Pulsa para cambiarla";
     TipCapture => "Take a screenshot", "Hacer una captura de pantalla";
     TipMicOn => "Turn the microphone on", "Encender el micrófono";
     TipMicOff => "Turn the microphone off", "Apagar el micrófono";

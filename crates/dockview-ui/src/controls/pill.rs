@@ -10,6 +10,8 @@ pub(super) struct BarMetrics {
     pub(super) save_w: f32,
     pub(super) record_w: f32,
     pub(super) capture_w: f32,
+    /// The chip with the length of the clip.
+    pub(super) length_w: f32,
     percent_w: f32,
     /// The whole bar.
     width: f32,
@@ -46,6 +48,12 @@ fn bar_metrics(ui: &mut Ui, m: &Model, room: f32) -> BarMetrics {
     let save_chip = hotkey_w(ui, &m.replay.hotkey);
     let record_chip = hotkey_w(ui, &m.replay.record_hotkey);
     let percent_w = ui.measure("100%", value).0;
+    // The widest of the lengths on offer, so the bar does not resize.
+    let length_w = dockview_domain::settings::REPLAY_STEPS
+        .iter()
+        .map(|s| ui.measure(&length_label(*s), BODY.tabular()).0)
+        .fold(0.0, f32::max)
+        + 20.0;
 
     let wide = |content: f32| 14.0 + content + 14.0;
     let save = |chips: bool| {
@@ -66,6 +74,8 @@ fn bar_metrics(ui: &mut Ui, m: &Model, room: f32) -> BarMetrics {
     let width_of = |chips: bool| {
         PAD_X * 2.0
             + save(chips)
+            + LENGTH_GAP
+            + length_w
             + GAP
             + record(chips)
             + capture_gap
@@ -80,9 +90,22 @@ fn bar_metrics(ui: &mut Ui, m: &Model, room: f32) -> BarMetrics {
         save_w: save(show_chips),
         record_w: record(show_chips),
         capture_w,
+        length_w,
         percent_w,
         width: width_of(show_chips),
         show_chips,
+    }
+}
+
+/// Space between the save button and the length chip.
+const LENGTH_GAP: f32 = 4.0;
+
+/// The length of a clip in few characters: `30 s`, `2 min`, `1:30`.
+pub(super) fn length_label(seconds: u32) -> String {
+    match (seconds / 60, seconds % 60) {
+        (0, s) => format!("{s} s"),
+        (m, 0) => format!("{m} min"),
+        (m, s) => format!("{m}:{s:02}"),
     }
 }
 
@@ -130,7 +153,8 @@ impl Controls {
             text_y: cy - line_h / 2.0,
         };
         let mut x = pill.x + PAD_X;
-        x = self.save_button(ui, m, &metrics, row, x) + GAP;
+        x = self.save_button(ui, m, &metrics, row, x);
+        x = self.length_chip_button(ui, m, &metrics, row, x + LENGTH_GAP) + GAP;
         x = self.record_button(ui, m, &metrics, row, x);
         if m.snip {
             x = self.capture_button(ui, m, &metrics, row, x + GAP);
@@ -139,6 +163,9 @@ impl Controls {
         x = self.pill_volume(ui, m, &metrics, row, x);
         x = divider_at(ui, t, x, cy);
         self.pill_toggles(ui, m, row, x);
+        if self.length_open {
+            self.draw_length_selector(ui, m, pill);
+        }
         pill
     }
 

@@ -38,6 +38,12 @@ pub(super) enum Hit {
     Fullscreen,
     /// Bar button that saves the replay.
     ReplaySave,
+    /// The length of the clip, beside that button: opens its selector.
+    ReplayLength,
+    /// The selector's buttons, and its background.
+    LengthLess,
+    LengthMore,
+    LengthPopover,
     /// Bar button that starts or stops a recording.
     Record,
     /// Bar button that takes a screenshot.
@@ -51,7 +57,7 @@ pub(super) enum Hit {
 impl Hit {
     /// Background regions only block clicks; they are not "buttons".
     fn is_widget(self) -> bool {
-        self != Hit::Pill
+        !matches!(self, Hit::Pill | Hit::LengthPopover)
     }
 }
 
@@ -66,6 +72,10 @@ pub struct Controls {
     hits: Vec<(Hit, Rect)>,
     next_hits: Vec<(Hit, Rect)>,
     volume_track: Rect,
+    /// The clip length selector is open above the bar.
+    length_open: bool,
+    /// Where the length chip was drawn (the selector opens over it).
+    length_chip: Rect,
     actions: Vec<Action>,
     animations: bool,
     /// Seconds since creation; drives the looping pulse.
@@ -93,6 +103,8 @@ impl Controls {
             hits: Vec::new(),
             next_hits: Vec::new(),
             volume_track: Rect::new(0.0, 0.0, 1.0, 1.0),
+            length_open: false,
+            length_chip: Rect::new(0.0, 0.0, 1.0, 1.0),
             actions: Vec::new(),
             animations: true,
             time: 0.0,
@@ -133,6 +145,7 @@ impl Controls {
     /// and nothing under the pointer belongs to them any more.
     pub fn hide(&mut self) {
         self.visibility = 0.0;
+        self.length_open = false;
         self.hits.clear();
         self.hovered = None;
         self.pressed = None;
@@ -144,6 +157,7 @@ impl Controls {
         self.time = (self.time + dt) % 3600.0;
         self.update_visibility(pointer, dt);
         if self.visibility <= 0.0 {
+            self.length_open = false;
             self.hits.clear();
             self.hovered = None;
             self.pressed = None;

@@ -33,6 +33,9 @@ pub(super) const DIVIDER_PAD: f32 = 12.0;
 pub(super) const ITEM_H: f32 = 36.0;
 pub(super) const ICON_SIZE: f32 = 17.0;
 pub(super) const SLIDER_WIDTH: f32 = 84.0;
+/// Size of the round buttons of the clip length selector, and its width.
+pub(super) const STEP_BUTTON: f32 = 32.0;
+pub(super) const LENGTH_POPOVER_W: f32 = 172.0;
 
 // Lucide code points.
 pub(super) const ICON_VOLUME_MUTE: char = '\u{e1ac}';
@@ -46,6 +49,8 @@ pub(super) const ICON_EYE: char = '\u{e0ba}';
 pub(super) const ICON_EYE_OFF: char = '\u{e0bb}';
 pub(super) const ICON_MIC: char = '\u{e118}';
 pub(super) const ICON_MIC_OFF: char = '\u{e119}';
+pub(super) const ICON_MINUS: char = '\u{e11c}';
+pub(super) const ICON_PLUS: char = '\u{e13d}';
 
 pub(super) const BODY: TextStyle = TextStyle::new(13.0, Weight::Regular);
 /// The text of the wide buttons.

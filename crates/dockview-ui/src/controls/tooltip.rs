@@ -81,6 +81,7 @@ pub(super) fn tooltip_for(hit: Hit, m: &Model) -> Option<String> {
             RecState::Starting => Key::TipRecordCancel,
             RecState::Recording => Key::TipRecordStop,
         },
+        Hit::ReplayLength => Key::TipReplayLength,
         Hit::Capture => Key::TipCapture,
         Hit::Mic if m.mic.state == MicState::Live => Key::TipMicOff,
         Hit::Mic => Key::TipMicOn,
