@@ -32,6 +32,32 @@ impl Core {
         self.route_audio();
     }
 
+    /// Stops the main source: the scene in use has no layer, so there is
+    /// nothing to capture or to hear from it.
+    pub(super) fn stop_main(&mut self) {
+        if self.cli.test_pattern {
+            return;
+        }
+        self.sources.go_idle();
+        self.view.video_size = (0, 0);
+        self.set_capture_exclusion(self.wants_exclusion());
+        self.route_audio();
+    }
+
+    /// Brings the main source back after a scene with no layer stopped it: the
+    /// capture card again, with its sound.
+    pub(super) fn resume_main(&mut self) {
+        if !self.sources.idle {
+            return;
+        }
+        self.sources.idle = false;
+        let index = self.sources.video_index;
+        self.select_video(index);
+        if let Some(audio) = self.sources.match_audio(index) {
+            self.select_audio(Some(audio));
+        }
+    }
+
     /// Lists the monitors and the windows again.
     pub fn refresh_sources(&mut self) {
         self.sources.refresh();

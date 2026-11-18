@@ -30,7 +30,8 @@ impl Core {
                 else {
                     return false;
                 };
-                if self.sources.source_kind != SourceKind::Capture
+                if self.sources.idle
+                    || self.sources.source_kind != SourceKind::Capture
                     || self.sources.video_index != Some(index)
                 {
                     self.select_video(Some(index));
@@ -51,7 +52,7 @@ impl Core {
                 else {
                     return false;
                 };
-                if self.sources.source_kind != SourceKind::Monitor(handle) {
+                if self.sources.idle || self.sources.source_kind != SourceKind::Monitor(handle) {
                     self.start_screen(CaptureTarget::Monitor(handle), SourceKind::Monitor(handle));
                 }
                 true
@@ -65,7 +66,7 @@ impl Core {
                     handle: window.0,
                     pid: window.1,
                 };
-                if self.sources.source_kind != kind {
+                if self.sources.idle || self.sources.source_kind != kind {
                     self.start_screen(CaptureTarget::Window(window.0), kind);
                 }
                 true
@@ -127,9 +128,16 @@ impl Core {
         self.settings.active_scene = index.filter(|_| scene.is_some());
         let Some(scene) = scene else {
             self.stop_scene();
+            self.resume_main();
             self.set_capture_exclusion(self.wants_exclusion());
             return;
         };
+        if scene.layers.is_empty() {
+            // Nothing to show: no transition, no source.
+            self.stop_scene();
+            self.stop_main();
+            return;
+        }
         if let Some(base) = scene.base() {
             if !self.make_main(base) {
                 self.emit(AppEvent::SceneMissing);

@@ -429,6 +429,7 @@ fn the_scenes_offer_what_the_popover_offers_with_the_same_actions() {
             scene(SceneAction::ToggleEdit),
             scene(SceneAction::SelectLayer(Some(0))),
             scene(SceneAction::ToggleLayer(0)),
+            scene(SceneAction::RemoveLayer(0)),
             scene(SceneAction::SelectLayer(Some(1))),
             scene(SceneAction::ToggleLayer(1)),
             scene(SceneAction::RemoveLayer(1)),
@@ -643,13 +644,13 @@ fn the_buttons_of_a_layer_do_not_also_choose_it() {
 }
 
 #[test]
-fn the_base_layer_can_be_hidden_but_not_removed() {
+fn the_base_layer_can_be_hidden_and_removed_like_any_other() {
     let rig = scenes_open(two_scenes_second_in_use());
     assert!(rig
         .panel
         .items
         .contains(&scene(SceneAction::ToggleLayer(0))));
-    assert!(!rig
+    assert!(rig
         .panel
         .items
         .contains(&scene(SceneAction::RemoveLayer(0))));

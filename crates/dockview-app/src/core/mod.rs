@@ -27,6 +27,9 @@ mod resident;
 #[cfg(test)]
 mod resident_tests;
 mod scene_actions;
+#[cfg(test)]
+mod scene_empty_tests;
+mod scene_layer_changes;
 mod scene_runtime;
 #[cfg(test)]
 mod scene_tests;

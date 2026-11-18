@@ -84,8 +84,10 @@ fn kind_label(kind: LayerKind) -> Key {
 /// down, remove. The base (the first) never moves or goes; the last one cannot
 /// go higher and the one over the base cannot go lower.
 pub(super) fn footer_options(selected: Option<usize>, layers: usize) -> (bool, bool, bool) {
-    match selected.filter(|i| *i > 0 && *i < layers) {
+    match selected.filter(|i| *i < layers) {
         None => (false, false, false),
+        // The main picture stays at the bottom, but it can be removed.
+        Some(0) => (false, false, true),
         Some(i) => (i + 1 < layers, i > 1, true),
     }
 }
@@ -254,8 +256,8 @@ mod tests {
     }
 
     #[test]
-    fn the_base_stays_where_it_is() {
-        assert_eq!(footer_options(Some(0), 3), (false, false, false));
+    fn the_base_stays_where_it_is_but_can_be_removed() {
+        assert_eq!(footer_options(Some(0), 3), (false, false, true));
     }
 
     #[test]

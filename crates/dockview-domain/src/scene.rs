@@ -1,9 +1,10 @@
 //! Scenes: which sources are drawn, and where. Plain data, saved in the
 //! settings; the compositor ([`crate::compose`]) turns it into a picture.
 //!
-//! A scene is a list of layers, bottom first. The first layer is the *base*:
-//! it is the main source, the one whose sound is recorded. The others are
-//! drawn over it.
+//! A scene is a list of layers, bottom first, and may have none. The first
+//! layer is the *base*: it is the main source, the one whose sound is recorded.
+//! The others are drawn over it. Taking the base away makes the next layer the
+//! base; a scene with no layer shows nothing.
 
 use serde::{Deserialize, Serialize};
 
@@ -148,6 +149,14 @@ const NEW_LAYER_SIZE: f32 = 0.26;
 const NEW_LAYER_MARGIN: f32 = 0.02;
 
 impl Scene {
+    /// A scene with nothing in it: the user adds what it shows.
+    pub fn empty(name: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            layers: Vec::new(),
+        }
+    }
+
     /// A scene with just its base source, over the whole picture.
     pub fn with_base(name: impl Into<String>, base: SourceRef) -> Self {
         Self {
@@ -166,6 +175,11 @@ impl Scene {
     pub fn add_layer(&mut self, source: SourceRef) -> Option<usize> {
         if self.layers.len() >= MAX_SCENE_LAYERS {
             return None;
+        }
+        // The first layer is the scene's main picture: all of it.
+        if self.layers.is_empty() {
+            self.layers.push(SceneLayer::new(source, NormRect::FULL));
+            return Some(0);
         }
         let size = NEW_LAYER_SIZE;
         let far = 1.0 - size - NEW_LAYER_MARGIN;
@@ -221,6 +235,25 @@ mod tests {
         assert_eq!(scene_for_slot(3, 3), Some(Some(2)));
         assert_eq!(scene_for_slot(4, 3), None);
         assert_eq!(scene_for_slot(1, 0), None);
+    }
+
+    #[test]
+    fn an_empty_scene_has_no_base_and_its_first_layer_fills_the_picture() {
+        let mut scene = Scene::empty("Nueva");
+        assert_eq!(scene.base(), None);
+        assert_eq!(scene.add_layer(card("a")), Some(0));
+        assert_eq!(scene.layers[0].rect, NormRect::FULL);
+        assert_eq!(scene.base(), Some(&card("a")));
+        // The next ones go to a corner, over it.
+        assert_eq!(scene.add_layer(card("b")), Some(1));
+        assert_ne!(scene.layers[1].rect, NormRect::FULL);
+    }
+
+    #[test]
+    fn a_scene_saved_with_no_layers_loads_and_stays_empty() {
+        let json = r#"{"name":"Vacía","layers":[]}"#;
+        let scene: Scene = serde_json::from_str(json).unwrap();
+        assert!(scene.clone().sanitized().layers.is_empty());
     }
 
     #[test]

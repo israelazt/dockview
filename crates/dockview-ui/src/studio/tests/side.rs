@@ -97,6 +97,7 @@ fn the_footer_acts_on_the_chosen_layer_only() {
     assert!(items.contains(&scene(SceneAction::MoveLayer(1, 1))));
     assert!(!items.contains(&scene(SceneAction::MoveLayer(1, -1))));
     assert!(items.contains(&scene(SceneAction::RemoveLayer(1))));
+    // Only the chosen layer (the first over the base) has its buttons here.
     assert!(!items.contains(&scene(SceneAction::RemoveLayer(0))));
 }
 

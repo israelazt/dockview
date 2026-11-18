@@ -86,6 +86,9 @@ pub struct SourcesService {
     pub(crate) source: Source,
     /// Whether the card, a monitor or a window is being captured.
     pub(crate) source_kind: SourceKind,
+    /// Set while the scene in use has no layer: nothing is the main source, and
+    /// nothing may reopen the card by itself. Opening any source clears it.
+    pub(crate) idle: bool,
     /// Where the main source publishes. It forwards to the output slot unless
     /// a scene is running, when it keeps the frames for the compositor.
     pub(crate) input_slot: Arc<FrameSlot>,
@@ -117,6 +120,7 @@ impl SourcesService {
             refreshed: Instant::now(),
             source: Source::None,
             source_kind: SourceKind::Capture,
+            idle: false,
             input_slot,
             audio: None,
             loopback: None,
@@ -182,6 +186,9 @@ impl SourcesService {
 
     /// The main source as something that can be saved in a scene.
     pub fn main_source_ref(&self) -> Option<SourceRef> {
+        if self.idle {
+            return None;
+        }
         match self.source_kind {
             SourceKind::Capture => self
                 .video_index
@@ -219,8 +226,17 @@ impl SourcesService {
         self.source = Source::None;
     }
 
+    /// Leaves no main source at all (a scene with no layer): the card is
+    /// released and its sound stops.
+    pub fn go_idle(&mut self) {
+        self.source = Source::None;
+        self.stop_audio();
+        self.idle = true;
+    }
+
     /// Starts the colour bars as the main source.
     pub fn open_test_pattern(&mut self, fps: u32) {
+        self.idle = false;
         self.source = Source::Test(
             self.machine
                 .start_test_pattern(Arc::clone(&self.input_slot), fps),
@@ -229,6 +245,7 @@ impl SourcesService {
 
     /// Opens the capture card `symbolic_link` as the main source.
     pub fn open_card(&mut self, symbolic_link: &str, options: CaptureOptions) {
+        self.idle = false;
         self.source = Source::Capture {
             capture: self.start_capture(symbolic_link, options),
             reconnect: Reconnect::new(),
@@ -238,6 +255,7 @@ impl SourcesService {
     /// Captures a monitor or a window as the main source.
     pub fn open_screen(&mut self, target: CaptureTarget, kind: SourceKind) {
         self.source = Source::None; // releases the card
+        self.idle = false;
         self.source_kind = kind;
         self.source = Source::Screen(self.machine.start_screen(
             target,

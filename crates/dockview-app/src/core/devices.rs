@@ -42,7 +42,8 @@ impl Core {
         self.sources.video_index = video.selected;
         self.sources.audio_index = audio.selected;
         // While a screen is shown, the lists are kept but nothing is started.
-        if self.sources.source_kind == SourceKind::Capture {
+        // An empty scene has no main source: nothing is reopened for it.
+        if self.sources.source_kind == SourceKind::Capture && !self.sources.idle {
             self.restore_video_device();
             self.restore_audio_device();
         }

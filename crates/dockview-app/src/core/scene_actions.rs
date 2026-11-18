@@ -2,11 +2,7 @@
 //! layers of the one in use. The saved scene in the settings is changed first,
 //! then the running layers (see `scene_runtime`) are brought in line with it.
 
-use std::sync::Arc;
-
 use dockview_domain::device_names;
-use dockview_domain::events::AppEvent;
-use dockview_domain::frame::FrameSlot;
 use dockview_domain::layer_edit;
 use dockview_domain::scene::{clean_scene_name, NormRect, Scene, SourceRef, MAX_SCENE_LAYERS};
 
@@ -15,7 +11,6 @@ use dockview_domain::i18n::LangModeExt;
 use dockview_domain::view::{LayerKind, LayerView, SceneAction, ScenesView};
 
 use super::Core;
-use crate::scenes_service::Overlay;
 
 /// Scenes a user may keep.
 const MAX_SCENES: usize = 12;
@@ -153,20 +148,16 @@ impl Core {
         self.settings_changed();
     }
 
-    /// A scene made of the current source, which becomes the active one.
+    /// An empty scene, which becomes the active one; the user adds its layers.
     fn new_scene(&mut self) {
         let count = self.settings.scenes.len();
-        let Some(base) = self.sources.main_source_ref() else {
-            self.emit(AppEvent::SceneMissing);
-            return;
-        };
         if count >= MAX_SCENES {
             return;
         }
         let lang = self.lang_mode().resolve(self.view.system_lang);
         let name =
             i18n::tr(lang, i18n::Key::SceneDefaultName).replace("{n}", &(count + 1).to_string());
-        self.settings.scenes.push(Scene::with_base(name, base));
+        self.settings.scenes.push(Scene::empty(name));
         self.activate_scene(Some(count));
     }
 
@@ -197,7 +188,7 @@ impl Core {
         }
     }
 
-    fn active_scene_mut(&mut self) -> Option<&mut Scene> {
+    pub(super) fn active_scene_mut(&mut self) -> Option<&mut Scene> {
         let index = self.settings.active_scene?;
         self.settings.scenes.get_mut(index)
     }
@@ -338,68 +329,5 @@ impl Core {
         self.begin_edit(index);
         self.commit_pending_edit(index);
         self.place_layer(index, whole);
-    }
-
-    /// Moves an overlay one step in the drawing order; the selection follows it.
-    fn move_layer(&mut self, index: usize, delta: i32) {
-        let Some(scene) = self.active_scene_mut() else {
-            return;
-        };
-        let target = index as i64 + i64::from(delta.signum());
-        if index == 0 || target < 1 || target >= scene.layers.len() as i64 {
-            return;
-        }
-        let target = target as usize;
-        scene.layers.swap(index, target);
-        self.forget_layer_edits();
-        self.scenes.swap_overlays(index, target);
-        if self.view.layer_selected == Some(index) {
-            self.view.layer_selected = Some(target);
-        } else if self.view.layer_selected == Some(target) {
-            self.view.layer_selected = Some(index);
-        }
-        self.sync_compositor();
-    }
-
-    /// Removes an overlay (the base cannot be removed).
-    fn remove_layer(&mut self, index: usize) {
-        let Some(scene) = self.active_scene_mut() else {
-            return;
-        };
-        if index == 0 || index >= scene.layers.len() {
-            return;
-        }
-        scene.layers.remove(index);
-        self.forget_layer_edits();
-        self.scenes.remove_overlay(index);
-        self.sync_compositor();
-        self.set_capture_exclusion(self.wants_exclusion());
-    }
-
-    /// Adds `source` over the active scene, in the first free corner.
-    fn add_layer(&mut self, source: Option<SourceRef>) {
-        let Some(source) = source else {
-            return;
-        };
-        let Some(scene) = self.active_scene_mut() else {
-            return;
-        };
-        let Some(index) = scene.add_layer(source.clone()) else {
-            return;
-        };
-        let layer = scene.layers[index].clone();
-        let slot = Arc::new(FrameSlot::new());
-        match self.start_overlay_source(&source, &slot) {
-            Some(running) => self.scenes.overlays.push(Overlay {
-                running,
-                slot,
-                layer,
-                index,
-            }),
-            // Kept in the scene, so it comes back when the source does.
-            None => self.emit(AppEvent::SceneMissing),
-        }
-        self.sync_compositor();
-        self.set_capture_exclusion(self.wants_exclusion());
     }
 }

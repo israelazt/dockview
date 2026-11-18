@@ -103,6 +103,17 @@ impl StudioPanel {
             }
             right -= ICON_BUTTON + 4.0;
         } else {
+            // The main picture can go too: the next layer takes its place.
+            let remove = Rect::new(right - ICON_BUTTON, button_y, ICON_BUTTON, ICON_BUTTON);
+            self.icon_item(
+                ui,
+                t,
+                remove,
+                ICON_CLOSE,
+                14.0,
+                Action::Scene(SceneAction::RemoveLayer(index)),
+            );
+            right -= ICON_BUTTON + 2.0;
             let tag = tr(m.lang, Key::SceneBaseTag);
             let tag_w = ui.measure(tag, TAG).0;
             ui.text(
