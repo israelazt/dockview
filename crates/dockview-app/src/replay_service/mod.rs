@@ -403,6 +403,7 @@ impl ReplayService {
             AudioStatus::Running => {
                 if self.mic_lost {
                     self.mic_lost = false;
+                    dockview_domain::log_info!("the microphone is back");
                     self.emit(AppEvent::MicBack);
                 }
                 self.mic_retry_at = None;
@@ -410,6 +411,7 @@ impl ReplayService {
             AudioStatus::Disconnected(_) | AudioStatus::Failed(_) => {
                 if !self.mic_lost {
                     self.mic_lost = true;
+                    dockview_domain::log_warn!("the microphone went away: {status:?}");
                     self.emit(AppEvent::MicLost);
                 }
                 match self.mic_retry_at {
