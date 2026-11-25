@@ -62,7 +62,7 @@ Qué hace el Creador:
 |---|---|---|
 | D1 | ¿La foto del juego se queda en el visor? | Sí: es para compartir mientras se juega |
 | D2 | ¿Guardar clip sale del visor? Consecuencia: un shiny en el visor no se puede rescatar en vídeo | Sí, y el replay no corre en el visor (no graba de fondo) |
-| D3 | ¿Qué cámara? (webcam USB, teléfono, otra capturadora) | Decide cómo se abre y qué retraso tiene (bloque C) |
+| D3 ✅ | ¿Qué cámara? | **Canon M50 Mark II por HDMI limpio a la segunda capturadora** (`pacoxi-budget`, hasta 1080p50). Se abre como cualquier capturadora; el retraso se mide con el ajuste de C-4 |
 | D4 | ¿Qué editor? (CapCut, DaVinci Resolve, Premiere…) | Decide si los WAV hacen falta o basta con las pistas del MP4, y el formato de vídeo |
 | D5 | ¿Se llama «Creador»? | Sí, provisional |
 | D6 | ¿La grabación del Estudio se queda? | Sí: graba la imagen compuesta, como hoy |
