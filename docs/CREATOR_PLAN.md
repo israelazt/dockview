@@ -38,6 +38,24 @@ Cada toma es una carpeta:
 
 Todos los archivos empiezan en el mismo instante (mismo reloj), así que en el editor se alinean al principio de la línea de tiempo. El vertical (9:16) se encuadra en el editor; el mismo material sirve para horizontal.
 
+## Regla del sonido: solo el juego
+
+Decidido con el autor (2026-11-25): a veces escucha un podcast o ve un vídeo en el PC mientras juega. **Eso nunca entra en una toma.** Solo se graba lo que viene del juego en directo y el micrófono.
+
+Cómo está hoy el código, según la fuente principal:
+
+| Fuente | De dónde sale el sonido | ¿Entra el podcast? |
+|---|---|---|
+| Capturadora | La entrada de audio de la capturadora (HDMI) | **No** |
+| Ventana | Solo el sonido de ese programa (loopback del proceso) | **No** |
+| Monitor | Todo el sonido del PC (loopback del sistema) | **Sí** |
+| Micrófono | El micrófono | Solo si suena por altavoces y el micrófono lo oye |
+
+Qué hace el Creador:
+- Con una **capturadora o una ventana** graba como hoy.
+- Con un **monitor** no usa el sonido de todo el PC: pide elegir el programa del juego y graba solo ese (loopback del proceso). Si no se elige, la toma va sin sonido del juego y lo dice, en vez de grabar el podcast.
+- El **micrófono** no puede distinguir: si el podcast suena por altavoces, lo oye. El Creador avisa (una vez) de usar auriculares cuando hay micrófono y la salida no lo es, si Windows lo sabe decir.
+
 ## Decisiones abiertas
 
 | | Pregunta | Propuesta |
@@ -73,6 +91,7 @@ Pausa: el autor revisa el modo nuevo y el visor.
 | B-2 | Un tap del **vídeo limpio**: los frames de la fuente principal antes de componerla. Hoy `FrameSlot::publish` reenvía (`forward`) antes de dar a los taps, así que el slot de entrada no los ve: hay que darle un tap propio que funcione con el reenvío | Test: con una escena activa, el tap ve el frame de la fuente y no el compuesto |
 | B-3 | `platform`: grabar `juego.mp4` desde ese tap (reutiliza el codificador y el MP4 fragmentado de `recording.rs`) | Test con el patrón de prueba: el archivo dura lo grabado y es legible |
 | B-4 | `platform`: `audio-juego.wav` y `audio-mic.wav` del mismo reloj que el vídeo; el WAV se cierra bien aunque la app se cierre (cabecera reescrita al final y cada pocos segundos) | Test: duraciones iguales a ±1 frame |
+| B-4b | La regla del sonido: con un monitor, el sonido del juego sale de un programa elegido y nunca del loopback del sistema; sin programa elegido, sin sonido del juego y con aviso | Tests del arnés: con un monitor, el Creador no abre `Loopback::System` |
 | B-5 | `Core` + Creador: Grabar empieza y para la toma; el estado de la toma (tiempo, archivos, espacio) y los avisos | Tests del arnés con la máquina falsa |
 
 Pausa: el autor graba una toma y la abre en su editor.
