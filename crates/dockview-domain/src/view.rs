@@ -259,6 +259,9 @@ pub enum Action {
     ToggleHud,
     /// Take a screenshot in the mode chosen in the settings.
     Capture,
+    /// A picture of the game alone: the video, with nothing of the program on
+    /// it, saved and put on the clipboard.
+    TakeStill,
     /// Go to a tab of the navigation row.
     GoTo(crate::navigation::AppMode),
     /// The server address the stream goes to.

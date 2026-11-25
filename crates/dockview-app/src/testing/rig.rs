@@ -14,6 +14,7 @@ use dockview_domain::stats::Stats;
 use super::replay::{self, FakeMachine};
 use super::resident;
 use super::sources::{FakeSources, SharedSources};
+use super::stills::FakeStills;
 use super::stream::{self, FakeStream, SharedSecrets};
 use super::system::{FakeStats, FakeSystem, RecordingHost, SharedHost};
 use crate::cli::Cli;
@@ -64,6 +65,8 @@ pub struct Rig {
     pub system: Arc<FakeSystem>,
     /// What the fake stream was asked, and what it reports.
     pub stream: stream::Shared,
+    /// Where the pictures of the game went.
+    pub stills: Arc<FakeStills>,
     /// The secrets (the stream key).
     pub secrets: Arc<dockview_domain::broadcast::MemorySecrets>,
     /// The time the rig says it is, moved by [`Rig::advance`].
@@ -138,6 +141,7 @@ impl RigBuilder {
         let save_attempts = Arc::new(AtomicUsize::new(0));
         let system = Arc::new(FakeSystem::default());
         let stream = stream::world();
+        let stills = Arc::new(FakeStills::default());
         let secrets = Arc::new(dockview_domain::broadcast::MemorySecrets::default());
         let ports = Ports {
             settings: Box::new(SharedStore {
@@ -154,6 +158,7 @@ impl RigBuilder {
             tray: Box::new(resident::FakeTrayHost(Arc::clone(&resident))),
             stream: Box::new(FakeStream(Arc::clone(&stream))),
             secrets: Box::new(SharedSecrets(Arc::clone(&secrets))),
+            stills: Arc::clone(&stills) as Arc<_>,
         };
         let core = Core::new(
             Arc::new(FrameSlot::new()),
@@ -174,6 +179,7 @@ impl RigBuilder {
             save_attempts,
             system,
             stream,
+            stills,
             secrets,
             now: Instant::now(),
         }

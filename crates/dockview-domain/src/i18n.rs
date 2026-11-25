@@ -274,6 +274,8 @@ strings! {
     TipMicOn => "Turn the microphone on", "Encender el micrófono";
     TipMicOff => "Turn the microphone off", "Apagar el micrófono";
     TipHudHide => "Hide the readouts (H)", "Ocultar los datos (H)";
+    TipStill => "Take a picture of the game (C)", "Foto del juego (C)";
+    StripStill => "Photo", "Foto";
     TipHudShow => "Show the readouts (H)", "Mostrar los datos (H)";
     HealthOk => "PIPELINE HEALTHY", "PIPELINE SANO";
     HealthAttention => "NEEDS ATTENTION", "REQUIERE ATENCIÓN";

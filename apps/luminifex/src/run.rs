@@ -100,6 +100,7 @@ pub fn run() {
         capture_hotkeys: Box::new(PlatformCaptureHotkeys),
         tray: Box::new(PlatformTrayHost),
         stream: Box::new(PlatformStream),
+        stills: Arc::new(dockview_platform::screen_io::PlatformScreen),
         secrets: Box::new(DpapiSecrets::new(
             secrets_dir().unwrap_or_else(|| std::path::PathBuf::from("secrets")),
         )),

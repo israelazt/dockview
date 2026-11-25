@@ -6,7 +6,7 @@ use std::path::Path;
 
 use dockview_domain::desktop::{Desktop, PxRect};
 use dockview_domain::image::{Image, ImageFormat};
-use dockview_domain::ports::{ImageOutput, ScreenGrabber};
+use dockview_domain::ports::{ImageOutput, ScreenGrabber, StillOutput};
 use dockview_domain::sources::WindowInfo;
 use windows::Win32::Foundation::{HWND, RECT};
 use windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_EXTENDED_FRAME_BOUNDS};
@@ -84,6 +84,16 @@ impl ImageOutput for PlatformScreen {
 
     fn copy(&self, image: &Image) -> Result<(), String> {
         imagefile::copy_to_clipboard(image)
+    }
+}
+
+impl StillOutput for PlatformScreen {
+    fn folder(&self) -> std::path::PathBuf {
+        pictures_screenshots_folder().unwrap_or_else(|| std::path::PathBuf::from("."))
+    }
+
+    fn clock(&self) -> ((u16, u16, u16), (u16, u16, u16)) {
+        local_time()
     }
 }
 

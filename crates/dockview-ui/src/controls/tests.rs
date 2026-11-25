@@ -176,6 +176,7 @@ fn every_control_has_a_tooltip_in_both_languages_with_nothing_left_to_fill_in() 
         Hit::ReplaySave,
         Hit::Record,
         Hit::Capture,
+        Hit::Still,
         Hit::Mic,
         Hit::Hud,
         Hit::Fullscreen,
@@ -488,6 +489,7 @@ fn wants_pointer_only_over_widgets_not_backgrounds() {
 fn the_capture_the_microphone_and_the_readouts_buttons_emit_their_actions() {
     for (hit, action) in [
         (Hit::Capture, Action::Capture),
+        (Hit::Still, Action::TakeStill),
         (Hit::Mic, Action::ToggleMic),
         (Hit::Hud, Action::ToggleHud),
     ] {
@@ -523,6 +525,8 @@ fn the_bar_has_the_clip_first_and_full_screen_last_inside_the_bar() {
         rig.controls.rect_of(Hit::Fullscreen),
     );
     assert!(save.x < record.x && record.x < capture.x && capture.x < volume.x);
+    let still = rig.controls.rect_of(Hit::Still);
+    assert!(volume.x < still.x && still.x < mic.x);
     assert!(volume.x < mic.x && mic.x < hud.x && hud.x < full.x);
     let pill = rig.controls.rect_of(Hit::Pill);
     assert!(save.x >= pill.x && full.x + full.w <= pill.x + pill.w);

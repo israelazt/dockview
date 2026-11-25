@@ -51,6 +51,7 @@ impl Controls {
             Hit::ReplaySave => Action::SaveReplay,
             Hit::Record => Action::ToggleRecord,
             Hit::Capture => Action::Capture,
+            Hit::Still => Action::TakeStill,
             Hit::Mic => Action::ToggleMic,
             Hit::Hud => Action::ToggleHud,
             Hit::Fullscreen => Action::ToggleFullscreen,

@@ -34,6 +34,7 @@ impl Core {
         }
         self.update_stats(now);
         self.poll_replay();
+        self.poll_still(now);
         self.follow_default_mic(now);
         self.poll_stream(now);
         self.maintain_resident();

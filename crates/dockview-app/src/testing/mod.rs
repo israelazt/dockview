@@ -10,5 +10,6 @@ pub mod replay;
 pub mod resident;
 pub mod rig;
 pub mod sources;
+pub mod stills;
 pub mod stream;
 pub mod system;

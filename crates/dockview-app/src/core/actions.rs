@@ -184,6 +184,10 @@ impl Core {
                 self.host.start_capture(self.settings.capture.mode);
                 return;
             }
+            Action::TakeStill => {
+                self.take_still();
+                return;
+            }
             Action::ToggleStream => {
                 self.toggle_stream();
                 return;
@@ -366,6 +370,7 @@ impl Core {
             KeyCommand::SyncEarlier => self.change_offset(-OFFSET_STEP_MS),
             KeyCommand::SyncLater => self.change_offset(OFFSET_STEP_MS),
             KeyCommand::CyclePreset => self.cycle_preset(),
+            KeyCommand::TakeStill => self.take_still(),
             KeyCommand::ToggleHud => {
                 self.settings.hud = !self.settings.hud;
                 self.settings_changed();

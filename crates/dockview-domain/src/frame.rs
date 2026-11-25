@@ -181,6 +181,14 @@ impl Frame {
     }
 }
 
+#[derive(Default)]
+enum Still {
+    #[default]
+    NotAsked,
+    Asked,
+    Ready(Box<Frame>),
+}
+
 /// Single-slot mailbox between the capture thread and the renderer.
 ///
 /// There is deliberately no queue: publishing replaces any frame that was not
@@ -195,6 +203,8 @@ pub struct FrameSlot {
     stream_tap: Mutex<Option<Arc<FrameTap>>>,
     /// While set, frames published here go to this slot instead.
     forward: Mutex<Option<Arc<FrameSlot>>>,
+    /// A copy of one frame, asked for with [`FrameSlot::request_still`].
+    still: Mutex<Still>,
     published: AtomicU64,
     dropped: AtomicU64,
 }
@@ -237,6 +247,7 @@ impl FrameSlot {
         if let Some(tap) = stream_tap {
             tap.offer(&frame);
         }
+        self.keep_still(&frame);
         let mut slots = self.lock();
         if let Some(old) = slots.latest.replace(frame) {
             slots.spare = Some(old);
@@ -256,6 +267,40 @@ impl FrameSlot {
     /// stream's `tap`, besides the replay's.
     pub fn set_stream_tap(&self, tap: Option<Arc<FrameTap>>) {
         *self.stream_tap.lock().unwrap_or_else(|e| e.into_inner()) = tap;
+    }
+
+    /// Asks for a copy of the next frame published here. The display and the
+    /// taps keep getting every frame as before.
+    pub fn request_still(&self) {
+        *self.lock_still() = Still::Asked;
+    }
+
+    /// The copy asked for, once its frame has arrived.
+    pub fn take_still(&self) -> Option<Frame> {
+        let mut still = self.lock_still();
+        match std::mem::take(&mut *still) {
+            Still::Ready(frame) => Some(*frame),
+            other => {
+                *still = other;
+                None
+            }
+        }
+    }
+
+    /// Forgets a request whose frame never arrived.
+    pub fn cancel_still(&self) {
+        *self.lock_still() = Still::NotAsked;
+    }
+
+    fn keep_still(&self, frame: &Frame) {
+        let mut still = self.lock_still();
+        if matches!(*still, Still::Asked) {
+            *still = Still::Ready(Box::new(frame.clone()));
+        }
+    }
+
+    fn lock_still(&self) -> std::sync::MutexGuard<'_, Still> {
+        self.still.lock().unwrap_or_else(|e| e.into_inner())
     }
 
     /// Blocks until a frame is available or `timeout` elapses. Returns whether
@@ -329,6 +374,25 @@ mod tests {
         assert_eq!(ColorMatrix::Bt601.resolve(1080), ColorMatrix::Bt601);
         assert_eq!(ColorMatrix::Bt709.resolve(480), ColorMatrix::Bt709);
         assert_eq!(ColorInfo::default().range, ColorRange::Limited);
+    }
+
+    #[test]
+    fn a_still_is_a_copy_of_the_next_frame_and_only_when_asked() {
+        let slot = FrameSlot::new();
+        slot.publish(frame(1));
+        assert!(slot.take_still().is_none(), "nobody asked");
+        slot.request_still();
+        assert!(slot.take_still().is_none(), "no frame since");
+        slot.publish(frame(2));
+        slot.publish(frame(3));
+        assert_eq!(slot.take_still().map(|f| f.timestamp), Some(2));
+        assert!(slot.take_still().is_none(), "taken once");
+        // The display still gets the newest one.
+        assert_eq!(slot.take_latest().map(|f| f.timestamp), Some(3));
+        slot.request_still();
+        slot.cancel_still();
+        slot.publish(frame(4));
+        assert!(slot.take_still().is_none(), "cancelled");
     }
 
     #[test]

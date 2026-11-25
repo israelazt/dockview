@@ -31,6 +31,7 @@ pub fn command_with(key: &Key, ctrl: bool) -> Option<KeyCommand> {
             "f" => Some(KeyCommand::ToggleFullscreen),
             "p" => Some(KeyCommand::CyclePreset),
             "h" => Some(KeyCommand::ToggleHud),
+            "c" => Some(KeyCommand::TakeStill),
             "v" => Some(KeyCommand::NextVideo),
             "a" => Some(KeyCommand::NextAudio),
             _ => None,
@@ -173,6 +174,7 @@ second"
             ("f", KeyCommand::ToggleFullscreen),
             ("p", KeyCommand::CyclePreset),
             ("h", KeyCommand::ToggleHud),
+            ("c", KeyCommand::TakeStill),
             ("v", KeyCommand::NextVideo),
             ("a", KeyCommand::NextAudio),
         ] {

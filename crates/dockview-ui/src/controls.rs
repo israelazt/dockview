@@ -48,6 +48,8 @@ pub(super) enum Hit {
     Record,
     /// Bar button that takes a screenshot.
     Capture,
+    /// Bar button that takes a picture of the game.
+    Still,
     /// Bar button that turns the microphone on or off.
     Mic,
     /// Bar button that shows or hides the readouts.

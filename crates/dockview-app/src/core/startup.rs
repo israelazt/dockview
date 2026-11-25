@@ -73,6 +73,7 @@ impl Core {
             replay: ReplayService::new(ports.replay),
             resident: ResidentService::new(ports.capture_hotkeys, ports.tray),
             stream: StreamService::new(ports.stream, ports.secrets),
+            stills: StillService::new(ports.stills),
             stream_health: HealthMonitor::default(),
             mic_auto: None,
             mic_checked: None,

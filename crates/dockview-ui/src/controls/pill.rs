@@ -1,5 +1,5 @@
-//! The floating bar of the viewer: save a clip, record, volume, the
-//! microphone, the readouts and full screen.
+//! The floating bar of the viewer: save a clip, record, volume, a picture of
+//! the game, the microphone, the readouts and full screen.
 
 use super::buttons::{chip_width, record_label};
 use super::*;
@@ -70,7 +70,7 @@ fn bar_metrics(ui: &mut Ui, m: &Model, room: f32) -> BarMetrics {
     let capture_gap = if m.snip { GAP } else { 0.0 };
     let volume = ICON_SIZE + 8.0 + SLIDER_WIDTH + 8.0 + percent_w;
     let divider = DIVIDER_PAD * 2.0 + 1.0;
-    let round = ITEM_H * 3.0 + GAP * 2.0;
+    let round = ITEM_H * 4.0 + GAP * 3.0;
     let width_of = |chips: bool| {
         PAD_X * 2.0
             + save(chips)
@@ -193,7 +193,8 @@ impl Controls {
         x + met.percent_w
     }
 
-    /// The round buttons at the right: microphone, readouts, full screen.
+    /// The round buttons at the right: picture of the game, microphone,
+    /// readouts, full screen.
     fn pill_toggles(&mut self, ui: &mut Ui, m: &Model, row: Row, mut x: f32) {
         let t = &m.theme;
         let round = |this: &mut Self, ui: &mut Ui, hit: Hit, x: f32, fill: Option<Color>| {
@@ -205,6 +206,10 @@ impl Controls {
             this.wash(ui, m, hit, rect, ITEM_H / 2.0, 1.0);
             rect.center()
         };
+        let (cx, cy) = round(self, ui, Hit::Still, x, None);
+        ui.icon(ICON_CAMERA, cx, cy, ICON_SIZE, t.text);
+        x += ITEM_H + GAP;
+
         // The microphone is red while it is open.
         let live = m.mic.state == MicState::Live;
         let fill = live.then(|| t.error.with_alpha(0.18));

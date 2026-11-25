@@ -311,6 +311,15 @@ pub trait ImageOutput {
     fn copy(&self, image: &crate::image::Image) -> Result<(), String>;
 }
 
+/// What a picture of the game needs from the system, besides writing it out.
+/// It is used from a worker thread.
+pub trait StillOutput: ImageOutput + Send + Sync {
+    /// The folder the pictures go to.
+    fn folder(&self) -> PathBuf;
+    /// The local date and time, `((year, month, day), (hour, minute, second))`.
+    fn clock(&self) -> ((u16, u16, u16), (u16, u16, u16));
+}
+
 /// How the selection overlay starts.
 #[derive(Debug, Clone, Copy)]
 pub struct PickOptions {

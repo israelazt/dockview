@@ -85,6 +85,7 @@ pub(super) fn tooltip_for(hit: Hit, m: &Model) -> Option<String> {
         Hit::Capture => Key::TipCapture,
         Hit::Mic if m.mic.state == MicState::Live => Key::TipMicOff,
         Hit::Mic => Key::TipMicOn,
+        Hit::Still => Key::TipStill,
         Hit::Hud if m.hud => Key::TipHudHide,
         Hit::Hud => Key::TipHudShow,
         Hit::Fullscreen if m.fullscreen => Key::TipExitFullscreen,

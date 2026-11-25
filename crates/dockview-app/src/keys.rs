@@ -19,6 +19,8 @@ pub enum KeyCommand {
     CyclePreset,
     /// Shows or hides the row of readouts over the picture.
     ToggleHud,
+    /// Takes a picture of the game.
+    TakeStill,
     NextVideo,
     NextAudio,
 }

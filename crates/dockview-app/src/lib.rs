@@ -17,6 +17,7 @@ mod settings_storage;
 pub mod snap_service;
 pub mod sources;
 mod sources_service;
+pub mod still_service;
 pub mod stream_service;
 pub mod telemetry;
 #[cfg(test)]

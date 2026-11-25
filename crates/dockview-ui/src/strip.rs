@@ -44,6 +44,10 @@ pub fn shortcuts(lang: Lang, model: &Model) -> Vec<Shortcut> {
             keys: "F".into(),
             label: word(Key::StripFullscreen),
         },
+        Shortcut {
+            keys: "C".into(),
+            label: word(Key::StripStill),
+        },
     ];
     if !model.replay.hotkey.is_empty() {
         list.push(Shortcut {
@@ -211,6 +215,7 @@ mod tests {
             [
                 ("Tab", "Studio"),
                 ("F", "Full screen"),
+                ("C", "Photo"),
                 ("Ctrl+Alt+S", "Save clip"),
                 ("Ctrl+Alt+R", "Record"),
                 ("Ctrl+Alt+F1-F9", "Scenes"),
@@ -227,7 +232,7 @@ mod tests {
             .into_iter()
             .map(|s| s.keys)
             .collect();
-        assert_eq!(keys, ["Tab", "F", "Ctrl+Alt+F1-F9"]);
+        assert_eq!(keys, ["Tab", "F", "C", "Ctrl+Alt+F1-F9"]);
         assert_eq!(shortcuts(Lang::Es, &m)[1].label, "Pantalla completa");
     }
 

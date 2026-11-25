@@ -19,6 +19,7 @@ pub mod draw;
 pub mod encoded;
 pub mod events;
 pub mod frame;
+pub mod frame_image;
 pub mod geometry;
 pub mod hotkey;
 pub mod hud;

@@ -61,6 +61,8 @@ pub enum AppEvent {
     ScreenshotCopied,
     /// A screenshot could not be taken or saved.
     ScreenshotFailed,
+    /// A screenshot was saved and also put on the clipboard.
+    ScreenshotSavedCopied,
     /// The server accepted the stream: the user is live.
     StreamLive,
     /// The connection to the server dropped; it keeps trying.

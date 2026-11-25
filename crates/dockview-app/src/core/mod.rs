@@ -40,6 +40,9 @@ mod settings_actions;
 mod sources;
 mod startup;
 mod stats;
+mod still;
+#[cfg(test)]
+mod still_tests;
 mod stream;
 #[cfg(test)]
 mod stream_tests;
@@ -59,7 +62,7 @@ use dockview_domain::frame::FrameSlot;
 use dockview_domain::i18n::{self, Lang, LangModeExt};
 use dockview_domain::navigation::AppMode;
 use dockview_domain::ports::{
-    CaptureHotkeys, Host, ReplayMachine, SourceMachine, StatsSink, SystemProbe,
+    CaptureHotkeys, Host, ReplayMachine, SourceMachine, StatsSink, StillOutput, SystemProbe,
 };
 use dockview_domain::recording::{RecorderStatus, RecordingInfo, RecordingState, ReplaySettings};
 use dockview_domain::settings::{
@@ -86,6 +89,7 @@ use crate::sources::{
     Reconnect, SourceKind, StartupScene,
 };
 use crate::sources_service::{Maintained, Source, SourcesService};
+use crate::still_service::StillService;
 use crate::stream_service::StreamService;
 use crate::telemetry::{Rates, Telemetry};
 
@@ -119,6 +123,8 @@ pub struct Ports {
     pub stream: Box<dyn StreamMachine>,
     /// Where the stream key is kept.
     pub secrets: Box<dyn SecretStore>,
+    /// Where the pictures of the game go.
+    pub stills: Arc<dyn StillOutput>,
 }
 
 /// The state and the services of the application. The binary creates one,
@@ -146,6 +152,8 @@ pub struct Core {
     resident: ResidentService,
     /// Going live (see `stream_service`).
     stream: StreamService,
+    /// The picture of the game being taken (see `still_service`).
+    stills: StillService,
     /// Judges how the stream's connection is doing.
     stream_health: HealthMonitor,
     /// The microphone Core picked by itself (the user had not chosen one),
