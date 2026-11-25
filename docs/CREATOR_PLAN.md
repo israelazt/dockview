@@ -56,17 +56,17 @@ Qué hace el Creador:
 - Con un **monitor** no usa el sonido de todo el PC: pide elegir el programa del juego y graba solo ese (loopback del proceso). Si no se elige, la toma va sin sonido del juego y lo dice, en vez de grabar el podcast.
 - El **micrófono** no puede distinguir: si el podcast suena por altavoces, lo oye. El Creador avisa (una vez) de usar auriculares cuando hay micrófono y la salida no lo es, si Windows lo sabe decir.
 
-## Decisiones abiertas
+## Decisiones (cerradas el 2026-11-25)
 
 | | Pregunta | Propuesta |
 |---|---|---|
-| D1 | ¿La foto del juego se queda en el visor? | Sí: es para compartir mientras se juega |
-| D2 | ¿Guardar clip sale del visor? Consecuencia: un shiny en el visor no se puede rescatar en vídeo | Sí, y el replay no corre en el visor (no graba de fondo) |
+| D1 ✅ | ¿La foto del juego se queda en el visor? | Sí: es para compartir mientras se juega |
+| D2 ✅ | ¿Guardar clip sale del visor? Consecuencia: un shiny en el visor no se puede rescatar en vídeo | Sí, y el replay no corre en el visor (no graba de fondo) |
 | D3 ✅ | ¿Qué cámara? | **Canon M50 Mark II por HDMI limpio a la segunda capturadora** (`pacoxi-budget`, hasta 1080p50). Se abre como cualquier capturadora; el retraso se mide con el ajuste de C-4 |
-| D4 | ¿Qué editor? (CapCut, DaVinci Resolve, Premiere…) | Decide si los WAV hacen falta o basta con las pistas del MP4, y el formato de vídeo |
-| D5 | ¿Se llama «Creador»? | Sí, provisional |
-| D6 | ¿La grabación del Estudio se queda? | Sí: graba la imagen compuesta, como hoy |
-| D7 | ¿El Creador muestra las escenas del Estudio? | No: muestra la fuente principal limpia; las escenas son del Estudio |
+| D4 ✅ | ¿Qué editor? | **Uno propio: Motifex**, con un MVP para vídeos cortos (plan aparte). La toma es su contrato de entrada: `toma.json` describe los archivos y su sincronía. Los WAV se quedan: el editor no tiene que descomprimir el audio para cortarlo o dibujar su onda, y otros editores los abren igual |
+| D5 ✅ | ¿Se llama «Creador»? | Sí |
+| D6 ✅ | ¿La grabación del Estudio se queda? | Sí: graba la imagen compuesta, como hoy |
+| D7 ✅ | ¿El Creador muestra las escenas del Estudio? | No: muestra la fuente principal limpia; las escenas son del Estudio |
 
 ## Cómo se trabaja
 
@@ -121,8 +121,14 @@ Pausa: el autor prueba un clip de un momento inesperado.
 | Tarea | Qué | Listo cuando |
 |---|---|---|
 | E-1 | Avisos claros: una fuente que se cae a media toma, poco disco, la cámara sin señal | Tests de cada aviso |
-| E-2 | Documentar el formato de la toma (`toma.json`) para Motifex | Sección en `FEXARIUM_PLAN.md` |
+| E-2 | Documentar el formato de la toma (`toma.json`) como contrato de Motifex, con su versión | Sección en `FEXARIUM_PLAN.md` y un test que lee una toma de ejemplo |
 | E-3 | Capturas finales y revisión del autor | Visto bueno |
+
+## Pendientes menores (se deciden en su bloque)
+
+- **Audio de la cámara** (bloque C): la M50 manda el sonido de su micrófono por HDMI. ¿Pista propia (`audio-camara.wav`) o se descarta? ¿Qué micrófono es el de la voz?
+- **Guías 9:16** (bloque A o C): un recuadro sobre el juego y la cámara que solo se ve, para saber qué cabrá en vertical.
+- **Calidad de la cámara** (bloque C): propuesta, lo que mande la capturadora a unos 12 Mbps.
 
 ## Costes que hay que vigilar
 
