@@ -44,7 +44,7 @@ impl ApplicationHandler for Shell {
         };
 
         dockview_domain::log_info!("window created");
-        crate::os::round_corners(&window);
+        crate::os::set_window_frame(&window, false);
         match crate::os::create_presenter(&window) {
             Ok(mut presenter) => {
                 presenter.set_filter(filter_for(self.core.render_preset()));

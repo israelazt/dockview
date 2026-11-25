@@ -24,7 +24,7 @@ pub fn style_window(attributes: WindowAttributes) -> WindowAttributes {
     attributes.with_decorations(false)
 }
 
-pub fn round_corners(_: &Window) {}
+pub fn set_window_frame(_: &Window, _fullscreen: bool) {}
 
 pub fn renderer_name() -> &'static str {
     ""

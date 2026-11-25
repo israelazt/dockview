@@ -349,6 +349,7 @@ impl Shell {
         if plan.unmaximize_first {
             window.set_maximized(false);
         }
+        crate::os::set_window_frame(window, on);
         window.set_fullscreen(on.then_some(winit::window::Fullscreen::Borderless(None)));
         if plan.maximize_after {
             window.set_maximized(true);

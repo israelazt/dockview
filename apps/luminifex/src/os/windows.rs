@@ -52,23 +52,45 @@ pub fn style_window(attributes: WindowAttributes) -> WindowAttributes {
         .with_undecorated_shadow(true)
 }
 
-/// Rounds the corners of the window as Windows 11 does for every window.
-pub fn round_corners(window: &Window) {
+/// The frame Windows puts around the window. In a window: rounded corners, the
+/// thin border and the shadow. In full screen: none of it, so the picture covers
+/// the screen to the last pixel (the shadow of an undecorated window moves the
+/// drawing area one pixel down, and the desktop shows through).
+pub fn set_window_frame(window: &Window, fullscreen: bool) {
     use windows::Win32::Graphics::Dwm::{
-        DwmSetWindowAttribute, DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_ROUND,
+        DWMWA_BORDER_COLOR, DWMWA_COLOR_DEFAULT, DWMWA_COLOR_NONE, DWMWA_WINDOW_CORNER_PREFERENCE,
+        DWMWCP_DONOTROUND, DWMWCP_ROUND,
     };
+    use winit::platform::windows::WindowExtWindows;
+
+    window.set_undecorated_shadow(!fullscreen);
     let Some(native) = native_window(window) else {
         return;
     };
-    let preference = DWMWCP_ROUND;
-    // SAFETY: the pointer refers to a live value of the size the attribute
-    // expects; older Windows versions just do not know the attribute.
+    let hwnd = hwnd_of(native);
+    let (corners, border) = if fullscreen {
+        (DWMWCP_DONOTROUND, DWMWA_COLOR_NONE)
+    } else {
+        (DWMWCP_ROUND, DWMWA_COLOR_DEFAULT)
+    };
+    set_dwm_attribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &corners);
+    set_dwm_attribute(hwnd, DWMWA_BORDER_COLOR, &border);
+}
+
+fn set_dwm_attribute<T>(
+    hwnd: HWND,
+    attribute: windows::Win32::Graphics::Dwm::DWMWINDOWATTRIBUTE,
+    value: &T,
+) {
+    use windows::Win32::Graphics::Dwm::DwmSetWindowAttribute;
+    // SAFETY: the pointer refers to a live value and the size given is its own;
+    // older Windows versions just do not know the attribute.
     unsafe {
         let _ = DwmSetWindowAttribute(
-            hwnd_of(native),
-            DWMWA_WINDOW_CORNER_PREFERENCE,
-            (&preference as *const _) as *const c_void,
-            std::mem::size_of_val(&preference) as u32,
+            hwnd,
+            attribute,
+            (value as *const T).cast::<c_void>(),
+            std::mem::size_of::<T>() as u32,
         );
     }
 }
