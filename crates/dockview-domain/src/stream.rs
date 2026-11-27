@@ -25,7 +25,9 @@ pub struct StreamInfo {
     pub width: u32,
     pub height: u32,
     pub fps: u32,
-    /// `true` for compressed formats such as MJPEG, which need decoding.
+    /// `true` when the picture is compressed on the wire and needs decoding:
+    /// MJPEG, or a mode the system offers already decoded from it (then
+    /// `format_name` is the decoded format, for example `NV12`).
     pub is_compressed: bool,
 }
 
@@ -45,6 +47,16 @@ impl StreamInfo {
         Some(self.pixels() as f32 * bytes_per_pixel * self.fps as f32 * 8.0 / 1e6)
     }
 
+    /// The format as the readouts say it: a mode decoded from MJPEG says so,
+    /// as one word, so it is not mistaken for an uncompressed one.
+    fn format_label(&self) -> String {
+        if self.is_compressed && self.format_name != "MJPEG" {
+            format!("{}/MJPEG", self.format_name)
+        } else {
+            self.format_name.clone()
+        }
+    }
+
     fn pixels(&self) -> u64 {
         u64::from(self.width) * u64::from(self.height)
     }
@@ -59,9 +71,34 @@ impl fmt::Display for StreamInfo {
         write!(
             f,
             "{} · {}×{} · {}fps",
-            self.format_name, self.width, self.height, self.fps
+            self.format_label(),
+            self.width,
+            self.height,
+            self.fps
         )
     }
+}
+
+/// Smallest height listed by [`mode_report`].
+const REPORT_MIN_HEIGHT: u32 = 720;
+
+/// The device's modes of 720 lines and up, for the log: one line for each
+/// format and size with its frame rates, in the order the device lists them.
+pub fn mode_report(types: &[StreamInfo]) -> Vec<String> {
+    let mut groups: Vec<(String, Vec<String>)> = Vec::new();
+    for mode in types.iter().filter(|t| t.height >= REPORT_MIN_HEIGHT) {
+        let name = format!("{} {}×{}", mode.format_label(), mode.width, mode.height);
+        let rate = mode.fps.to_string();
+        match groups.iter_mut().find(|(n, _)| *n == name) {
+            Some((_, rates)) if rates.contains(&rate) => {}
+            Some((_, rates)) => rates.push(rate),
+            None => groups.push((name, vec![rate])),
+        }
+    }
+    groups
+        .into_iter()
+        .map(|(name, rates)| format!("{name}: {} fps", rates.join(", ")))
+        .collect()
 }
 
 /// Picks the best stream for `profile`, or `None` if `types` is empty.
@@ -308,6 +345,71 @@ mod tests {
         let yuy2 = make(640, 480, 30, false, "YUY2");
         assert!((yuy2.raw_mbps().unwrap() - 147.5).abs() < 1.0);
         assert_eq!(mjpeg_1080p60().raw_mbps(), None);
+    }
+
+    /// The 1080p modes of a UGREEN 25173 as Media Foundation lists them: the
+    /// real uncompressed ones first, then each MJPEG mode with an NV12 twin
+    /// that Windows decodes from it.
+    fn card_with_decoded_twins() -> Vec<StreamInfo> {
+        let mut types = vec![
+            make(1920, 1080, 60, false, "YUY2"),
+            make(1920, 1080, 120, false, "NV12"),
+            make(1920, 1080, 60, false, "NV12"),
+            make(1920, 1080, 120, false, "I420"),
+            make(1920, 1080, 240, true, "NV12"),
+            make(1920, 1080, 240, true, "MJPEG"),
+            make(1920, 1080, 120, true, "NV12"),
+            make(1920, 1080, 120, true, "MJPEG"),
+        ];
+        for (index, mode) in types.iter_mut().enumerate() {
+            mode.type_index = index as u32;
+        }
+        types
+    }
+
+    #[test]
+    fn a_mode_decoded_from_mjpeg_does_not_pass_for_uncompressed() {
+        let types = card_with_decoded_twins();
+        for profile in [CaptureProfile::Balanced, CaptureProfile::Quality] {
+            let best = select_best(&types, profile).unwrap();
+            assert_eq!(best, &types[1], "{profile:?}");
+        }
+    }
+
+    #[test]
+    fn the_compressed_choice_can_be_a_decoded_twin() {
+        let types = card_with_decoded_twins();
+        let best = select_best_compressed(&types, CaptureProfile::Balanced).unwrap();
+        assert_eq!(best, types[4]);
+        assert_eq!(best.raw_mbps(), None);
+    }
+
+    #[test]
+    fn a_decoded_mode_says_so_in_one_word() {
+        let decoded = make(1920, 1080, 240, true, "NV12");
+        assert_eq!(decoded.to_string(), "NV12/MJPEG · 1920×1080 · 240fps");
+        assert_eq!(
+            crate::hud::format_of(&decoded.to_string()),
+            Some("NV12/MJPEG")
+        );
+        assert_eq!(mjpeg_1080p60().to_string(), "MJPEG · 1920×1080 · 60fps");
+    }
+
+    #[test]
+    fn the_mode_report_groups_rates_by_format_and_size() {
+        let mut types = card_with_decoded_twins();
+        types.push(make(640, 480, 60, false, "YUY2"));
+        types.push(make(1920, 1080, 60, false, "NV12"));
+        assert_eq!(
+            mode_report(&types),
+            [
+                "YUY2 1920×1080: 60 fps",
+                "NV12 1920×1080: 120, 60 fps",
+                "I420 1920×1080: 120 fps",
+                "NV12/MJPEG 1920×1080: 240, 120 fps",
+                "MJPEG 1920×1080: 240, 120 fps",
+            ]
+        );
     }
 
     #[test]

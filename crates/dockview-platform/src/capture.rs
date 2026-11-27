@@ -24,7 +24,7 @@ use crate::mf::{first_video_stream, open_source, read_native_types, unpack_pair,
 use crate::worker::{StatusCell, Worker};
 use dockview_domain::frame::{ColorInfo, ColorMatrix, ColorRange, Frame, FrameSlot, PixelFormat};
 use dockview_domain::sources::{CaptureOptions, CaptureStatus};
-use dockview_domain::stream::{select_best, select_best_compressed, StreamInfo};
+use dockview_domain::stream::{mode_report, select_best, select_best_compressed, StreamInfo};
 
 /// How long `Drop` waits for the capture thread before detaching it. A source
 /// with no signal can leave `ReadSample` blocked indefinitely.
@@ -162,6 +162,10 @@ unsafe fn read_frames(
         None => select_best(&types, options.profile).cloned(),
     }
     .ok_or_else(|| Error::new(E_FAIL, "requested video mode is not available"))?;
+    for line in mode_report(&types) {
+        dockview_domain::log_info!("[capture] offers {line}");
+    }
+    dockview_domain::log_info!("[capture] chosen: {best}");
 
     // 1. Pick the device's native mode.
     let native = reader.GetNativeMediaType(stream, best.type_index)?;

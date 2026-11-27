@@ -23,6 +23,13 @@ use windows::Win32::System::Com::{
 use dockview_domain::device::VideoDevice;
 use dockview_domain::stream::StreamInfo;
 
+/// Set to 1 on the media types Windows offers already decoded from a
+/// compressed one: for every MJPEG mode of a camera it lists an "NV12" twin
+/// that is not NV12 on the wire. The SDK in use does not name it (it seems to
+/// be `MF_MT_FSSourceTypeDecoded`, not verified); the behaviour was checked on
+/// a UGREEN 25173, whose USB descriptors offer 1080p240 in MJPEG only.
+const DECODED_SOURCE_TYPE: GUID = GUID::from_u128(0xea031a62_8bbb_43c5_b5c4_572d2d231c18);
+
 /// Frame rate assumed when a media type does not report a valid one.
 const DEFAULT_FPS: u32 = 30;
 
@@ -166,7 +173,7 @@ pub(crate) unsafe fn read_native_types(reader: &IMFSourceReader) -> Result<Vec<S
             width,
             height,
             fps,
-            is_compressed: is_compressed(&subtype),
+            is_compressed: is_compressed(&subtype, media_type.GetUINT32(&DECODED_SOURCE_TYPE).ok()),
         });
     }
     Ok(types)
@@ -232,8 +239,10 @@ fn fps_from_rate(numerator: u32, denominator: u32) -> u32 {
     (f64::from(numerator) / f64::from(denominator)).round() as u32
 }
 
-pub(crate) fn is_compressed(subtype: &GUID) -> bool {
-    *subtype == MFVideoFormat_MJPG
+/// Whether a media type is compressed on the wire. `decoded` is its
+/// [`DECODED_SOURCE_TYPE`] attribute, if it has one.
+pub(crate) fn is_compressed(subtype: &GUID, decoded: Option<u32>) -> bool {
+    *subtype == MFVideoFormat_MJPG || decoded == Some(1)
 }
 
 /// Short display name for a media subtype, falling back to its FourCC.
@@ -287,9 +296,11 @@ mod tests {
     }
 
     #[test]
-    fn only_mjpeg_is_compressed() {
-        assert!(is_compressed(&MFVideoFormat_MJPG));
-        assert!(!is_compressed(&MFVideoFormat_YUY2));
-        assert!(!is_compressed(&MFVideoFormat_NV12));
+    fn mjpeg_and_what_is_decoded_from_it_are_compressed() {
+        assert!(is_compressed(&MFVideoFormat_MJPG, None));
+        assert!(is_compressed(&MFVideoFormat_NV12, Some(1)));
+        assert!(!is_compressed(&MFVideoFormat_YUY2, None));
+        assert!(!is_compressed(&MFVideoFormat_NV12, None));
+        assert!(!is_compressed(&MFVideoFormat_NV12, Some(0)));
     }
 }
